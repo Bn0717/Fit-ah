@@ -1,14 +1,15 @@
-// lib/types/clothing.ts 
+// lib/types/clothing.ts
 
 /**
  * Size chart for a specific garment size
  */
 export interface SizeChart {
-  size: string;          // e.g., "S", "M", "L", "XL"
-  chest: number;         // in cm
-  length: number;        // in cm
-  shoulder: number;      // in cm
-  waist?: number;        // in cm (optional)
+  size: string;        // e.g., "S", "M", "L", "XL"
+  chest: number;       // in cm
+  length: number;      // in cm
+  shoulder: number;    // in cm
+  sleeve?: number;     // in cm (optional)
+  waist?: number;      // in cm (optional)
 }
 
 /**
@@ -19,15 +20,19 @@ export interface ClothingItem {
   userId: string;
   brand: string;
   name: string;
-  category: string;      // User can now add custom categories
+  category: string;
+  // Legacy single image (kept for backwards compat)
   imageUrl?: string;
+  // New: front + back images (background removed)
+  frontImageUrl?: string;
+  backImageUrl?: string;
   sizeChart: SizeChart[];
-  sizeChartPhotoUrl?: string | null; 
-  userWearingSize?: string | null;   
-  price?: number | null;             
+  sizeChartPhotoUrl?: string | null;
+  userWearingSize?: string | null;
+  price?: number | null;
   isFavorite: boolean;
-  lastViewed?: string;   // ISO timestamp of last view
-  createdAt?: any;       // Firestore Timestamp
+  lastViewed?: string;
+  createdAt?: any;
 }
 
 /**
@@ -36,11 +41,11 @@ export interface ClothingItem {
 export interface OutfitCombination {
   id: string;
   userId: string;
-  name: string;          // e.g., "Summer Casual", "Work Outfit #1"
-  itemIds: string[];     // Array of clothing item IDs
+  name: string;
+  itemIds: string[];
   isFavorite: boolean;
-  createdAt?: any;       // Firestore Timestamp
-  notes?: string;        // Optional notes about the combination
+  createdAt?: any;
+  notes?: string;
 }
 
 /**
@@ -49,8 +54,8 @@ export interface OutfitCombination {
 export interface CustomCategory {
   id: string;
   userId: string;
-  name: string;          // e.g., "Winter Wear", "Gym Clothes"
-  icon: string;          // Emoji or icon identifier
+  name: string;
+  icon: string;
   createdAt?: any;
 }
 
@@ -58,6 +63,6 @@ export interface CustomCategory {
  * Random outfit configuration
  */
 export interface RandomOutfitConfig {
-  categories: string[];  // Which categories to include
-  count: number;         // How many items to pick
+  categories: string[];
+  count: number;
 }

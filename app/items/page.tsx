@@ -127,32 +127,52 @@ export default function ItemsPage() {
     }
   };
 
-  const handleUpload = async (data: any) => {
+  const handleUpload = async (data: {
+    frontPhoto: File;
+    backPhoto: File;
+    brand: string;
+    name: string;
+    category: string;
+    sizeChart: any[];
+    sizeChartPhoto?: File;
+    userWearingSize?: string;
+    price?: number;
+  }) => {
     if (!user) return;
 
-    // 1. Create the "Ghost" item for immediate display
     const tempId = `temp_${Date.now()}`;
     const placeholderItem = {
       id: tempId,
       name: data.name,
       brand: data.brand,
-      imageUrl: URL.createObjectURL(data.photo), // Temporary local preview
+      imageUrl: URL.createObjectURL(data.frontPhoto),
     };
-
     setProcessingItems(prev => [placeholderItem, ...prev]);
 
-    // 2. Start the heavy AI work in the BACKGROUND (no 'await' here)
     const runBackgroundAI = async () => {
       try {
-        let finalImage: File = data.photo;
-        const cleanBlob = await removeBackgroundFree(data.photo);
-        if (cleanBlob) {
-          const safeBaseName = data.photo.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-          finalImage = new File([cleanBlob], `${safeBaseName}_processed.png`, { type: "image/png" });
-        }
+        // Remove background from BOTH photos in parallel
+        const [frontBlob, backBlob] = await Promise.all([
+          removeBackgroundFree(data.frontPhoto),
+          removeBackgroundFree(data.backPhoto),
+        ]);
+
+        const toFile = (blob: Blob | null, original: File, suffix: string): File => {
+          if (!blob) return original;
+          const safeBase = original.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          return new File([blob], `${safeBase}_${suffix}.png`, { type: 'image/png' });
+        };
+
+        const frontFile = toFile(frontBlob, data.frontPhoto, 'front');
+        const backFile  = toFile(backBlob,  data.backPhoto,  'back');
 
         const itemId = `item_${Date.now()}`;
-        const { url } = await uploadClothingPhoto(user.uid, itemId, finalImage);
+
+        // Upload both in parallel
+        const [{ url: frontUrl }, { url: backUrl }] = await Promise.all([
+          uploadClothingPhoto(user.uid, itemId, frontFile, 'clothing-items/front'),
+          uploadClothingPhoto(user.uid, itemId, backFile,  'clothing-items/back'),
+        ]);
 
         const newItem = {
           id: itemId,
@@ -160,7 +180,10 @@ export default function ItemsPage() {
           brand: data.brand,
           name: data.name,
           category: data.category,
-          imageUrl: url || '',
+          // Legacy field — point at front image for grid thumbnail
+          imageUrl: frontUrl || '',
+          frontImageUrl: frontUrl || '',
+          backImageUrl:  backUrl  || '',
           sizeChart: data.sizeChart,
           isFavorite: false,
           price: data.price || null,
@@ -169,20 +192,19 @@ export default function ItemsPage() {
         };
 
         await saveClothingItem(newItem);
-        setProcessingItems(prev => prev.filter(i => i.id !== tempId)); // Remove ghost
-        await loadData(); // Refresh real list
+        setProcessingItems(prev => prev.filter(i => i.id !== tempId));
+        await loadData();
       } catch (err) {
         console.error(err);
         setProcessingItems(prev => prev.filter(i => i.id !== tempId));
       }
     };
 
-    runBackgroundAI(); // Execute in background
+    runBackgroundAI();
 
-    // 3. Wait 3 seconds then let the Modal close
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        setSuccessMessage("Adding to wardrobe...");
+        setSuccessMessage('Adding to wardrobe...');
         resolve();
       }, 3000);
     });
@@ -913,9 +935,9 @@ export default function ItemsPage() {
         onSubmit={handleUpload}
         availableCategories={customCategories.map(c => c.name)}
         onAddCategory={async (name, icon) => {
-           const categoryId = `cat_${Date.now()}`;
-           await saveCustomCategory({ id: categoryId, userId: user.uid, name, icon });
-           await loadData();
+          const categoryId = `cat_${Date.now()}`;
+          await saveCustomCategory({ id: categoryId, userId: user.uid, name, icon });
+          await loadData();
         }}
       />
 
