@@ -81,8 +81,8 @@ export default function DashboardPage() {
     item.sizeChart.forEach(size => sizesByBrand[item.brand].add(size.size));
   });
   
-  // Estimated money saved (average return cost $10-15)
-  const estimatedSaved = Math.round(totalItems * 12.50);
+  // Calculate total money spent on all items
+  const totalMoneySpent = items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
 
   if (authLoading || !user) {
     return (
@@ -179,17 +179,17 @@ export default function DashboardPage() {
               <div className="bg-white rounded-xl p-6 shadow-sm border-2 transition-all hover:shadow-md" style={{ borderColor: colors.pink }}>
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-sm font-semibold" style={{ color: colors.navy, opacity: 0.6 }}>
-                    MONEY SAVED
+                    TOTAL MONEY SPENT
                   </span>
                   <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.pink }}>
                     <span className="text-xl">💰</span>
                   </div>
                 </div>
                 <p className="text-3xl font-bold mb-1" style={{ color: colors.navy }}>
-                  ${estimatedSaved}
+                  RM {totalMoneySpent.toFixed(2)}
                 </p>
                 <p className="text-xs" style={{ color: colors.navy, opacity: 0.5 }}>
-                  By avoiding returns
+                  All your wardrobe items
                 </p>
               </div>
 
