@@ -1,48 +1,65 @@
 // app/profile/page.tsx
-// All logged-in users: view 3D body, change body size with sliders, try on wardrobe shirts
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getAvatar, saveAvatar, getUserClothingItems, getUserOutfits } from '@/lib/firebase/firestore';
+import { uploadUserPhoto } from '@/lib/firebase/storage';
+import { processImage } from '@/lib/mediapipe/poseDetection';
 import type { ClothingItem, OutfitCombination } from '@/lib/types/clothing';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
 const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29 };
 const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54 };
 type Measurements = { height: number; chest: number; waist: number; shoulder: number };
-function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
-function norm01(cm: number, base: number, max: number) { return clamp((cm - base) / (max - base), 0, 1); }
+const clamp  = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const norm01 = (cm: number, base: number, max: number) => clamp((cm - base) / (max - base), 0, 1);
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [displayName,      setDisplayName]      = useState('');
-  const [measurements,     setMeasurements]     = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
-  const [tempMeasurements, setTempMeasurements] = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
-  const [showSliders,      setShowSliders]      = useState(false);
-  const [saving,           setSaving]           = useState(false);
-  const [success,          setSuccess]          = useState<string | null>(null);
-  const [items,            setItems]            = useState<ClothingItem[]>([]);
-  const [outfits,          setOutfits]          = useState<OutfitCombination[]>([]);
-  const [selectedItem,     setSelectedItem]     = useState<ClothingItem | null>(null);
-  const [outfitTab,        setOutfitTab]        = useState<'items' | 'outfits'>('items');
-  const [show2d,           setShow2d]           = useState(false);
-  const [loadingData,      setLoadingData]      = useState(true);
-  const [bodyReady,        setBodyReady]        = useState(false);
+  // ── Profile info ──────────────────────────────────────────────
+  const [displayName, setDisplayName] = useState('');
+  const [age,         setAge]         = useState('');
+  const [gender,      setGender]      = useState('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile,    setPhotoFile]    = useState<File | null>(null);
+  const [editingInfo,  setEditingInfo]  = useState(false);
+  const [detecting,    setDetecting]    = useState(false);
+  const [detectMsg,    setDetectMsg]    = useState<string | null>(null);
+  const [savingInfo,   setSavingInfo]   = useState(false);
 
-  // 3D body canvas
+  // ── Body measurements ─────────────────────────────────────────
+  const [saved,       setSaved]       = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
+  const [draft,       setDraft]       = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
+  const [savingBody,  setSavingBody]  = useState(false);
+  const [bodySuccess, setBodySuccess] = useState(false);
+  // slider is always visible — no toggle state needed
+
+  // ── Wardrobe ──────────────────────────────────────────────────
+  const [items,          setItems]          = useState<ClothingItem[]>([]);
+  const [outfits,        setOutfits]        = useState<OutfitCombination[]>([]);
+  const [activeTab,      setActiveTab]      = useState<'items' | 'outfits'>('items');
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [selectedItem,   setSelectedItem]   = useState<ClothingItem | null>(null);
+  const [sidebarView,    setSidebarView]    = useState<'2d' | '3d'>('2d');
+  const [loadingData,    setLoadingData]    = useState(true);
+
+  // ── 3D body canvas (center) ────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sceneRef  = useRef<{ animId: ReturnType<typeof requestAnimationFrame>; renderer: any; ro: ResizeObserver; updateBody: (m: Measurements) => void } | null>(null);
+  const sceneRef  = useRef<{
+    animId: ReturnType<typeof requestAnimationFrame>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    renderer: any;
+    ro: ResizeObserver;
+    updateBody: (m: Measurements) => void;
+    tryOnShirt: (url: string | null) => void;
+  } | null>(null);
+  const [bodyReady, setBodyReady] = useState(false);
 
-  // 3D shirt canvas
-  const shirtCanvasRef = useRef<HTMLCanvasElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shirtSceneRef  = useRef<{ animId: ReturnType<typeof requestAnimationFrame>; renderer: any; ro: ResizeObserver } | null>(null);
-
+  // Auth guard
   useEffect(() => { if (!authLoading && !user) router.push('/login'); }, [user, authLoading, router]);
 
   // Load profile + wardrobe
@@ -52,18 +69,19 @@ export default function ProfilePage() {
     Promise.all([getAvatar(user.uid), getUserClothingItems(user.uid), getUserOutfits(user.uid)])
       .then(([profile, clothingItems, userOutfits]) => {
         if (profile) {
-          const m = { height: profile.height, chest: profile.chest, waist: profile.waist, shoulder: profile.shoulder };
-          setMeasurements(m); setTempMeasurements(m);
+          const m: Measurements = { height: profile.height, chest: profile.chest, waist: profile.waist, shoulder: profile.shoulder };
+          setSaved(m); setDraft(m);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setDisplayName((profile as any).displayName || '');
+          const p = profile as any;
+          setDisplayName(p.displayName || ''); setAge(p.age ? String(p.age) : ''); setGender(p.gender || '');
+          if (p.photoUrl) setPhotoPreview(p.photoUrl);
         }
-        setItems(clothingItems);
-        setOutfits(userOutfits);
+        setItems(clothingItems); setOutfits(userOutfits);
         setLoadingData(false);
       });
   }, [user]);
 
-  // ── Body 3D scene ─────────────────────────────────────────────────────
+  // ── Body 3D scene (loads fitcheck_human3d_shirt3dnew.glb — has both body + shirt meshes) ──
   useEffect(() => {
     if (!canvasRef.current) return;
     let cancelled = false;
@@ -76,28 +94,38 @@ export default function ProfilePage() {
     ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
       if (cancelled || !canvasRef.current) return;
       const canvas = canvasRef.current;
-      const W = canvas.clientWidth || 700, H = canvas.clientHeight || 600;
-      const scene    = new THREE.Scene(); scene.background = new THREE.Color(0xfaf7f2);
-      const camera   = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
-      camera.position.set(0, 0.8, 4.0);
+      const W = canvas.clientWidth || 500, H = canvas.clientHeight || 600;
+
+      const scene    = new THREE.Scene();
+      scene.background = new THREE.Color(0xf8f3ea);
+      const camera   = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
+      camera.position.set(0, 0.9, 4.2);
       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setSize(W, H, false);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true; controls.minDistance = 1.5; controls.maxDistance = 7;
-      controls.target.set(0, 0.5, 0);
+      controls.enableDamping = true;
+      controls.minDistance   = 1.5;
+      controls.maxDistance   = 7;
+      controls.target.set(0, 0.6, 0);
+
       scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-      const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 2); scene.add(key);
-      const fill = new THREE.DirectionalLight(0xffeedd, 0.3); fill.position.set(-3, 1, -2); scene.add(fill);
+      const key  = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 2);  scene.add(key);
+      const fill = new THREE.DirectionalLight(0xfff4e0, 0.4); fill.position.set(-3, 1, -2); scene.add(fill);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let bodyMesh: any = null;
+      let bodyMesh: any  = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let shirtMesh: any = null;
+
       function setMorph(prefix: string, value: number) {
         if (!bodyMesh?.morphTargetDictionary) return;
-        const keys = Object.keys(bodyMesh.morphTargetDictionary) as string[];
-        const k = keys.find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
+        const k = (Object.keys(bodyMesh.morphTargetDictionary) as string[])
+          .find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
         if (k) bodyMesh.morphTargetInfluences[bodyMesh.morphTargetDictionary[k]] = value;
       }
+
       function updateBody(m: Measurements) {
         if (!bodyMesh) return;
         setMorph('CHEST_WIDE',    norm01(m.chest,    BODY_BASE.chest,    BODY_MAX.chest)    * 3.0);
@@ -107,146 +135,188 @@ export default function ProfilePage() {
         setMorph('HIP_WIDE',      clamp(norm01(m.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 0, 1) * 2.0);
         setMorph('BODY_LENGTH',   1.5);
       }
-      const loader = new GLTFLoader();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/human.glb?v=' + Date.now(), (gltf: any) => {
-        if (cancelled) return;
-        const model = gltf.scene;
-        const box = new THREE.Box3().setFromObject(model);
-        model.position.sub(box.getCenter(new THREE.Vector3()));
-        scene.add(model);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        model.traverse((obj: any) => {
-          if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
-          const lkeys = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
-          if (lkeys.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
-            bodyMesh = obj;
-            updateBody(measurements);
-            if (sceneRef.current) sceneRef.current.updateBody = updateBody;
-          }
+
+      function tryOnShirt(url: string | null) {
+        if (!shirtMesh) return;
+        if (!url) {
+          // Hide shirt by making it transparent
+          shirtMesh.visible = false;
+          return;
+        }
+        shirtMesh.visible = true;
+        const tex = new THREE.TextureLoader().load(url);
+        tex.flipY = false;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        shirtMesh.material = new THREE.MeshStandardMaterial({
+          map: tex, roughness: 0.8, side: THREE.DoubleSide,
         });
-        setBodyReady(true);
-      }, undefined, () => setBodyReady(true));
+        shirtMesh.material.needsUpdate = true;
+      }
+
+      // Load the combined body+shirt model
+      const loader = new GLTFLoader();
+      loader.load(
+        '/models/fitcheck_human3d_shirt3dnew.glb?v=' + Date.now(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (gltf: any) => {
+          if (cancelled) return;
+          const model = gltf.scene;
+          model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
+          scene.add(model);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model.traverse((obj: any) => {
+            if (!obj.isMesh) return;
+            const lk = obj.morphTargetDictionary
+              ? Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase())
+              : [];
+
+            // Body mesh — has body morph targets
+            if (!bodyMesh && lk.some((k: string) =>
+              k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
+              bodyMesh = obj;
+              updateBody(saved);
+              if (sceneRef.current) sceneRef.current.updateBody = updateBody;
+            }
+
+            // Shirt mesh — has shirt morph targets (len_long, chest_wide) or is named shirt
+            if (!shirtMesh && (
+              lk.some((k: string) => k.includes('len_long') || k.includes('sleeve_long')) ||
+              obj.name?.toLowerCase().includes('shirt') ||
+              obj.name?.toLowerCase().includes('tshirt')
+            )) {
+              shirtMesh = obj;
+              shirtMesh.visible = false; // Hidden until user selects an item
+              if (sceneRef.current) sceneRef.current.tryOnShirt = tryOnShirt;
+            }
+          });
+          setBodyReady(true);
+        },
+        undefined,
+        // Fallback: try human.glb (body only, no shirt try-on)
+        () => {
+          loader.load('/models/human.glb?v=' + Date.now(),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (gltf: any) => {
+              if (cancelled) return;
+              const model = gltf.scene;
+              model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
+              scene.add(model);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              model.traverse((obj: any) => {
+                if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
+                const lk = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
+                if (lk.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
+                  bodyMesh = obj; updateBody(saved);
+                  if (sceneRef.current) sceneRef.current.updateBody = updateBody;
+                }
+              });
+              setBodyReady(true);
+            },
+            undefined,
+            () => setBodyReady(true)
+          );
+        }
+      );
 
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
-      const animate = () => { animId = requestAnimationFrame(animate); controls.update(); setMorph('BODY_LENGTH', 1.5); renderer.render(scene, camera); };
+      const animate = () => {
+        animId = requestAnimationFrame(animate);
+        controls.update();
+        setMorph('BODY_LENGTH', 1.5);
+        renderer.render(scene, camera);
+      };
       animate();
+
       const ro = new ResizeObserver(() => {
         const w = canvas.clientWidth, h = canvas.clientHeight;
         camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
       });
       ro.observe(canvas);
-      sceneRef.current = { animId, renderer, ro, updateBody };
+
+      sceneRef.current = { animId, renderer, ro, updateBody, tryOnShirt };
     });
 
     return () => {
       cancelled = true;
-      if (sceneRef.current) { cancelAnimationFrame(sceneRef.current.animId); sceneRef.current.renderer.dispose(); sceneRef.current.ro.disconnect(); sceneRef.current = null; }
+      if (sceneRef.current) {
+        cancelAnimationFrame(sceneRef.current.animId);
+        sceneRef.current.renderer.dispose();
+        sceneRef.current.ro.disconnect();
+        sceneRef.current = null;
+      }
       setBodyReady(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync body mesh with temp or saved measurements depending on slider state
-  useEffect(() => {
-    sceneRef.current?.updateBody(showSliders ? tempMeasurements : measurements);
-  }, [tempMeasurements, measurements, showSliders]);
+  // Live body update when draft changes
+  useEffect(() => { sceneRef.current?.updateBody(draft); }, [draft]);
 
-  // ── Shirt 3D scene ────────────────────────────────────────────────────
+  // Try shirt on body when selectedItem changes
   useEffect(() => {
-    if (shirtSceneRef.current) {
-      cancelAnimationFrame(shirtSceneRef.current.animId);
-      shirtSceneRef.current.renderer.dispose();
-      shirtSceneRef.current.ro.disconnect();
-      shirtSceneRef.current = null;
+    if (!selectedItem) {
+      sceneRef.current?.tryOnShirt(null);
+    } else {
+      const url = selectedItem.frontImageUrl || selectedItem.imageUrl || null;
+      sceneRef.current?.tryOnShirt(url);
     }
-    if (!selectedItem || show2d || !shirtCanvasRef.current) return;
-    let cancelled = false;
+  }, [selectedItem]);
 
-    Promise.all([
-      import('three'),
-      import('three/addons/loaders/GLTFLoader.js'),
-      import('three/addons/controls/OrbitControls.js'),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
-      if (cancelled || !shirtCanvasRef.current) return;
-      const canvas = shirtCanvasRef.current;
-      const W = canvas.clientWidth || 220, H = canvas.clientHeight || 280;
-      const scene    = new THREE.Scene(); scene.background = new THREE.Color(0xf8f3ea);
-      const camera   = new THREE.PerspectiveCamera(45, W / H, 0.1, 50);
-      camera.position.set(0, 0.3, 2.2);
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-      renderer.setSize(W, H, false);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 2.5;
-      scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-      const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(2, 3, 2); scene.add(key);
+  // ── Handlers ──────────────────────────────────────────────────
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setPhotoFile(file); setDetectMsg(null);
+    const reader = new FileReader();
+    reader.onloadend = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
-      const loader = new GLTFLoader();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/newtntshirt1.glb?v=' + Date.now(), (gltf: any) => {
-        if (cancelled) return;
-        const model = gltf.scene;
-        const box = new THREE.Box3().setFromObject(model);
-        model.position.sub(box.getCenter(new THREE.Vector3()));
-        scene.add(model);
-        const frontUrl = selectedItem.frontImageUrl || selectedItem.imageUrl;
-        if (frontUrl) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model.traverse((obj: any) => {
-            if (!obj.isMesh) return;
-            const tex = new THREE.TextureLoader().load(frontUrl);
-            tex.flipY = false;
-            obj.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, side: THREE.DoubleSide });
-          });
-        }
-      }, undefined, console.error);
-
-      let animId: ReturnType<typeof requestAnimationFrame> = 0;
-      const animate = () => { animId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
-      animate();
-      const ro = new ResizeObserver(() => {
-        const w = canvas.clientWidth, h = canvas.clientHeight;
-        camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
-      });
-      ro.observe(canvas);
-      shirtSceneRef.current = { animId, renderer, ro };
-    });
-
-    return () => {
-      cancelled = true;
-      if (shirtSceneRef.current) { cancelAnimationFrame(shirtSceneRef.current.animId); shirtSceneRef.current.renderer.dispose(); shirtSceneRef.current.ro.disconnect(); shirtSceneRef.current = null; }
-    };
-  }, [selectedItem, show2d]);
-
-  // Slider handlers
-  const handleOpenSliders = useCallback(() => {
-    setTempMeasurements({ ...measurements }); setShowSliders(true); setSuccess(null);
-  }, [measurements]);
-
-  const handleCancelSliders = useCallback(() => {
-    setShowSliders(false);
-    sceneRef.current?.updateBody(measurements);
-  }, [measurements]);
-
-  const handleApplyTemp = useCallback(() => {
-    sceneRef.current?.updateBody(tempMeasurements);
-    setShowSliders(false);
-  }, [tempMeasurements]);
-
-  const handleSavePermanently = useCallback(async () => {
-    if (!user) return;
-    setSaving(true);
+  const handleAutoDetect = async () => {
+    if (!photoPreview) return;
+    setDetecting(true); setDetectMsg(null);
     try {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = photoPreview; });
+      const result = await processImage(img, draft.height);
+      if (result && result.confidence >= 0.5) {
+        const m: Measurements = { height: result.height, chest: result.chest, waist: result.waist, shoulder: result.shoulder };
+        setDraft(m); setDetectMsg('✅ Updated!');
+      } else {
+        setDetectMsg('⚠️ Could not detect. Adjust manually.');
+      }
+    } catch { setDetectMsg('❌ Detection failed.'); }
+    finally { setDetecting(false); }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingInfo(true);
+    try {
+      let photoUrl = photoPreview;
+      if (photoFile) {
+        const r = await uploadUserPhoto(user.uid, photoFile, 'profile');
+        photoUrl = r?.url || photoUrl;
+        if (r?.url) setPhotoPreview(r.url);
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await saveAvatar({ userId: user.uid, ...tempMeasurements } as any);
-      setMeasurements({ ...tempMeasurements });
-      setSuccess('Measurements saved! ✅');
-      setTimeout(() => setSuccess(null), 3000);
-      setShowSliders(false);
-    } finally { setSaving(false); }
-  }, [user, tempMeasurements]);
+      await saveAvatar({ userId: user.uid, ...draft, displayName, age: parseInt(age) || 0, gender, photoUrl } as any);
+      setSaved({ ...draft }); setEditingInfo(false);
+    } finally { setSavingInfo(false); }
+  };
+
+  const handleSaveBody = async () => {
+    if (!user) return;
+    setSavingBody(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await saveAvatar({ userId: user.uid, ...draft, displayName, age: parseInt(age) || 0, gender } as any);
+    setSaved({ ...draft });
+    setBodySuccess(true); setTimeout(() => setBodySuccess(false), 2500);
+    setSavingBody(false);
+  };
+
+  // Derived
+  const categories    = ['All', ...Array.from(new Set(items.map(i => i.category).filter(Boolean)))];
+  const filteredItems = activeCategory === 'All' ? items : items.filter(i => i.category === activeCategory);
 
   if (authLoading || !user) {
     return (
@@ -257,225 +327,415 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '100vh', backgroundColor: C.cream }}>
+    <div className="flex" style={{ height: 'calc(100vh - 64px)', backgroundColor: C.cream }}>
 
-      {/* ════ BODY CANVAS ════ */}
-      <div className="relative flex-1" style={{ minHeight: '60vh', maxHeight: '68vh' }}>
-        <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />
+      {/* ═══════════════════════════════════════════════════════
+          3-COLUMN LAYOUT — fills full viewport height
+      ═══════════════════════════════════════════════════════ */}
 
-        {/* Loading overlay */}
-        {!bodyReady && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10" style={{ backgroundColor: C.cream }}>
-            <div className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
-            <p className="text-sm font-bold" style={{ color: C.navy }}>Loading 3D body...</p>
-          </div>
-        )}
-
-        {/* Name tag */}
-        {bodyReady && displayName && (
-          <div className="absolute top-4 left-4 px-4 py-2 rounded-xl font-black text-sm shadow-lg" style={{ backgroundColor: C.navy, color: 'white' }}>
-            👤 {displayName}
-          </div>
-        )}
-
-        {/* Rotate hint */}
-        {bodyReady && (
-          <div className="absolute top-4 right-4 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.85)', color: C.navy }}>
-            🖱 Drag to rotate
-          </div>
-        )}
-
-        {/* Change Body Size — bottom right */}
-        <button
-          onClick={handleOpenSliders}
-          className="absolute bottom-4 right-4 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg hover:opacity-90 transition-all flex items-center gap-2"
-          style={{ backgroundColor: C.navy, color: 'white' }}
-        >
-          ⚙️ Change Body Size
-        </button>
-
-        {/* ── BODY SLIDERS PANEL ── */}
-        {showSliders && (
-          <div className="absolute inset-y-0 right-0 w-80 bg-white shadow-2xl border-l flex flex-col z-30" style={{ borderColor: C.peach }}>
-            <div className="p-5 border-b" style={{ borderColor: C.peach }}>
-              <h3 className="text-lg font-black" style={{ color: C.navy }}>Body Size</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Changes show live on the model</p>
+        {/* ══ LEFT: Profile info & photo ══ */}
+        <div className="w-60 flex-shrink-0 bg-white border-r flex flex-col overflow-y-auto" style={{ borderColor: C.peach }}>
+          <div className="p-4 border-b" style={{ borderColor: C.peach }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-black uppercase tracking-widest" style={{ color: C.navy }}>Profile</h2>
+              <button onClick={() => setEditingInfo(e => !e)}
+                className="text-[10px] font-bold px-2.5 py-1 rounded-full transition-all"
+                style={{ backgroundColor: editingInfo ? C.navy : C.peach, color: editingInfo ? 'white' : C.navy }}>
+                {editingInfo ? 'Cancel' : '✏️ Edit'}
+              </button>
             </div>
 
-            {success && <div className="mx-5 mt-4 p-3 rounded-lg bg-green-50 border border-green-200 text-xs font-semibold text-green-700">{success}</div>}
+            {/* Photo */}
+            <div className="relative mb-3">
+              <div className="w-full aspect-square rounded-xl overflow-hidden border-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
+                {photoPreview
+                  ? <img src={photoPreview} alt="profile" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                  : <div className="w-full h-full flex flex-col items-center justify-center">
+                      <span className="text-4xl">🧍</span>
+                      <p className="text-[10px] mt-1 font-medium" style={{ color: C.navy, opacity: 0.4 }}>No photo</p>
+                    </div>
+                }
+              </div>
+              <label className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center cursor-pointer shadow-lg text-sm hover:scale-110 transition-transform"
+                style={{ backgroundColor: C.navy }}>
+                📷
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+              </label>
+            </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              {([
-                { key: 'height',   label: 'Height',   unit: 'cm', min: 150, max: 198 },
-                { key: 'chest',    label: 'Chest',    unit: 'cm', min: 50,  max: 150 },
-                { key: 'waist',    label: 'Waist',    unit: 'cm', min: 40,  max: 140 },
-                { key: 'shoulder', label: 'Shoulder', unit: 'cm', min: 30,  max: 70  },
-              ] as const).map(({ key, label, unit, min, max }) => (
-                <div key={key}>
-                  <div className="flex justify-between mb-1.5">
-                    <span className="text-xs font-black uppercase tracking-widest text-gray-400">{label}</span>
-                    <span className="text-base font-black" style={{ color: C.navy }}>{tempMeasurements[key]} {unit}</span>
+            {photoPreview && (
+              <button onClick={handleAutoDetect} disabled={detecting}
+                className="w-full py-2 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 disabled:opacity-60 transition-all hover:opacity-90 mb-2"
+                style={{ backgroundColor: C.pink, color: C.navy }}>
+                {detecting
+                  ? <><div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />Scanning...</>
+                  : '🎯 Re-scan body'}
+              </button>
+            )}
+            {detectMsg && (
+              <p className="text-[10px] text-center py-1 px-2 rounded-lg mb-1" style={{ backgroundColor: C.peach, color: C.navy }}>
+                {detectMsg}
+              </p>
+            )}
+          </div>
+
+          {/* Profile fields */}
+          <div className="p-4 flex-1 space-y-3">
+            {editingInfo ? (
+              <>
+                {[
+                  { label: 'Name', value: displayName, set: setDisplayName, type: 'text',   placeholder: 'Your name' },
+                  { label: 'Age',  value: age,         set: setAge,         type: 'number', placeholder: '25'        },
+                ].map(({ label, value, set, type, placeholder }) => (
+                  <div key={label}>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 block mb-1">{label}</label>
+                    <input type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
+                      className="w-full px-2.5 py-1.5 rounded-lg border text-xs font-medium focus:outline-none"
+                      style={{ borderColor: C.peach, backgroundColor: C.cream, color: C.navy }} />
                   </div>
-                  <input type="range" min={min} max={max} step={0.5}
-                    value={tempMeasurements[key]}
-                    onChange={e => setTempMeasurements(p => ({ ...p, [key]: Number(e.target.value) }))}
-                    className="w-full" style={{ accentColor: C.navy }} />
-                  <input type="number" min={min} max={max}
-                    value={tempMeasurements[key]}
-                    onChange={e => setTempMeasurements(p => ({ ...p, [key]: Number(e.target.value) }))}
-                    className="mt-1.5 w-full px-3 py-1.5 rounded-lg border text-sm font-bold focus:outline-none"
-                    style={{ borderColor: C.peach, backgroundColor: C.cream, color: C.navy }} />
+                ))}
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 block mb-1">Gender</label>
+                  <select value={gender} onChange={e => setGender(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border text-xs font-medium focus:outline-none"
+                    style={{ borderColor: C.peach, backgroundColor: C.cream, color: C.navy }}>
+                    <option value="">Select...</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                    <option value="prefer_not">Prefer not to say</option>
+                  </select>
+                </div>
+                <button onClick={handleSaveProfile} disabled={savingInfo}
+                  className="w-full py-2 rounded-lg font-bold text-xs text-white disabled:opacity-50 hover:opacity-90 transition-all"
+                  style={{ backgroundColor: C.navy }}>
+                  {savingInfo ? 'Saving...' : '💾 Save Profile'}
+                </button>
+              </>
+            ) : (
+              <>
+                {[
+                  { label: 'Name',   value: displayName || '—' },
+                  { label: 'Age',    value: age         || '—' },
+                  { label: 'Gender', value: gender      || '—' },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p>
+                    <p className="text-xs font-bold capitalize mt-0.5" style={{ color: C.navy }}>{value}</p>
+                  </div>
+                ))}
+                <div className="pt-2 border-t" style={{ borderColor: C.peach }}>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Saved Measurements</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([['Height', saved.height], ['Chest', saved.chest], ['Waist', saved.waist], ['Shldr', saved.shoulder]] as const).map(([k, v]) => (
+                      <div key={k} className="rounded-lg px-2 py-1 text-center" style={{ backgroundColor: C.peach }}>
+                        <p className="text-[8px] font-black text-gray-400 uppercase">{k}</p>
+                        <p className="text-sm font-black" style={{ color: C.navy }}>{v}<span className="text-[8px] font-medium opacity-60">cm</span></p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ══ CENTER: 3D body canvas + always-visible slider ══ */}
+        <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: '#f8f3ea' }}>
+          <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />
+
+          {!bodyReady && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10" style={{ backgroundColor: C.cream }}>
+              <div className="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
+              <p className="text-xs font-bold" style={{ color: C.navy }}>Loading 3D body...</p>
+            </div>
+          )}
+
+          {/* ── Always-visible body size panel — top-left ── */}
+          <div
+            className="absolute top-3 left-3 z-20 rounded-2xl shadow-xl border"
+            style={{
+              width: '240px',
+              backgroundColor: 'rgba(255,255,255,0.97)',
+              backdropFilter: 'blur(12px)',
+              borderColor: C.peach,
+            }}>
+            <div className="px-3 pt-2.5 pb-1.5 border-b" style={{ borderColor: C.peach }}>
+              <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: C.navy }}>📐 Body Size</p>
+              <p className="text-[9px] text-gray-400">Drag sliders — updates model live</p>
+            </div>
+            <div className="px-3 py-2.5 space-y-3">
+              {([
+                { key: 'height',   label: 'Height',   min: 150, max: 198 },
+                { key: 'chest',    label: 'Chest',    min: 50,  max: 150 },
+                { key: 'waist',    label: 'Waist',    min: 40,  max: 140 },
+                { key: 'shoulder', label: 'Shoulder', min: 30,  max: 70  },
+              ] as const).map(({ key, label, min, max }) => (
+                <div key={key}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</span>
+                    <span
+                      className="text-[11px] font-black tabular-nums px-2 py-0.5 rounded-md"
+                      style={{ backgroundColor: C.peach, color: C.navy, minWidth: '52px', textAlign: 'center' }}>
+                      {draft[key]}<span className="text-[9px] font-normal opacity-60"> cm</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range" min={min} max={max} step={0.5}
+                    value={draft[key]}
+                    onChange={e => setDraft(p => ({ ...p, [key]: Number(e.target.value) }))}
+                    className="w-full cursor-pointer"
+                    style={{ accentColor: C.navy, height: '4px' }}
+                  />
                 </div>
               ))}
             </div>
-
-            <div className="p-5 border-t space-y-2" style={{ borderColor: C.peach }}>
-              <button onClick={handleSavePermanently} disabled={saving}
-                className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-50 hover:opacity-90 transition-all"
+            <div className="px-3 pb-3">
+              <button onClick={handleSaveBody} disabled={savingBody}
+                className="w-full py-2 rounded-xl font-bold text-xs text-white disabled:opacity-50 hover:opacity-90 transition-all"
                 style={{ backgroundColor: C.navy }}>
-                {saving ? 'Saving...' : '💾 Save Permanently'}
+                {savingBody ? 'Saving...' : '💾 Save Permanently'}
               </button>
-              <button onClick={handleApplyTemp}
-                className="w-full py-2.5 rounded-xl font-bold text-sm border-2 hover:opacity-80 transition-all"
-                style={{ borderColor: C.navy, color: C.navy }}>
-                ✅ Apply (this session only)
-              </button>
-              <button onClick={handleCancelSliders}
-                className="w-full py-2.5 rounded-xl font-bold text-sm border-2 hover:opacity-80 transition-all"
-                style={{ borderColor: C.peach, color: C.navy }}>
-                Cancel
-              </button>
+              {bodySuccess && <p className="text-center text-[9px] font-bold text-green-600 mt-1.5">✅ Saved!</p>}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ════ OUTFIT SELECTION ════ */}
-      <div className="bg-white border-t-2 flex-shrink-0" style={{ borderColor: C.peach, maxHeight: '40vh', display: 'flex', flexDirection: 'column' }}>
+          {/* Drag hint — centered top, right of slider panel */}
+          {bodyReady && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg text-[11px] font-medium pointer-events-none"
+              style={{ backgroundColor: 'rgba(255,255,255,0.75)', color: C.navy, marginLeft: '60px' }}>
+              🖱 Drag to rotate
+            </div>
+          )}
 
-        {/* Tab bar */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b flex-shrink-0" style={{ borderColor: C.peach }}>
-          <div className="flex gap-2">
-            {(['items', 'outfits'] as const).map(tab => (
-              <button key={tab} onClick={() => setOutfitTab(tab)}
-                className="px-4 py-2 rounded-lg font-bold text-sm transition-all"
-                style={{ backgroundColor: outfitTab === tab ? C.navy : C.cream, color: outfitTab === tab ? 'white' : C.navy }}>
-                {tab === 'items' ? `👕 Shirts (${items.length})` : `✨ Outfits (${outfits.length})`}
-              </button>
-            ))}
-          </div>
+          {/* Selected item try-on badge */}
           {selectedItem && (
-            <button onClick={() => { setSelectedItem(null); setShow2d(false); }}
-              className="text-xs font-bold px-3 py-1.5 rounded-full border hover:opacity-80"
-              style={{ borderColor: C.peach, color: C.navy }}>
-              ✕ Deselect
-            </button>
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-xl shadow-lg"
+                 style={{ backgroundColor: C.navy, color: 'white' }}>
+              <span className="text-xs font-bold">👕 Trying on:</span>
+              <span className="text-xs font-black">{selectedItem.name}</span>
+              <button onClick={() => setSelectedItem(null)}
+                className="ml-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px]"
+                style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>✕</button>
+            </div>
           )}
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Card grid */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
-            {loadingData && (
-              <div className="flex items-center justify-center h-full">
-                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
-              </div>
-            )}
+        {/* ══ RIGHT: Wardrobe sidebar ══ */}
+        <div className="w-96 flex-shrink-0 bg-white border-l flex flex-col overflow-hidden" style={{ borderColor: C.peach }}>
 
-            {!loadingData && outfitTab === 'items' && (
-              <div className="flex gap-3 h-full items-start pb-1">
-                {items.length === 0
-                  ? <p className="text-sm text-gray-400 self-center">No items yet. Add from the Wardrobe page.</p>
-                  : items.map(item => (
-                    <button key={item.id} onClick={() => { setSelectedItem(item); setShow2d(false); }}
-                      className="flex-shrink-0 w-24 rounded-xl overflow-hidden border-2 transition-all hover:scale-105"
-                      style={{
-                        borderColor: selectedItem?.id === item.id ? C.navy : C.peach,
-                        boxShadow:   selectedItem?.id === item.id ? `0 0 0 3px ${C.pink}` : 'none',
-                      }}>
-                      <div className="w-full aspect-square bg-white flex items-center justify-center overflow-hidden">
-                        {(item.frontImageUrl || item.imageUrl)
-                          ? <img src={item.frontImageUrl || item.imageUrl} alt={item.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
-                          : <span className="text-2xl">👕</span>}
-                      </div>
-                      <div className="p-1.5" style={{ backgroundColor: C.cream }}>
-                        <p className="text-[10px] font-bold truncate" style={{ color: C.navy }}>{item.name}</p>
-                        <p className="text-[9px] opacity-50 truncate" style={{ color: C.navy }}>{item.brand}</p>
-                      </div>
-                    </button>
-                  ))
-                }
-              </div>
-            )}
+          {/* Header: tabs + 2D/3D toggle */}
+          <div className="p-3 border-b flex-shrink-0 space-y-2" style={{ borderColor: C.peach }}>
+            {/* Items / Outfits tabs */}
+            <div className="flex gap-1.5">
+              {(['items', 'outfits'] as const).map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className="flex-1 py-1.5 rounded-lg font-bold text-[10px] transition-all"
+                  style={{ backgroundColor: activeTab === tab ? C.navy : C.cream, color: activeTab === tab ? 'white' : C.navy }}>
+                  {tab === 'items' ? `👕 Items (${items.length})` : `✨ Outfits (${outfits.length})`}
+                </button>
+              ))}
+            </div>
+            {/* Global 2D / 3D view toggle */}
+            <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: C.cream }}>
+              {(['2d', '3d'] as const).map(v => (
+                <button key={v} onClick={() => setSidebarView(v)}
+                  className="flex-1 py-1.5 rounded-lg font-bold text-[11px] transition-all"
+                  style={{
+                    backgroundColor: sidebarView === v ? C.navy : 'transparent',
+                    color:           sidebarView === v ? 'white' : C.navy,
+                  }}>
+                  {v === '2d' ? '🖼 2D View' : '📦 3D View'}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {!loadingData && outfitTab === 'outfits' && (
-              <div className="flex gap-3 h-full items-start pb-1">
-                {outfits.length === 0
-                  ? <p className="text-sm text-gray-400 self-center">No outfits yet. Create combos in the Wardrobe page.</p>
-                  : outfits.map(outfit => {
-                    const outfitItems = items.filter(i => outfit.itemIds.includes(i.id));
-                    return (
-                      <button key={outfit.id} onClick={() => outfitItems[0] && setSelectedItem(outfitItems[0])}
-                        className="flex-shrink-0 w-32 rounded-xl overflow-hidden border-2 text-left transition-all hover:scale-105"
-                        style={{ borderColor: C.peach }}>
-                        <div className="grid grid-cols-2 gap-0.5 p-1" style={{ backgroundColor: C.cream }}>
-                          {outfitItems.slice(0, 4).map((item, idx) => (
-                            <div key={idx} className="aspect-square rounded overflow-hidden bg-white flex items-center justify-center">
-                              {(item.frontImageUrl || item.imageUrl)
-                                ? <img src={item.frontImageUrl || item.imageUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                : <span className="text-lg">👕</span>}
-                            </div>
-                          ))}
+          {/* Category pills */}
+          {activeTab === 'items' && (
+            <div className="px-2.5 py-2 flex flex-wrap gap-1 border-b flex-shrink-0" style={{ borderColor: C.peach }}>
+              {categories.map(cat => (
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className="px-2 py-0.5 rounded-full text-[9px] font-bold transition-all"
+                  style={{ backgroundColor: activeCategory === cat ? C.pink : C.peach, color: C.navy }}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Scrollable grid */}
+          <div className="flex-1 overflow-y-auto p-2.5">
+            {loadingData ? (
+              <div className="flex justify-center pt-8">
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
+              </div>
+            ) : activeTab === 'items' ? (
+              filteredItems.length === 0
+                ? <p className="text-[10px] text-center text-gray-400 pt-8">No items yet. Add from Wardrobe.</p>
+                : <div className="grid grid-cols-2 gap-2">
+                    {filteredItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedItem(prev => prev?.id === item.id ? null : item)}
+                        className="rounded-xl overflow-hidden border-2 transition-all hover:scale-[1.03] hover:shadow-md text-left"
+                        style={{
+                          borderColor: selectedItem?.id === item.id ? C.navy : C.peach,
+                          boxShadow:   selectedItem?.id === item.id ? `0 0 0 2.5px ${C.pink}` : 'none',
+                        }}>
+                        <div className="aspect-square bg-white relative overflow-hidden">
+                          {sidebarView === '2d' ? (
+                            (item.frontImageUrl || item.imageUrl)
+                              ? <img src={item.frontImageUrl || item.imageUrl} alt={item.name}
+                                  className="w-full h-full object-cover" crossOrigin="anonymous" />
+                              : <div className="w-full h-full flex items-center justify-center"><span className="text-2xl">👕</span></div>
+                          ) : (
+                            <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
+                          )}
+                          {selectedItem?.id === item.id && (
+                            <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shadow"
+                                 style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                          )}
                         </div>
-                        <div className="p-2">
-                          <p className="text-[10px] font-bold truncate" style={{ color: C.navy }}>{outfit.name}</p>
-                          <p className="text-[9px] opacity-50" style={{ color: C.navy }}>{outfitItems.length} items</p>
+                        <div className="px-1.5 py-1" style={{ backgroundColor: selectedItem?.id === item.id ? C.peach : C.cream }}>
+                          <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{item.name}</p>
+                          <p className="text-[8px] opacity-50 truncate" style={{ color: C.navy }}>{item.brand}</p>
                         </div>
                       </button>
-                    );
-                  })
-                }
-              </div>
+                    ))}
+                  </div>
+            ) : (
+              outfits.length === 0
+                ? <p className="text-[10px] text-center text-gray-400 pt-8">No outfits yet.</p>
+                : <div className="space-y-2">
+                    {outfits.map(outfit => {
+                      const oi = items.filter(i => outfit.itemIds.includes(i.id));
+                      return (
+                        <button key={outfit.id}
+                          onClick={() => oi[0] && setSelectedItem(prev => prev?.id === oi[0].id ? null : oi[0])}
+                          className="w-full rounded-xl overflow-hidden border-2 text-left hover:scale-[1.02] transition-all"
+                          style={{ borderColor: C.peach }}>
+                          <div className="grid grid-cols-4 gap-0.5 p-1.5" style={{ backgroundColor: C.cream }}>
+                            {oi.slice(0, 4).map((oi2, idx) => (
+                              <div key={idx} className="aspect-square rounded overflow-hidden bg-white flex items-center justify-center">
+                                {(oi2.frontImageUrl || oi2.imageUrl)
+                                  ? <img src={oi2.frontImageUrl || oi2.imageUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                  : <span className="text-xs">👕</span>}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-2 py-1.5" style={{ backgroundColor: C.cream }}>
+                            <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{outfit.name}</p>
+                            <p className="text-[8px] opacity-50" style={{ color: C.navy }}>{oi.length} items</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
             )}
           </div>
 
-          {/* Selected item panel (right) */}
-          {selectedItem && (
-            <div className="flex-shrink-0 w-60 border-l p-4 overflow-y-auto" style={{ borderColor: C.peach }}>
-              <div className="flex gap-2 mb-3">
-                {(['3d', '2d'] as const).map(v => (
-                  <button key={v} onClick={() => setShow2d(v === '2d')}
-                    className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                    style={{
-                      backgroundColor: (v === '2d') === show2d ? C.navy : C.peach,
-                      color:           (v === '2d') === show2d ? 'white'  : C.navy,
-                    }}>
-                    {v === '3d' ? '📦 3D' : '🖼 2D'}
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-full rounded-xl overflow-hidden border-2 mb-3" style={{ borderColor: C.peach, aspectRatio: '4/5' }}>
-                {show2d ? (
-                  <img src={selectedItem.frontImageUrl || selectedItem.imageUrl || ''}
-                    alt={selectedItem.name} className="w-full h-full object-contain bg-white" crossOrigin="anonymous" />
-                ) : (
-                  <canvas ref={shirtCanvasRef} className="w-full h-full" style={{ display: 'block', backgroundColor: C.cream }} />
-                )}
-              </div>
-
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ backgroundColor: C.pink, color: C.navy }}>{selectedItem.brand}</span>
-              <h3 className="text-sm font-black mt-1 mb-0.5" style={{ color: C.navy }}>{selectedItem.name}</h3>
-              <p className="text-xs text-gray-400 mb-2">{selectedItem.category}</p>
-              <div className="flex flex-wrap gap-1">
-                {selectedItem.sizeChart.map(s => (
-                  <span key={s.size} className="text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ borderColor: C.peach, color: C.navy }}>{s.size}</span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+
     </div>
   );
+}
+
+// ── Mini 3D shirt canvas — auto-rotating, one per item card ─────────────────
+function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: string | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sceneRef  = useRef<{ animId: number; renderer: any; ro: ResizeObserver } | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    let cancelled = false;
+
+    Promise.all([
+      import('three'),
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/controls/OrbitControls.js'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
+      if (cancelled || !canvasRef.current) return;
+      const canvas = canvasRef.current;
+      const W = canvas.clientWidth  || 130;
+      const H = canvas.clientHeight || 130;
+
+      const scene    = new THREE.Scene();
+      scene.background = new THREE.Color(0xfaf7f2);
+      const camera   = new THREE.PerspectiveCamera(45, W / H, 0.1, 50);
+      camera.position.set(0, 0.15, 1.9);
+
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setSize(W, H, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping    = true;
+      controls.autoRotate       = true;
+      controls.autoRotateSpeed  = 3.5;
+      controls.enableZoom       = false;
+      controls.enablePan        = false;
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+      const key = new THREE.DirectionalLight(0xffffff, 1.5);
+      key.position.set(2, 3, 2);
+      scene.add(key);
+
+      const loader = new GLTFLoader();
+      loader.load(
+        '/models/newtntshirt1.glb',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (gltf: any) => {
+          if (cancelled) return;
+          const model = gltf.scene;
+          model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
+          scene.add(model);
+          if (imageUrl) {
+            const tex = new THREE.TextureLoader().load(imageUrl);
+            tex.flipY = false;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            model.traverse((obj: any) => {
+              if (!obj.isMesh) return;
+              obj.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, side: THREE.DoubleSide });
+            });
+          }
+        },
+        undefined,
+        () => { /* silently ignore load errors for mini canvases */ }
+      );
+
+      let animId = 0;
+      const animate = () => {
+        animId = requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      const ro = new ResizeObserver(() => {
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        if (!w || !h) return;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      });
+      ro.observe(canvas);
+      sceneRef.current = { animId, renderer, ro };
+    });
+
+    return () => {
+      cancelled = true;
+      if (sceneRef.current) {
+        cancelAnimationFrame(sceneRef.current.animId);
+        sceneRef.current.renderer.dispose();
+        sceneRef.current.ro.disconnect();
+        sceneRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId]);
+
+  return <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />;
 }

@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { ClothingItem } from '@/lib/types/clothing';
 import type { ParametricAvatar } from '@/lib/types/avatar';
+import { saveAvatar } from '@/lib/firebase/firestore';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 const colors = {
   cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC',
@@ -23,6 +25,11 @@ const BASE = SIZE_DATA['S'];
 const MAX  = SIZE_DATA['4XL'];
 const cmToMorph = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
 
+// Body morph helpers (for human body mesh if present)
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54 };
+const bodyNorm  = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
+
 const ATLAS_SIZE    = 2048;
 const FRONT_RECT    = { x: 0,    y: 0,    w: 1024, h: 1536 };
 const BACK_RECT     = { x: 1024, y: 0,    w: 1024, h: 1536 };
@@ -38,13 +45,16 @@ interface Props {
   userProfile: ParametricAvatar | null;
 }
 
+type BodyDraft = { height: number; chest: number; waist: number; shoulder: number };
+
 export default function FitRecommendationModal({ isOpen, onClose, item, userProfile }: Props) {
+  const { user } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // FIX: properly type the ref so animId has no red underline
   const sceneRef = useRef<{
     renderer: { dispose: () => void };
     animId: ReturnType<typeof requestAnimationFrame>;
     applySize: (s: string) => void;
+    updateBody: (b: BodyDraft) => void;
     ro: ResizeObserver;
   } | null>(null);
 
@@ -56,6 +66,33 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   const [aiSuggestions, setAiSuggestions] = useState<OutfitSuggestion[]>([]);
   const [aiError,       setAiError]       = useState<string | null>(null);
   const [showAi,        setShowAi]        = useState(false);
+
+  // ── Body slider state ─────────────────────────────────────────
+  const [showBodyPanel, setShowBodyPanel] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState<BodyDraft>({
+    height:   userProfile?.height   ?? 170,
+    chest:    userProfile?.chest    ?? 90,
+    waist:    userProfile?.waist    ?? 75,
+    shoulder: userProfile?.shoulder ?? 44,
+  });
+  const [savedBody,   setSavedBody]   = useState<BodyDraft>({ ...bodyDraft });
+  const [savingBody,  setSavingBody]  = useState(false);
+  const [bodySavedOk, setBodySavedOk] = useState(false);
+
+  // Sync initial body from profile
+  useEffect(() => {
+    if (!userProfile) return;
+    const b: BodyDraft = {
+      height:   userProfile.height,
+      chest:    userProfile.chest,
+      waist:    userProfile.waist,
+      shoulder: userProfile.shoulder,
+    };
+    setBodyDraft(b); setSavedBody(b);
+  }, [userProfile]);
+
+  // Live body update on draft change
+  useEffect(() => { sceneRef.current?.updateBody(bodyDraft); }, [bodyDraft]);
 
   // Fit status
   useEffect(() => {
@@ -79,7 +116,8 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       import('three'),
       import('three/addons/loaders/GLTFLoader.js'),
       import('three/addons/controls/OrbitControls.js'),
-    ]).then(([THREE, { GLTFLoader }, { OrbitControls }]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
       if (cancelled || !canvasRef.current) return;
       const canvas = canvasRef.current;
       const W = canvas.clientWidth || 560, H = canvas.clientHeight || 560;
@@ -95,12 +133,14 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping   = true;
       controls.autoRotate      = true;
-      controls.autoRotateSpeed = 3.5;   // faster rotation
+      controls.autoRotateSpeed = 3.5;
       controls.minDistance     = 1.5;
       controls.maxDistance     = 6;
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(3, 4, 2); scene.add(key);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fill = new THREE.DirectionalLight(0xaaccff, 0.4); fill.position.set(-3, 0, -2); scene.add(fill);
 
       // Atlas
@@ -111,6 +151,8 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       let atlasTexture: any = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let morphMesh: any = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let bodyMesh: any = null;
       let frontImg: HTMLImageElement | null = null;
       let backImg:  HTMLImageElement | null = null;
 
@@ -158,39 +200,65 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         }
       }
 
-      function setMorph(prefix: string, value: number) {
-        if (!morphMesh?.morphTargetDictionary) return;
-        const keys = Object.keys(morphMesh.morphTargetDictionary);
-        const key  = keys.find((k: string) => k === prefix || k.startsWith(prefix));
-        if (key) morphMesh.morphTargetInfluences[morphMesh.morphTargetDictionary[key]] = value;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      function setShirtMorph(prefix: string, value: number, mesh: any) {
+        if (!mesh?.morphTargetDictionary) return;
+        const keys = Object.keys(mesh.morphTargetDictionary);
+        const k  = keys.find((k: string) => k === prefix || k.startsWith(prefix));
+        if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value;
       }
 
       function applySize(size: string) {
         const d = SIZE_DATA[size]; if (!d) return;
-        setMorph('CHEST_WIDE',    cmToMorph(d.chest,    BASE.chest,    MAX.chest));
-        setMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder));
-        setMorph('LEN_LONG',      cmToMorph(d.length,   BASE.length,   MAX.length));
-        setMorph('SLEEVE_LONG',   cmToMorph(d.sleeve,   BASE.sleeve,   MAX.sleeve));
+        setShirtMorph('CHEST_WIDE',    cmToMorph(d.chest,    BASE.chest,    MAX.chest),    morphMesh);
+        setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder), morphMesh);
+        setShirtMorph('LEN_LONG',      cmToMorph(d.length,   BASE.length,   MAX.length),   morphMesh);
+        setShirtMorph('SLEEVE_LONG',   cmToMorph(d.sleeve,   BASE.sleeve,   MAX.sleeve),   morphMesh);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      function setBodyMorph(prefix: string, value: number, mesh: any) {
+        if (!mesh?.morphTargetDictionary) return;
+        const k = (Object.keys(mesh.morphTargetDictionary) as string[])
+          .find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value;
+      }
+
+      function updateBody(b: BodyDraft) {
+        if (!bodyMesh) return;
+        setBodyMorph('CHEST_WIDE',    bodyNorm(b.chest,    BODY_BASE.chest,    BODY_MAX.chest)    * 3.0,  bodyMesh);
+        setBodyMorph('SHOULDER_WIDE', bodyNorm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder) * 0.5,  bodyMesh);
+        setBodyMorph('HEIGHT',        bodyNorm(b.height,   BODY_BASE.height,   BODY_MAX.height)   * 0.8,  bodyMesh);
+        setBodyMorph('WAIST_WIDE',    bodyNorm(b.waist,    BODY_BASE.waist,    BODY_MAX.waist)    * 10.0, bodyMesh);
+        setBodyMorph('HIP_WIDE',      Math.min(bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 1) * 2.0, bodyMesh);
+        setBodyMorph('BODY_LENGTH',   1.5, bodyMesh);
       }
 
       const loader = new GLTFLoader();
+      // Try loading combined human+shirt model first, fall back to shirt-only
       loader.load(
         '/models/fitcheck_human3d_shirt3dnew.glb?v=' + Date.now(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (gltf: any) => {
           if (cancelled) return;
           const model = gltf.scene;
           const box = new THREE.Box3().setFromObject(model);
           model.position.sub(box.getCenter(new THREE.Vector3()));
           scene.add(model);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model.traverse((obj: any) => {
-            if (!obj.isMesh || !obj.morphTargetDictionary || morphMesh) return;
+            if (!obj.isMesh || !obj.morphTargetDictionary) return;
             const lkeys = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
-            if (lkeys.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) {
+            if (!morphMesh && lkeys.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) {
               morphMesh = obj;
               obj.material = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
               rebuildAtlas(); applySize(selectedSize);
               if (sceneRef.current) sceneRef.current.applySize = applySize;
               setSceneReady(true);
+            }
+            if (!bodyMesh && lkeys.some((k: string) => k.includes('body_length') || (k.includes('height') && k.includes('body')))) {
+              bodyMesh = obj;
+              if (sceneRef.current) sceneRef.current.updateBody = updateBody;
             }
           });
           setModelLoading(false);
@@ -207,9 +275,14 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       if (item.backImageUrl)  loadImg(item.backImageUrl,  img => { backImg  = img; });
       else if (item.imageUrl) loadImg(item.imageUrl,      img => { frontImg = img; });
 
-      // Typed animId — ReturnType<typeof requestAnimationFrame> = number
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
-      const animate = () => { animId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
+      const animate = () => {
+        animId = requestAnimationFrame(animate);
+        controls.update();
+        // Force body length every frame to prevent distortion
+        if (bodyMesh) setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
+        renderer.render(scene, camera);
+      };
       animate();
 
       const ro = new ResizeObserver(() => {
@@ -218,7 +291,8 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       });
       ro.observe(canvas);
 
-      sceneRef.current = { renderer, animId, applySize, ro };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sceneRef.current = { renderer, animId, applySize, updateBody: (b: BodyDraft) => updateBody(b), ro };
     });
 
     return () => {
@@ -235,6 +309,20 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   }, [isOpen]);
 
   useEffect(() => { sceneRef.current?.applySize(selectedSize); }, [selectedSize]);
+
+  // Save body handlers
+  const handleSaveBodyPermanently = async () => {
+    if (!user) return;
+    setSavingBody(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await saveAvatar({ userId: user.uid, ...bodyDraft } as any);
+      setSavedBody({ ...bodyDraft });
+      setBodySavedOk(true); setTimeout(() => setBodySavedOk(false), 2500);
+    } finally { setSavingBody(false); }
+  };
+  const handleApplySession = () => { setBodySavedOk(true); setTimeout(() => setBodySavedOk(false), 1500); setShowBodyPanel(false); };
+  const handleResetBody = () => { setBodyDraft({ ...savedBody }); };
 
   // Gemini AI
   const handleAiSuggest = useCallback(async () => {
@@ -264,6 +352,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       const gData = await geminiRes.json();
       const text  = gData.candidates?.[0]?.content?.parts?.[0]?.text || '';
       setAiSuggestions(JSON.parse(text.replace(/```json|```/g, '').trim()));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setAiError('Could not get suggestions. Check NEXT_PUBLIC_GEMINI_API_KEY in .env.local');
     } finally { setAiLoading(false); }
@@ -278,26 +367,110 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-3">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex overflow-hidden">
 
-        {/* LEFT: 3D canvas */}
-        <div className="flex-1 bg-[#0d0d1a] relative flex flex-col">
+        {/* ══ LEFT: 3D canvas area ══ */}
+        <div className="flex-1 bg-[#0d0d1a] relative flex flex-col min-w-0">
           {modelLoading && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-[#0d0d1a]">
               <div className="w-12 h-12 border-4 border-t-transparent border-blue-400 rounded-full animate-spin" />
               <p className="text-blue-300 text-sm font-bold tracking-widest uppercase animate-pulse">Loading 3D Model...</p>
             </div>
           )}
+
+          {/* Canvas fills full area */}
           <canvas ref={canvasRef} className="w-full flex-1" style={{ display: 'block', minHeight: 0 }} />
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
-            <div className="bg-black/60 backdrop-blur-md rounded-xl p-3 border border-white/10">
-              <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2">Select Size to Preview</p>
+
+          {/* ── Body Size dropdown panel — anchored to bottom-left, above the size bar ── */}
+          {showBodyPanel && (
+            <div
+              className="absolute bottom-[88px] left-3 z-30 rounded-2xl border border-white/15 shadow-2xl"
+              style={{
+                backgroundColor: 'rgba(10,10,26,0.96)',
+                backdropFilter: 'blur(12px)',
+                width: '260px',
+              }}>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+                <p className="text-[11px] font-black text-white uppercase tracking-widest">⚙️ Body Size</p>
+                <button onClick={() => setShowBodyPanel(false)} className="text-white/40 hover:text-white text-xl leading-none transition-colors">×</button>
+              </div>
+              <div className="p-3 space-y-3">
+                {([
+                  { key: 'height',   label: 'Height',   min: 150, max: 198, unit: 'cm' },
+                  { key: 'chest',    label: 'Chest',    min: 50,  max: 150, unit: 'cm' },
+                  { key: 'waist',    label: 'Waist',    min: 40,  max: 140, unit: 'cm' },
+                  { key: 'shoulder', label: 'Shoulder', min: 30,  max: 70,  unit: 'cm' },
+                ] as const).map(({ key, label, min, max, unit }) => (
+                  <div key={key}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">{label}</span>
+                      <span className="text-xs font-black text-white tabular-nums">
+                        {bodyDraft[key]}<span className="text-[9px] text-white/40 ml-0.5">{unit}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={min} max={max} step={0.5}
+                        value={bodyDraft[key]}
+                        onChange={e => setBodyDraft(p => ({ ...p, [key]: Number(e.target.value) }))}
+                        className="flex-1 h-1 rounded-full appearance-none cursor-pointer"
+                        style={{ accentColor: colors.pink }}
+                      />
+                      <input
+                        type="number" min={min} max={max}
+                        value={bodyDraft[key]}
+                        onChange={e => setBodyDraft(p => ({ ...p, [key]: Number(e.target.value) }))}
+                        className="w-14 px-1.5 py-1 rounded-lg text-xs font-bold text-center focus:outline-none"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'white', border: '1px solid rgba(255,255,255,0.15)' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-3 pb-3 pt-1 space-y-1.5">
+                <button onClick={handleSaveBodyPermanently} disabled={savingBody}
+                  className="w-full py-2 rounded-xl font-bold text-xs text-white disabled:opacity-50 hover:opacity-90 transition-all"
+                  style={{ backgroundColor: colors.navy }}>
+                  {savingBody ? 'Saving...' : 'Save Permanently'}
+                </button>
+                <div className="flex gap-1.5">
+                  <button onClick={handleApplySession}
+                    className="flex-1 py-1.5 rounded-lg font-bold text-xs border border-white/20 text-white/70 hover:text-white hover:border-white/40 transition-all">
+                    ✓ Apply session
+                  </button>
+                  <button onClick={handleResetBody}
+                    className="flex-1 py-1.5 rounded-lg font-bold text-xs border border-white/20 text-white/50 hover:text-white/80 hover:border-white/30 transition-all">
+                    ↩ Reset
+                  </button>
+                </div>
+                {bodySavedOk && <p className="text-center text-[10px] font-bold text-green-400">✅ Applied!</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ── Bottom bar: size selector + body size button ── */}
+          <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
+            <div className="bg-black/60 backdrop-blur-md rounded-xl p-2.5 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Select Size to Preview</p>
+                {/* Body Size toggle button */}
+                <button
+                  onClick={() => setShowBodyPanel(p => !p)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all"
+                  style={{
+                    backgroundColor: showBodyPanel ? colors.pink : 'rgba(255,255,255,0.1)',
+                    color:           showBodyPanel ? colors.navy : 'rgba(255,255,255,0.8)',
+                    border:          `1px solid ${showBodyPanel ? colors.pink : 'rgba(255,255,255,0.2)'}`,
+                  }}>
+                  ⚙️ Body Size
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {sizeButtons.map(size => (
                   <button key={size} onClick={() => setSelectedSize(size)}
                     className="px-4 py-2 rounded-lg font-bold text-sm transition-all"
                     style={{
-                      backgroundColor: selectedSize === size ? '#FA9EBC' : 'rgba(255,255,255,0.1)',
-                      color:           selectedSize === size ? '#0B1957' : 'white',
-                      border:          `1px solid ${selectedSize === size ? '#FA9EBC' : 'rgba(255,255,255,0.2)'}`,
+                      backgroundColor: selectedSize === size ? colors.pink : 'rgba(255,255,255,0.1)',
+                      color:           selectedSize === size ? colors.navy : 'white',
+                      border:          `1px solid ${selectedSize === size ? colors.pink : 'rgba(255,255,255,0.2)'}`,
                       transform:       selectedSize === size ? 'scale(1.08)' : 'scale(1)',
                     }}>{size}</button>
                 ))}
@@ -306,13 +479,13 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
           </div>
         </div>
 
-        {/* RIGHT: Info panel */}
-        <div className="w-[310px] bg-white flex flex-col overflow-hidden">
+        {/* ══ RIGHT: Info panel ══ */}
+        <div className="w-[310px] bg-white flex flex-col overflow-hidden flex-shrink-0">
           <div className="p-4 border-b border-gray-100">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{item.brand}</p>
-                <h2 className="text-lg font-black text-[#0B1957] leading-tight">{item.name}</h2>
+                <h2 className="text-lg font-black leading-tight" style={{ color: colors.navy }}>{item.name}</h2>
                 <p className="text-xs text-gray-400">{item.category}</p>
               </div>
               <button onClick={onClose} className="text-gray-300 hover:text-gray-600 mt-1">
@@ -341,7 +514,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
               </div>
             )}
 
-            {/* Size chart — compact with sleeve */}
+            {/* Size chart */}
             <div>
               <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Size Chart</p>
               <div className="overflow-x-auto rounded-xl border" style={{ borderColor: colors.peach }}>
@@ -370,7 +543,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
               </div>
             </div>
 
-            {/* AI suggestions inline */}
+            {/* AI suggestions */}
             {showAi && (
               <div className="space-y-2">
                 {aiLoading && (
@@ -399,7 +572,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
             )}
           </div>
 
-          {/* Footer: Done above, AI below */}
+          {/* Footer */}
           <div className="p-4 border-t border-gray-100 bg-gray-50 space-y-2">
             <button onClick={onClose}
               className="w-full py-3 rounded-xl font-bold text-white shadow hover:shadow-lg transition-all"
