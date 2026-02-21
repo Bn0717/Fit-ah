@@ -57,9 +57,9 @@ export default function Navbar() {
 
           {/* Navigation Links - SMOOTH HOVER VERSION */}
           <div className="flex items-center gap-1">
-            <NavLink href="/" isActive={isActive('/')}>
+            {/*<NavLink href="/" isActive={isActive('/')}>
               Home
-            </NavLink>
+            </NavLink>*/}
             
             <NavLink href="/profile" isActive={isActive('/profile')}>
               Profile
@@ -73,9 +73,9 @@ export default function Navbar() {
               Dashboard
             </NavLink>
             
-            <NavLink href="/try-on" isActive={isActive('/try-on')}>
+            {/*<NavLink href="/try-on" isActive={isActive('/try-on')}>
               Try-On
-            </NavLink>
+            </NavLink>*/}
           </div>
 
           {/* User Menu */}

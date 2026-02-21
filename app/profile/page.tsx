@@ -524,30 +524,33 @@ export default function ProfilePage() {
         {/* ══ RIGHT: Wardrobe sidebar ══ */}
         <div className="w-96 flex-shrink-0 bg-white border-l flex flex-col overflow-hidden" style={{ borderColor: C.peach }}>
 
-          {/* Header: tabs + 2D/3D toggle */}
-          <div className="p-3 border-b flex-shrink-0 space-y-2" style={{ borderColor: C.peach }}>
-            {/* Items / Outfits tabs */}
+          {/* Header: tabs */}
+          <div className="px-3 pt-3 pb-2 border-b flex-shrink-0" style={{ borderColor: C.peach }}>
+            {/* Items / Outfits tabs — full width */}
             <div className="flex gap-1.5">
               {(['items', 'outfits'] as const).map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className="flex-1 py-1.5 rounded-lg font-bold text-[10px] transition-all"
+                  className="flex-1 py-2 rounded-xl font-bold text-[11px] transition-all"
                   style={{ backgroundColor: activeTab === tab ? C.navy : C.cream, color: activeTab === tab ? 'white' : C.navy }}>
                   {tab === 'items' ? `👕 Items (${items.length})` : `✨ Outfits (${outfits.length})`}
                 </button>
               ))}
             </div>
-            {/* Global 2D / 3D view toggle */}
-            <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: C.cream }}>
-              {(['2d', '3d'] as const).map(v => (
-                <button key={v} onClick={() => setSidebarView(v)}
-                  className="flex-1 py-1.5 rounded-lg font-bold text-[11px] transition-all"
-                  style={{
-                    backgroundColor: sidebarView === v ? C.navy : 'transparent',
-                    color:           sidebarView === v ? 'white' : C.navy,
-                  }}>
-                  {v === '2d' ? '🖼 2D View' : '📦 3D View'}
-                </button>
-              ))}
+            {/* 2D / 3D toggle — small pill pair, right-aligned below tabs */}
+            <div className="flex justify-end mt-2">
+              <div className="flex gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: C.peach }}>
+                {(['2d', '3d'] as const).map(v => (
+                  <button key={v} onClick={() => setSidebarView(v)}
+                    className="px-3 py-1 rounded-md font-black text-[9px] uppercase tracking-widest transition-all"
+                    style={{
+                      backgroundColor: sidebarView === v ? C.navy : 'transparent',
+                      color:           sidebarView === v ? 'white' : C.navy,
+                      letterSpacing:   '0.08em',
+                    }}>
+                    {v === '2d' ? '🖼 2D' : '📦 3D'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -641,7 +644,14 @@ export default function ProfilePage() {
   );
 }
 
-// ── Mini 3D shirt canvas — auto-rotating, one per item card ─────────────────
+// ── Atlas constants — must match FitRecommendationModal exactly ──────────────
+const MINI_ATLAS_SIZE    = 2048;
+const MINI_FRONT_RECT    = { x: 0,    y: 0,    w: 1024, h: 1536 };
+const MINI_BACK_RECT     = { x: 1024, y: 0,    w: 1024, h: 1536 };
+const MINI_L_SLEEVE_RECT = { x: 0,    y: 1536, w: 1024, h: 512  };
+const MINI_R_SLEEVE_RECT = { x: 1024, y: 1536, w: 1024, h: 512  };
+
+// ── Mini 3D shirt canvas — atlas-based texture so 3D matches 2D pattern ──────
 function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: string | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -672,16 +682,79 @@ function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: strin
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping    = true;
-      controls.autoRotate       = true;
-      controls.autoRotateSpeed  = 3.5;
-      controls.enableZoom       = false;
-      controls.enablePan        = false;
+      controls.enableDamping   = true;
+      controls.autoRotate      = true;
+      controls.autoRotateSpeed = 3.5;
+      controls.enableZoom      = false;
+      controls.enablePan       = false;
 
       scene.add(new THREE.AmbientLight(0xffffff, 1.0));
       const key = new THREE.DirectionalLight(0xffffff, 1.5);
       key.position.set(2, 3, 2);
       scene.add(key);
+
+      // ── Build atlas canvas (same technique as FitRecommendationModal) ──
+      const atlasCanvas = document.createElement('canvas');
+      atlasCanvas.width = atlasCanvas.height = MINI_ATLAS_SIZE;
+      const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
+      atlasCtx.fillStyle = '#ffffff';
+      atlasCtx.fillRect(0, 0, MINI_ATLAS_SIZE, MINI_ATLAS_SIZE);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let atlasTexture: any = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let morphMesh: any    = null;
+
+      function processAndApply(img: HTMLImageElement) {
+        // Crop to shirt content using pixel scan
+        const tmp = document.createElement('canvas'); tmp.width = img.width; tmp.height = img.height;
+        const tCtx = tmp.getContext('2d')!; tCtx.drawImage(img, 0, 0);
+        const data = tCtx.getImageData(0, 0, tmp.width, tmp.height).data;
+        let minX = img.width, minY = img.height, maxX = 0, maxY = 0, found = false;
+        for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+          const i = (y * img.width + x) * 4;
+          if (data[i+3] > 20 && (data[i] < 250 || data[i+1] < 250 || data[i+2] < 250)) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y; found = true;
+          }
+        }
+        if (!found) return;
+        const sw = maxX - minX, sh = maxY - minY;
+
+        // Pattern tile for sleeves
+        const ss = Math.min(sw * 0.25, 200);
+        const pat = document.createElement('canvas'); pat.width = pat.height = ss;
+        const pCtx = pat.getContext('2d')!;
+        pCtx.drawImage(img, minX + sw*0.5 - ss/2, minY + sh*0.6 - ss/2, ss, ss, 0, 0, ss, ss);
+
+        // Front panel
+        atlasCtx.fillStyle = atlasCtx.createPattern(pat, 'repeat')!;
+        atlasCtx.fillRect(MINI_FRONT_RECT.x, MINI_FRONT_RECT.y, MINI_FRONT_RECT.w, MINI_FRONT_RECT.h);
+        atlasCtx.fillRect(MINI_L_SLEEVE_RECT.x, MINI_L_SLEEVE_RECT.y, MINI_L_SLEEVE_RECT.w, MINI_L_SLEEVE_RECT.h);
+        atlasCtx.fillRect(MINI_R_SLEEVE_RECT.x, MINI_R_SLEEVE_RECT.y, MINI_R_SLEEVE_RECT.w, MINI_R_SLEEVE_RECT.h);
+        const tw = sw * 0.8;
+        atlasCtx.drawImage(img, minX + (sw-tw)/2, minY, tw, sh, MINI_FRONT_RECT.x, MINI_FRONT_RECT.y, MINI_FRONT_RECT.w, MINI_FRONT_RECT.h);
+
+        // Back panel (mirrored)
+        atlasCtx.save();
+        atlasCtx.translate(MINI_BACK_RECT.x + MINI_BACK_RECT.w, MINI_BACK_RECT.y);
+        atlasCtx.scale(-1, 1);
+        atlasCtx.fillStyle = atlasCtx.createPattern(pat, 'repeat')!;
+        atlasCtx.fillRect(0, 0, MINI_BACK_RECT.w, MINI_BACK_RECT.h);
+        atlasCtx.drawImage(img, minX + (sw-tw)/2, minY, tw, sh, 0, 0, MINI_BACK_RECT.w, MINI_BACK_RECT.h);
+        atlasCtx.restore();
+
+        if (!atlasTexture) {
+          atlasTexture = new THREE.CanvasTexture(atlasCanvas);
+          atlasTexture.flipY = false;
+          atlasTexture.colorSpace = THREE.SRGBColorSpace;
+        } else { atlasTexture.needsUpdate = true; }
+
+        if (morphMesh) {
+          morphMesh.material.map = atlasTexture;
+          morphMesh.material.needsUpdate = true;
+        }
+      }
 
       const loader = new GLTFLoader();
       loader.load(
@@ -692,19 +765,32 @@ function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: strin
           const model = gltf.scene;
           model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
           scene.add(model);
-          if (imageUrl) {
-            const tex = new THREE.TextureLoader().load(imageUrl);
-            tex.flipY = false;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            model.traverse((obj: any) => {
-              if (!obj.isMesh) return;
-              obj.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, side: THREE.DoubleSide });
+
+          // Find the shirt mesh
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model.traverse((obj: any) => {
+            if (!obj.isMesh || morphMesh) return;
+            morphMesh = obj;
+            obj.material = new THREE.MeshStandardMaterial({
+              roughness: 0.8, side: THREE.DoubleSide,
+              // white base until texture loads
+              color: new THREE.Color(0xffffff),
             });
-          }
+            // If image already loaded, apply now
+            if (atlasTexture) { obj.material.map = atlasTexture; obj.material.needsUpdate = true; }
+          });
         },
         undefined,
         () => { /* silently ignore load errors for mini canvases */ }
       );
+
+      // Load the shirt image and build atlas
+      if (imageUrl) {
+        const img = new Image(); img.crossOrigin = 'anonymous';
+        img.onload = () => { if (!cancelled) processAndApply(img); };
+        img.onerror = () => {}; // ignore
+        img.src = imageUrl;
+      }
 
       let animId = 0;
       const animate = () => {
