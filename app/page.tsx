@@ -19,7 +19,7 @@ export default function LandingPage() {
         {/* Logo/Brand */}
         <div className="mb-8">
           <h1 className="text-6xl font-black mb-4" style={{ color: colors.navy }}>
-            FitCheck
+            Fit-ah
           </h1>
           <p className="text-xl" style={{ color: colors.navy, opacity: 0.7 }}>
             AI-Powered Virtual Try-On & Size Recommendations

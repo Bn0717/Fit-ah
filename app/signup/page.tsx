@@ -24,7 +24,7 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (user) {
-      router.push('/profile');
+      router.push('/onboarding');
     }
   }, [user, router]);
 
@@ -69,7 +69,7 @@ export default function SignupPage() {
     }
 
     if (user) {
-      router.push('/profile');
+      router.push('/onboarding');
     }
   };
 
@@ -92,7 +92,7 @@ export default function SignupPage() {
 
       if (user) {
         setTimeout(() => {
-          router.push('/profile');
+          router.push('/onboarding');
         }, 500);
       } else {
         setLoading(false);

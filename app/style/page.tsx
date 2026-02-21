@@ -22,13 +22,13 @@ const C = {
 // ─── Preset wardrobe items (bottom / shoes / accessories) ───────────────────
 // These are the ONLY options Gemini may pick from — prevents hallucination.
 const PRESET_BOTTOMS = [
-  { id: 'b1', label: 'Baggy Wide-Leg Jeans',  emoji: '', tags: ['formal','rain','cold'] },
-  { id: 'b2', label: 'Casual Sweatpants',           emoji: '', tags: ['casual','cold'] },
-  { id: 'b3', label: 'Baggy Cargo Pants',          emoji: '', tags: ['casual','warm','smart'] },
-  { id: 'b4', label: 'Wide-Leg Sweatpants',               emoji: '', tags: ['hot','casual'] },
-  { id: 'b5', label: 'Pleated Wide-Leg Trousers',             emoji: '', tags: ['cold','casual','cosy'] },
-  { id: 'b6', label: 'Casual Shorts',           emoji: '', tags: ['casual','rain','outdoor'] },
-  { id: 'b7', label: 'Slacks',        emoji: '', tags: ['smart','casual','warm'] },
+  { id: 'b1', label: 'Baggy Wide-Leg Jeans',  emoji: '🖤', tags: ['formal','rain','cold'] },
+  { id: 'b2', label: 'Casual Sweatpants',           emoji: '👖', tags: ['casual','cold'] },
+  { id: 'b3', label: 'Baggy Cargo Pants',          emoji: '🟤', tags: ['casual','warm','smart'] },
+  { id: 'b4', label: 'Casual Shorts',               emoji: '🩳', tags: ['hot','casual'] },
+  { id: 'b5', label: 'Pleated Wide Leg Trousers',             emoji: '🩶', tags: ['cold','casual','cosy'] },
+  { id: 'b6', label: 'Wide Leg Sweatpants',           emoji: '🫙', tags: ['casual','rain','outdoor'] },
+  { id: 'b7', label: 'Black Slacks',        emoji: '🔷', tags: ['smart','casual','warm'] },
 ];
 
 const PRESET_SHOES = [

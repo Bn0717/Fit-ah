@@ -33,36 +33,20 @@ export const signUp = async (email: string, password: string) => {
 
 // Sign in with Google
 export const signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  // Add prompt to select account every time for better UX
-  provider.setCustomParameters({
-    prompt: 'select_account'
-  });
-  
   try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, provider);
     return { user: result.user, error: null };
   } catch (error: any) {
-    // Handle specific error cases
     const errorCode = error.code;
-    const errorMessage = error.message;
-    
-    // User closed the popup
     if (errorCode === 'auth/popup-closed-by-user' || errorCode === 'auth/cancelled-popup-request') {
       return { user: null, error: 'popup-closed-by-user' };
     }
-    
-    // Popup was blocked by browser
     if (errorCode === 'auth/popup-blocked') {
       return { user: null, error: 'Popup blocked by browser. Please allow popups for this site.' };
     }
-    
-    // Network error
-    if (errorCode === 'auth/network-request-failed') {
-      return { user: null, error: 'Network error. Please check your internet connection.' };
-    }
-    
-    return { user: null, error: errorMessage };
+    return { user: null, error: error.message };
   }
 };
 

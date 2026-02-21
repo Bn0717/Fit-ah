@@ -68,6 +68,10 @@ export default function ProfilePage() {
     setLoadingData(true);
     Promise.all([getAvatar(user.uid), getUserClothingItems(user.uid), getUserOutfits(user.uid)])
       .then(([profile, clothingItems, userOutfits]) => {
+        if (!profile) {
+          router.replace('/onboarding');
+          return;
+        }
         if (profile) {
           const m: Measurements = { height: profile.height, chest: profile.chest, waist: profile.waist, shoulder: profile.shoulder };
           setSaved(m); setDraft(m);

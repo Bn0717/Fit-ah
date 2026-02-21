@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn, signInWithGoogle, resetPassword } from '@/lib/firebase/auth';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { getAvatar } from '@/lib/firebase/firestore';
 
 const colors = {
   cream: '#F8F3EA',
@@ -64,8 +65,9 @@ export default function LoginPage() {
     }
 
     if (user) {
-      router.push('/profile');
-    }
+    const profile = await getAvatar(user.uid);
+    router.push(profile ? '/profile' : '/onboarding');
+  }
   };
 
   const handleGoogleLogin = async () => {
@@ -75,22 +77,20 @@ export default function LoginPage() {
     try {
       const { user, error: googleError } = await signInWithGoogle();
 
-      if (googleError) {
-        // Check if user closed the popup
+        if (googleError) {
+        // Don't show an error if the user simply closed the popup
         if (googleError.includes('popup-closed-by-user') || googleError.includes('cancelled')) {
-          setError('Sign-in cancelled. Please try again.');
-        } else {
-          setError(googleError);
+          setLoading(false);
+          return; // Silently do nothing
         }
+        setError(googleError);
         setLoading(false);
         return;
       }
 
       if (user) {
-        // Add small delay to ensure auth state is updated
-        setTimeout(() => {
-          router.push('/profile');
-        }, 500);
+        const profile = await getAvatar(user.uid);
+        router.push(profile ? '/profile' : '/onboarding');
       } else {
         setLoading(false);
       }
@@ -134,7 +134,7 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-12" style={{ backgroundColor: colors.navy }}>
         <div className="max-w-md">
           <h1 className="text-5xl font-black mb-4 text-white">
-            FitCheck
+            Fit-ah
           </h1>
           <p className="text-xl text-white opacity-80 mb-8">
             Never buy the wrong size again
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <span>Privacy-first approach</span>
+              <span>Precision Fit</span>
             </div>
           </div>
         </div>

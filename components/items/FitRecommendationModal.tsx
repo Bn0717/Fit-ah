@@ -231,8 +231,8 @@ function StyleOverlay({
       } catch { /* text-only fallback */ }
     }
     try {
-      const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!key) throw new Error('Add NEXT_PUBLIC_GEMINI_API_KEY to .env.local');
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('Add GEMINI_API_KEY to .env.local');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' },
