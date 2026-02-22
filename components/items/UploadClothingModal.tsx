@@ -11,7 +11,7 @@ const colors = {
   pink: '#FA9EBC'
 };
 
-const DEFAULT_CATEGORIES = ['Short Sleeve Shirt'];//, 'Shirt', 'Jacket', 'Pants', 'Hoodie', 'Shoes', 'Accessories'];
+const DEFAULT_CATEGORIES = ['Short Sleeve Shirt'];
 
 // TNT CO Default Size Chart
 const TNT_DEFAULT_SIZE_CHART: SizeChart[] = [
@@ -24,7 +24,7 @@ const TNT_DEFAULT_SIZE_CHART: SizeChart[] = [
   { size: '4XL', chest: 69.5, shoulder: 55, length: 79, sleeve: 29.5 },
 ];
 
-const DEFAULT_BRAND = 'TNT CO';
+const DEFAULT_BRAND    = 'TNT CO';
 const DEFAULT_CATEGORY = 'Short Sleeve Shirt';
 
 interface Props {
@@ -44,6 +44,10 @@ interface Props {
   availableCategories: string[];
   onAddCategory?: (name: string, icon: string) => Promise<void>;
 }
+
+// Force all inputs/textareas to show navy text — applied globally in this modal
+const inputStyle = { borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy };
+const inputCls   = 'w-full px-4 py-3 rounded-lg border-2 focus:outline-none';
 
 export default function UploadClothingModal({
   isOpen,
@@ -204,7 +208,7 @@ export default function UploadClothingModal({
                       onChange={(e) => handleSizeChange(index, field, e.target.value)}
                       placeholder={field === 'size' ? 'S' : '0'}
                       className={`${field === 'size' ? 'w-12 text-center font-bold' : 'w-full'} px-2 py-1 rounded border text-sm`}
-                      style={{ borderColor: colors.peach, backgroundColor: 'white' }}
+                      style={{ borderColor: colors.peach, backgroundColor: 'white', color: colors.navy }}
                     />
                   </td>
                 ))}
@@ -228,11 +232,92 @@ export default function UploadClothingModal({
     </div>
   );
 
+  // ── Single photo upload row (upload box left, reference photo right) ──────
+  function PhotoUploadRow({
+    side,
+    preview,
+    onClear,
+    referenceUrl,
+    referenceLabel,
+    referenceNote,
+  }: {
+    side: 'front' | 'back';
+    preview: string | null;
+    onClear: () => void;
+    referenceUrl: string;
+    referenceLabel: string;
+    referenceNote: string;
+  }) {
+    const label = side === 'front' ? '👕 Front' : '🔄 Back';
+    const emoji = side === 'front' ? '👕' : '🔄';
+
+    return (
+      <div className="flex gap-4 items-start">
+        {/* Upload area */}
+        <div className="flex-1">
+          <p className="text-xs font-bold mb-1.5" style={{ color: colors.navy }}>
+            {label} <span className="text-red-500">*</span>
+          </p>
+          <div
+            className="border-2 border-dashed rounded-xl overflow-hidden"
+            style={{ borderColor: preview ? colors.navy : colors.peach, backgroundColor: colors.cream }}
+          >
+            {preview ? (
+              <div className="relative">
+                <img src={preview} alt={`${side} preview`} className="w-full h-40 object-contain bg-white p-2" />
+                <button
+                  onClick={onClear}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white flex items-center justify-center shadow text-xs font-bold"
+                  style={{ color: colors.navy }}
+                >✕</button>
+                <div className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs font-bold text-center text-white"
+                  style={{ backgroundColor: 'rgba(11,25,87,0.7)' }}>
+                  {label}
+                </div>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center h-40 cursor-pointer hover:opacity-80">
+                <span className="text-3xl mb-2">{emoji}</span>
+                <p className="text-sm font-semibold" style={{ color: colors.navy }}>{label}</p>
+                <p className="text-xs mt-1 opacity-60" style={{ color: colors.navy }}>Click to upload</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handlePhotoChange(e, side)}
+                />
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* Reference photo */}
+        <div className="w-32 flex-shrink-0">
+          <p className="text-xs font-bold mb-1.5" style={{ color: colors.navy }}>
+            Reference Example
+          </p>
+          <div
+            className="rounded-xl overflow-hidden border-2 bg-white"
+            style={{ borderColor: colors.peach }}
+          >
+            <img
+              src={referenceUrl}
+              alt={referenceLabel}
+              className="w-full h-40 object-contain p-2"
+              crossOrigin="anonymous"
+            />
+          </div>
+          <p className="text-[9px] mt-1 text-center leading-tight text-gray-400 italic">{referenceNote}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        style={{ borderColor: colors.peach, borderWidth: 2 }}
+        style={{ borderColor: colors.peach, borderWidth: 2, color: colors.navy }}
       >
         <div className="p-8">
           {/* Header */}
@@ -253,48 +338,30 @@ export default function UploadClothingModal({
 
           <div className="space-y-6">
 
-            {/* ── FRONT + BACK PHOTO UPLOAD ── */}
+            {/* ── PHOTO UPLOADS: front on top, back below, each with reference ── */}
             <div>
               <label className="block text-sm font-semibold mb-3" style={{ color: colors.navy }}>
-                Item Photos * <span className="font-normal opacity-60">(front &amp; back required)</span>
+                Item Photos <span className="font-normal opacity-60">(front &amp; back required)</span>
               </label>
-              <div className="grid grid-cols-2 gap-4">
-                {(['front', 'back'] as const).map((side) => {
-                  const preview = side === 'front' ? frontPhotoPreview : backPhotoPreview;
-                  const label = side === 'front' ? '👕 Front' : '🔄 Back';
-                  return (
-                    <div
-                      key={side}
-                      className="border-2 border-dashed rounded-xl overflow-hidden"
-                      style={{ borderColor: preview ? colors.navy : colors.peach, backgroundColor: colors.cream }}
-                    >
-                      {preview ? (
-                        <div className="relative">
-                          <img src={preview} alt={`${side} preview`} className="w-full h-48 object-cover" />
-                          <button
-                            onClick={() => side === 'front' ? (setFrontPhoto(null), setFrontPhotoPreview(null)) : (setBackPhoto(null), setBackPhotoPreview(null))}
-                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white flex items-center justify-center shadow text-xs"
-                          >✕</button>
-                          <div className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs font-bold text-center text-white" style={{ backgroundColor: 'rgba(11,25,87,0.7)' }}>
-                            {label}
-                          </div>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center h-48 cursor-pointer">
-                          <span className="text-3xl mb-2">{side === 'front' ? '👕' : '🔄'}</span>
-                          <p className="text-sm font-semibold" style={{ color: colors.navy }}>{label}</p>
-                          <p className="text-xs mt-1 opacity-60" style={{ color: colors.navy }}>Click to upload</p>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => handlePhotoChange(e, side)}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="space-y-4">
+                {/* FRONT */}
+                <PhotoUploadRow
+                  side="front"
+                  preview={frontPhotoPreview}
+                  onClear={() => { setFrontPhoto(null); setFrontPhotoPreview(null); }}
+                  referenceUrl="/reference/front-reference.png"
+                  referenceLabel="Front reference"
+                  referenceNote="The front should show the main design/logo clearly"
+                />
+                {/* BACK */}
+                <PhotoUploadRow
+                  side="back"
+                  preview={backPhotoPreview}
+                  onClear={() => { setBackPhoto(null); setBackPhotoPreview(null); }}
+                  referenceUrl="/reference/back-reference.png"
+                  referenceLabel="Back reference"
+                  referenceNote="The back should show any important details like tags or unique features"
+                />
               </div>
             </div>
 
@@ -308,7 +375,7 @@ export default function UploadClothingModal({
                   onChange={(e) => setBrand(e.target.value)}
                   placeholder="e.g., TNT CO"
                   className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
-                  style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                  style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 />
               </div>
               <div>
@@ -319,7 +386,7 @@ export default function UploadClothingModal({
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g., Classic Tee"
                   className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
-                  style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                  style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 />
               </div>
             </div>
@@ -331,9 +398,9 @@ export default function UploadClothingModal({
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <input type="text" value={newCategoryIcon} onChange={(e) => setNewCategoryIcon(e.target.value)} maxLength={2}
-                      className="w-16 px-3 py-3 rounded-lg border-2 text-center text-xl" style={{ borderColor: colors.peach, backgroundColor: colors.cream }} />
+                      className="w-16 px-3 py-3 rounded-lg border-2 text-center text-xl" style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }} />
                     <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Category name"
-                      className="flex-1 px-4 py-3 rounded-lg border-2" style={{ borderColor: colors.peach, backgroundColor: colors.cream }} />
+                      className="flex-1 px-4 py-3 rounded-lg border-2" style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }} />
                   </div>
                   <div className="flex gap-2">
                     <button onClick={handleAddCategory} className="flex-1 px-4 py-2 rounded-lg font-semibold text-white" style={{ backgroundColor: colors.navy }}>Add Category</button>
@@ -344,7 +411,7 @@ export default function UploadClothingModal({
                 <div className="space-y-2">
                   <select value={category} onChange={(e) => setCategory(e.target.value)}
                     className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
-                    style={{ borderColor: colors.peach, backgroundColor: colors.cream }}>
+                    style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}>
                     {allCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                   <button onClick={() => setShowAddCategory(true)}
@@ -395,7 +462,6 @@ export default function UploadClothingModal({
                 ))}
               </div>
 
-              {/* Default mode: editable pre-filled table */}
               {sizeChartMode === 'default' && (
                 <div>
                   <div className="mb-3 p-3 rounded-lg flex items-center gap-2" style={{ backgroundColor: colors.pink }}>
@@ -408,7 +474,6 @@ export default function UploadClothingModal({
                 </div>
               )}
 
-              {/* Photo mode */}
               {sizeChartMode === 'photo' && (
                 <div>
                   <div className="border-2 border-dashed rounded-xl overflow-hidden mb-4" style={{ borderColor: colors.pink, backgroundColor: colors.cream }}>
@@ -433,7 +498,6 @@ export default function UploadClothingModal({
                 </div>
               )}
 
-              {/* Manual mode */}
               {sizeChartMode === 'manual' && (
                 <div>
                   <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: colors.cream }}>
@@ -450,7 +514,7 @@ export default function UploadClothingModal({
                 Which size do you wear? <span className="font-normal opacity-60">(Optional)</span>
               </label>
               <select value={userWearingSize} onChange={(e) => setUserWearingSize(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border-2" style={{ borderColor: colors.peach, backgroundColor: colors.cream }}>
+                className="w-full px-4 py-3 rounded-lg border-2" style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}>
                 <option value="">Select your size...</option>
                 {sizeChart.filter(s => s.size).map((s) => (
                   <option key={s.size} value={s.size}>{s.size}</option>
@@ -468,7 +532,7 @@ export default function UploadClothingModal({
                 <input type="number" value={price} onChange={(e) => setPrice(e.target.value)}
                   placeholder="0.00" step="0.01" min="0"
                   className="w-full pl-10 pr-4 py-3 rounded-lg border-2 focus:outline-none"
-                  style={{ borderColor: colors.peach, backgroundColor: colors.cream }} />
+                  style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }} />
               </div>
             </div>
 

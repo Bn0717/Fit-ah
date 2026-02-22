@@ -41,7 +41,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
   const hasBothSides = !!(item.frontImageUrl && item.backImageUrl);
   const currentSrc   = photoSide === 'front' ? frontSrc : backSrc;
 
-  // ── 3D scene (only when 3D tab is active) ───────────────────────────────
+  // ── 3D scene ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || viewMode !== '3d' || !canvasRef.current) return;
 
@@ -147,7 +147,6 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
         }
       }
 
-      // Load shirt-only GLB (newtntshirt1.glb)
       const loader = new GLTFLoader();
       loader.load(
         '/models/newtntshirt1.glb?v=' + Date.now(),
@@ -178,7 +177,6 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
         (err: any) => console.error('Shirt GLB error:', err)
       );
 
-      // Load textures from Firebase URLs
       const loadImg = (url: string, cb: (img: HTMLImageElement) => void) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -190,7 +188,6 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
       if (item.backImageUrl)  loadImg(item.backImageUrl,  (img) => { backImg  = img; });
       else if (item.imageUrl) loadImg(item.imageUrl,      (img) => { frontImg = img; });
 
-      // Animate
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
       const animate = () => {
         animId = requestAnimationFrame(animate);
@@ -242,6 +239,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                   {item.category}
                 </span>
               </div>
+              {/* FIXED: explicit dark colour so it's always readable */}
               <h2 className="text-2xl font-bold" style={{ color: colors.navy }}>{item.name}</h2>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:opacity-70" style={{ backgroundColor: colors.cream }}>
@@ -274,7 +272,6 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
             <div>
               {viewMode === '2d' ? (
                 <div>
-                  {/* Front / Back toggle */}
                   {hasBothSides && (
                     <div className="flex gap-2 mb-3">
                       {(['front', 'back'] as PhotoSide[]).map((side) => (
@@ -316,7 +313,6 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                   </div>
                 </div>
               ) : (
-                /* ── 3D VIEW ── */
                 <div className="relative aspect-[3/4] rounded-xl overflow-hidden" style={{ backgroundColor: colors.cream }}>
                   <canvas
                     ref={canvasRef}
@@ -329,6 +325,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                         className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin"
                         style={{ borderColor: colors.navy, borderTopColor: 'transparent' }}
                       />
+                      {/* FIXED: explicit colour */}
                       <p className="text-xs font-semibold" style={{ color: colors.navy }}>Loading 3D model...</p>
                     </div>
                   )}
@@ -345,6 +342,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
 
             {/* ── RIGHT: SIZE CHART + ACTIONS ── */}
             <div>
+              {/* FIXED: explicit dark heading colour */}
               <h3 className="font-bold mb-4 text-lg" style={{ color: colors.navy }}>Size Chart</h3>
 
               <div className="overflow-x-auto">
@@ -356,6 +354,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                         ...(item.sizeChart[0]?.sleeve !== undefined ? ['Sleeve'] : []),
                         ...(item.sizeChart[0]?.waist  !== undefined ? ['Waist']  : []),
                       ].map((h) => (
+                        /* FIXED: explicit dark header text */
                         <th key={h} className="px-3 py-3 text-left text-xs font-bold" style={{ color: colors.navy }}>{h}</th>
                       ))}
                     </tr>
@@ -364,14 +363,13 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                     {item.sizeChart.map((size, idx) => {
                       const isMySize = size.size === item.userWearingSize;
                       return (
-                        <tr key={idx} className="border-b transition-colors" 
-                            style={{ 
-                              borderColor: colors.peach, 
-                              backgroundColor: isMySize ? colors.pink + '30' : 'transparent' 
+                        <tr key={idx} className="border-b transition-colors"
+                            style={{
+                              borderColor: colors.peach,
+                              backgroundColor: isMySize ? colors.pink + '30' : 'transparent'
                             }}>
-                          <td className="px-3 py-3 font-bold flex items-center gap-2" style={{ color: colors.navy }}>
-                            {size.size}
-                          </td>
+                          {/* FIXED: every cell gets explicit colour */}
+                          <td className="px-3 py-3 font-bold" style={{ color: colors.navy }}>{size.size}</td>
                           <td className="px-3 py-3" style={{ color: colors.navy }}>{size.chest} cm</td>
                           <td className="px-3 py-3" style={{ color: colors.navy }}>{size.length} cm</td>
                           <td className="px-3 py-3" style={{ color: colors.navy }}>{size.shoulder} cm</td>
@@ -382,6 +380,16 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                   </tbody>
                 </table>
               </div>
+
+              {/* My size badge */}
+              {item.userWearingSize && (
+                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: colors.pink + '30' }}>
+                  <span className="text-sm">👕</span>
+                  <p className="text-xs font-bold" style={{ color: colors.navy }}>
+                    You wear size <span className="font-black">{item.userWearingSize}</span>
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6 space-y-3">
                 <button
@@ -394,6 +402,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                 </button>
 
                 <div className="p-4 rounded-lg" style={{ backgroundColor: colors.cream }}>
+                  {/* FIXED: explicit colour for tip text */}
                   <p className="text-xs" style={{ color: colors.navy, opacity: 0.7 }}>
                     💡 All measurements in centimeters. Click "Check My Fit" to see size recommendations.
                   </p>

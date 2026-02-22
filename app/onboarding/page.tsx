@@ -102,7 +102,7 @@ export default function OnboardingPage() {
       }
       const loader = new GLTFLoader();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/human.glb?v=' + Date.now(), (gltf: any) => {
+      loader.load('/models/humanlatest.glb?v=' + Date.now(), (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
         model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
@@ -297,23 +297,44 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              {/* Photo upload */}
-              <div className="border-2 border-dashed rounded-2xl overflow-hidden mb-4" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
-                {photoPreview ? (
-                  <div className="relative">
-                    <img src={photoPreview} className="w-full h-64 object-contain bg-white" alt="body" />
-                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setDetected(false); setDetectMsg(null); }}
-                      className="absolute top-3 right-3 w-7 h-7 bg-white rounded-full shadow flex items-center justify-center text-sm font-bold"
-                      style={{ color: C.navy }}>✕</button>
+              {/* Photo upload + Reference side by side */}
+              <div className="flex gap-4 items-start mb-4">
+                {/* Upload box */}
+                <div className="flex-1">
+                  <div className="border-2 border-dashed rounded-2xl overflow-hidden" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
+                    {photoPreview ? (
+                      <div className="relative">
+                        <img src={photoPreview} className="w-full h-64 object-contain bg-white" alt="body" />
+                        <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setDetected(false); setDetectMsg(null); }}
+                          className="absolute top-3 right-3 w-7 h-7 bg-white rounded-full shadow flex items-center justify-center text-sm font-bold"
+                          style={{ color: C.navy }}>✕</button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-52 cursor-pointer hover:opacity-80">
+                        <span className="text-5xl mb-3">🧍</span>
+                        <p className="text-sm font-bold mb-1" style={{ color: C.navy }}>Upload full body photo</p>
+                        <p className="text-xs opacity-40" style={{ color: C.navy }}>Stand facing camera, arms slightly out</p>
+                        <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                      </label>
+                    )}
                   </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center h-52 cursor-pointer hover:opacity-80">
-                    <span className="text-5xl mb-3">🧍</span>
-                    <p className="text-sm font-bold mb-1" style={{ color: C.navy }}>Upload full body photo</p>
-                    <p className="text-xs opacity-40" style={{ color: C.navy }}>Stand facing camera, arms slightly out</p>
-                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                  </label>
-                )}
+                </div>
+
+                {/* Reference photo */}
+                <div className="w-32 flex-shrink-0">
+                  <p className="text-xs font-bold mb-1.5 text-center" style={{ color: C.navy }}>Reference</p>
+                  <div className="rounded-2xl overflow-hidden border-2 bg-white" style={{ borderColor: C.peach }}>
+                    <img
+                      src="/reference/body-scan-reference.png"
+                      alt="Body scan reference pose"
+                      className="w-full h-52 object-contain p-2"
+                      crossOrigin="anonymous"
+                    />
+                  </div>
+                  <p className="text-[9px] mt-1 text-center leading-tight text-gray-400 italic">
+                    Stand straight, face camera, arms slightly apart
+                  </p>
+                </div>
               </div>
 
               {photoPreview && (

@@ -38,101 +38,107 @@ const C = {
   pink: '#FA9EBC',
 };
 
-// ─── Preset bottoms & shoes (same as FitRecommendationModal) ─────────────────
-const PRESET_BOTTOMS = [
-  { id: 'b1', label: 'Baggy Wide-Leg Jeans',      material: 'Denim',           color: 'Black',      imageUrl: '/bottoms/baggy-wide-leg-jeans-black.jpg' },
-  { id: 'b2', label: 'Casual Sweatpants',          material: 'Cotton Fleece',   color: 'White',      imageUrl: '/bottoms/casual-sweatpants-white.jpg' },
-  { id: 'b3', label: 'Baggy Cargo Pants',          material: 'Cotton Twill',    color: 'Olive Green',imageUrl: '/bottoms/baggy-cargo-pants-olivegreen.jpg' },
-  { id: 'b4', label: 'Wide-Leg Sweatpants',        material: 'Cotton Blend',    color: 'Grey',       imageUrl: '/bottoms/wide-leg-sweatpants.jpg' },
-  { id: 'b5', label: 'Pleated Wide-Leg Trousers',  material: 'Polyester Blend', color: 'Beige',      imageUrl: '/bottoms/pleated-whide-leg-trousers-beige.jpg' },
-  { id: 'b6', label: 'Casual Shorts',              material: 'Cotton',          color: 'Cream',      imageUrl: '/bottoms/casual-shorts-cream.jpg' },
-  { id: 'b7', label: 'Slacks',                     material: 'Wool Blend',      color: 'Black',      imageUrl: '/bottoms/slacks-black.png' },
-];
-const PRESET_SHOES = [
-  { id: 's1', label: 'White & Light Grey Chunky Sneakers', material: 'Leather',  color: 'White / Light Grey', imageUrl: '/shoes/chunky-sneaker.png' },
-  { id: 's2', label: 'Classic Low-Top Sneakers',           material: 'Leather',  color: 'Black',              imageUrl: '/shoes/classic-low-top-sneaker-white.png' },
-  { id: 's3', label: 'Casual Slip-on Loafers',             material: 'Leather',  color: 'Black',              imageUrl: '/shoes/casual-slipon-loafer.png' },
-  { id: 's4', label: 'Slip-on Clog',                       material: 'Rubber',   color: 'White',              imageUrl: '/shoes/slip-on-clog.png' },
-  { id: 's5', label: 'Winter Boots',                       material: 'Suede',    color: 'Brown',              imageUrl: '/shoes/winter-boot.png' },
-];
-
 const DEFAULT_CATEGORIES = ['Short Sleeve Shirt', 'Shirt', 'Jacket', 'Pants', 'Hoodie', 'Shoes', 'Accessories'];
 
-// ─── Lightbox component ───────────────────────────────────────────────────────
-function PhotoLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+// ─── User Guide Modal ─────────────────────────────────────────────────────────
+function UserGuideModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
+
+  const steps = [
+    {
+      num: '1',
+      title: 'Add Items',
+      desc: 'Use this wardrobe page to upload or select the items you want to try on.',
+      note: 'Currently, only short sleeve T-shirts are supported.',
+      icon: '👕',
+      color: '#EFF6FF',
+      border: '#BFDBFE',
+    },
+    {
+      num: '2',
+      title: 'Virtual Try-On',
+      desc: 'Click "Check My Fit" on any item to see how different sizes look on your 3D model.',
+      note: null,
+      icon: '🧍',
+      color: '#F0FDF4',
+      border: '#BBF7D0',
+    },
+    {
+      num: '3',
+      title: 'AI Recommendations',
+      desc: 'Click "AI Outfit Suggestion" to receive outfit ideas based on weather conditions.',
+      note: 'This is currently limited to preset clothing.',
+      icon: '✨',
+      color: '#FDF4FF',
+      border: '#E9D5FF',
+    },
+  ];
+
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+      className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
-      <div className="relative max-w-2xl w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
-        <button
-          onClick={onClose}
-          className="absolute -top-10 right-0 text-white/70 hover:text-white text-3xl font-light transition-colors"
-        >×</button>
-        {/* ADDED bg-white and p-4 so transparent images have a nice white canvas */}
-        <img
-          src={src} alt={alt}
-          className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl bg-white p-4"
-          crossOrigin="anonymous"
-        />
-        <p className="text-center text-white text-sm mt-4 font-bold tracking-wide">{alt}</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Preset item card ─────────────────────────────────────────────────────────
-function PresetItemCard({ label, material, color, imageUrl, onPhotoClick }: {
-  label: string; material: string; color: string; imageUrl: string;
-  onPhotoClick: (src: string, alt: string) => void;
-}) {
-  return (
-    <div
-      className="bg-white rounded-xl border-2 overflow-hidden transition-all hover:shadow-md"
-      style={{ borderColor: C.peach }}
-    >
-      {/* Photo */}
       <div
-        className="aspect-[3/4] relative overflow-hidden cursor-zoom-in bg-white" 
-        onClick={() => onPhotoClick(imageUrl, label)}
+        className="relative w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+        style={{ backgroundColor: 'white' }}
       >
-        {/* Changed object-cover to object-contain with p-4 so the shoes fit nicely without being cut off */}
-        <img 
-          src={imageUrl} 
-          alt={label} 
-          className="w-full h-full object-contain p-4 transition-transform hover:scale-105" 
-          crossOrigin="anonymous" 
-        />
-        
-        {/* Zoom hint */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-          style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
-          <span className="text-white text-2xl">🔍</span>
+        {/* Header */}
+        <div className="px-6 py-5" style={{ background: `linear-gradient(135deg, ${C.navy} 0%, #1a2f7a 100%)` }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-1">How to use</p>
+              <h2 className="text-xl font-black text-white">Wardrobe Guide 📖</h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all font-bold text-lg"
+            >×</button>
+          </div>
         </div>
-        {/* Preset badge */}
-        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest"
-          style={{ backgroundColor: C.navy, color: 'white' }}>
-          Preset
+
+        {/* Steps */}
+        <div className="p-5 space-y-3">
+          {steps.map((step) => (
+            <div
+              key={step.num}
+              className="rounded-xl p-4 border-2"
+              style={{ backgroundColor: step.color, borderColor: step.border }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm text-white"
+                  style={{ backgroundColor: C.navy }}>
+                  {step.num}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-black text-sm" style={{ color: C.navy }}>{step.title}</p>
+                  </div>
+                  <p className="text-xs leading-relaxed text-gray-600">{step.desc}</p>
+                  {step.note && (
+                    <p className="text-[10px] mt-1.5 font-semibold text-gray-400 italic">⚠️ {step.note}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
-      {/* Info */}
-      <div className="p-3">
-        <h3 className="font-bold text-sm truncate mb-1" style={{ color: C.navy }}>{label}</h3>
-        <p className="text-[10px] text-gray-400">
-          <span className="font-semibold" style={{ color: C.navy, opacity: 0.6 }}>{material}</span>
-          <span className="mx-1">·</span>
-          <span>{color}</span>
-        </p>
-        <p className="mt-2 text-[9px] leading-snug text-gray-400 italic">
-          Preset item — available for AI outfit suggestions
-        </p>
+
+        <div className="px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl font-bold text-sm text-white hover:opacity-90 transition-all"
+            style={{ backgroundColor: C.navy }}
+          >
+            Got it! 👍
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -165,8 +171,7 @@ export default function ItemsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [processingItems, setProcessingItems] = useState<any[]>([]);
-  // Lightbox state
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [showUserGuide, setShowUserGuide] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -319,19 +324,11 @@ export default function ItemsPage() {
   const categoryCounts: Record<string, number> = {};
   allCategories.forEach(cat => { categoryCounts[cat] = items.filter(i => i.category === cat).length; });
 
-  // Preset counts for category badges
-  categoryCounts['Pants'] = (categoryCounts['Pants'] || 0) + PRESET_BOTTOMS.length;
-  categoryCounts['Shoes'] = (categoryCounts['Shoes'] || 0) + PRESET_SHOES.length;
-
   const catIcon = (cat: string, custom?: CustomCategory) => custom?.icon || (
     cat === 'Short Sleeve Shirt' ? '👔' : cat === 'Shirt' ? '👕' : cat === 'Jacket' ? '🧥' :
     cat === 'Pants' ? '👖' : cat === 'Hoodie' ? '🧥' : cat === 'Shoes' ? '👟' :
     cat === 'Accessories' ? '👜' : '📦'
   );
-
-  // Decide whether to show preset items in addition to user items
-  const showPresetBottoms = filterCategory === 'Pants' || (!filterCategory && activeTab === 'items' && !filterBrand.includes(' '));
-  const showPresetShoes   = filterCategory === 'Shoes'  || (!filterCategory && activeTab === 'items' && !filterBrand.includes(' '));
 
   if (authLoading || !user) {
     return (
@@ -481,13 +478,23 @@ export default function ItemsPage() {
       <div className="flex-1 overflow-y-auto" style={{ backgroundColor: C.cream }}>
         <div className="p-8">
 
-          {/* Random outfit button */}
-          <div className="mb-6">
+          {/* Random outfit button + User Guide button */}
+          <div className="mb-6 flex items-center gap-3">
             <button onClick={() => setShowRandomModal(true)}
               className="px-6 py-3 rounded-xl font-semibold text-white flex items-center gap-2 shadow-sm hover:opacity-90 transition-all hover:shadow-md"
               style={{ backgroundColor: C.navy }}>
               <span className="text-xl">🎲</span>
               Random Outfit Generator
+            </button>
+
+            {/* User Guide Button */}
+            <button
+              onClick={() => setShowUserGuide(true)}
+              className="px-4 py-3 rounded-xl font-semibold flex items-center gap-2 border-2 hover:opacity-90 transition-all hover:shadow-md"
+              style={{ backgroundColor: 'white', borderColor: C.peach, color: C.navy }}
+            >
+              <span className="text-lg">📖</span>
+              <span className="text-sm">User Guide</span>
             </button>
           </div>
 
@@ -604,7 +611,7 @@ export default function ItemsPage() {
                   </div>
                 ))}
 
-                {/* User clothing items */}
+                {/* User clothing items — NO preset items shown here */}
                 {filteredItems.map(item => (
                   <div key={item.id} onClick={() => handleItemClick(item.id)}
                     className="bg-white rounded-xl border-2 transition-all cursor-pointer overflow-hidden hover:shadow-md relative group"
@@ -622,13 +629,12 @@ export default function ItemsPage() {
                       </button>
                     </div>
 
-                    {/* Photo — Clicking this now correctly bubbles up to handleItemClick to open Details Modal */}
+                    {/* Photo */}
                     <div className="aspect-[3/4] relative overflow-hidden bg-white">
                       {item.imageUrl
                         ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
                         : <div className="w-full h-full flex items-center justify-center text-4xl opacity-20">👕</div>}
                       
-                      {/* Hover overlay hint that it opens details */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                         style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
                         <span className="bg-white/80 text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: C.navy, backdropFilter: 'blur(4px)' }}>
@@ -640,9 +646,7 @@ export default function ItemsPage() {
                     <div className="p-4 bg-white">
                       <span className="inline-block px-3 py-1 rounded-full text-xs font-bold mb-2"
                         style={{ backgroundColor: C.pink, color: C.navy }}>{item.brand}</span>
-                      {/* Name + price */}
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        {/* Show Name and the specific Size they uploaded */}
                         <h3 className="font-semibold truncate" style={{ color: C.navy }}>
                           {item.name} {item.userWearingSize ? <span className="text-gray-400 font-normal">({item.userWearingSize})</span> : ''}
                         </h3>
@@ -660,22 +664,6 @@ export default function ItemsPage() {
                     </div>
                   </div>
                 ))}
-
-                {/* ── PRESET BOTTOMS (Pants category or All Items) ── */}
-                {(filterCategory === 'Pants' || (!filterCategory && activeTab !== 'favorites' && activeTab !== 'recent')) &&
-                  PRESET_BOTTOMS.map(b => (
-                    <PresetItemCard key={b.id} label={b.label} material={b.material} color={b.color}
-                      imageUrl={b.imageUrl} onPhotoClick={(src, alt) => setLightbox({ src, alt })} />
-                  ))
-                }
-
-                {/* ── PRESET SHOES ── */}
-                {(filterCategory === 'Shoes' || (!filterCategory && activeTab !== 'favorites' && activeTab !== 'recent')) &&
-                  PRESET_SHOES.map(s => (
-                    <PresetItemCard key={s.id} label={s.label} material={s.material} color={s.color}
-                      imageUrl={s.imageUrl} onPhotoClick={(src, alt) => setLightbox({ src, alt })} />
-                  ))
-                }
               </div>
 
               {filteredItems.length === 0 && processingItems.length === 0 && !loading && (
@@ -725,10 +713,8 @@ export default function ItemsPage() {
         </>
       )}
 
-      {/* Lightbox */}
-      {lightbox && (
-        <PhotoLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
-      )}
+      {/* User Guide Modal */}
+      {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
     </div>
   );
 }
