@@ -67,6 +67,7 @@ interface OutfitSuggestion {
   reason:    string;
   comfort:   string;
   vibe:      string;  // e.g. "Smart Casual", "Streetwear", "Minimalist"
+  fit_logic: string;
 }
 
 // ─── Weather condition helpers ───────────────────────────────────────────────
@@ -85,6 +86,15 @@ function getConditionMeta(condition: string) {
   return CONDITION_META[condition] ?? { label: condition, emoji: '🌤️', bg: C.cream };
 }
 
+function getFitTechnicalExplanation(fit: FitSummary) {
+  const ease = fit.easeChestCm;
+  if (ease < 0) return "This shirt is currently smaller than your body measurements. Expect significant tension across the chest and restricted arm movement. Style this with high-waisted, structured bottoms to draw attention away from the pull-lines.";
+  if (ease < 4) return "This is a 'Skinny' or 'Muscle' fit. There is very little air gap (ease) between the fabric and your skin. This is ideal for sharp, modern looks but can be warm in high humidity.";
+  if (ease >= 4 && ease < 8) return "This is a 'Slim-Regular' fit. This is the gold standard for tailored casual wear, providing enough room for comfort while maintaining your body's natural silhouette.";
+  if (ease >= 8 && ease < 12) return "This is a 'Relaxed' fit. This provides significant airflow, making it perfect for the current humidity. It creates a casual, effortless drape.";
+  return "This is an 'Oversized' silhouette. The shirt will hang off the shoulders and chest. To avoid looking swamped, balance this with 'Baggy' bottoms for a full streetwear look or 'Black Slacks' for a high-fashion contrast.";
+}
+
 function getTempLabel(tempC: number): { label: string; color: string } {
   if (tempC >= 33) return { label: 'Very Hot',  color: '#ef4444' };
   if (tempC >= 28) return { label: 'Hot',        color: '#f97316' };
@@ -101,34 +111,43 @@ function buildGeminiPrompt(
   shirtUrl: string | null,
 ): string {
   const fitBlock = fit
-    ? `Shirt: "${fit.shirtName}" by ${fit.shirtBrand} (${fit.shirtColor}), size ${fit.selectedSize}.
-Fit: ${fit.overall} — chest ease +${fit.easeChestCm}cm, waist ease +${fit.easeWaistCm}cm.`
-    : `No specific shirt selected — suggest generally.`;
+    ? `SHIRT MEASUREMENTS & FIT:
+- Shirt Name: "${fit.shirtName}" (${fit.shirtBrand})
+- Selected Size: ${fit.selectedSize}
+- Overall Silhouette: ${fit.overall}
+- Chest Ease: ${fit.easeChestCm}cm (Positive means loose, negative means tight)
+- Waist Ease: ${fit.easeWaistCm}cm
+- Color/Style: ${fit.shirtColor}`
+    : `No specific shirt selected — suggest generally based on weather.`;
 
-  return `You are a concise fashion stylist for a Southeast Asian male user.
+  return `You are an expert high-end fashion stylist. 
 
 CONTEXT:
 Weather: ${weather.tempC}°C, ${weather.condition}, humidity ${weather.humidity}%.
 ${fitBlock}
 
-RULES:
-- Only select items from the ALLOWED LISTS below. Do NOT invent or suggest other items.
-- Give exactly 3 outfit suggestions, each with a different vibe.
-- Keep "reason" around 30-50 words. Keep "comfort" under 15 words.
-- Output ONLY a valid JSON array — no markdown, no extra text.
+STYLING RULES:
+1. Only select from ALLOWED BOTTOMS: ${PRESET_BOTTOMS.map(b => b.label).join(', ')}
+2. Only select from ALLOWED SHOES: ${PRESET_SHOES.map(s => s.label).join(', ')}
+3. If the shirt is "Tight" (low ease), suggest bottoms that balance the look (e.g., wider legs) or offer high mobility.
+4. If the shirt is "Loose" (high ease), suggest how to style the proportions.
+5. Consider the humidity: high humidity needs breathable combinations.
 
-ALLOWED BOTTOMS: ${PRESET_BOTTOMS.map(b => b.label).join(' | ')}
-ALLOWED SHOES:   ${PRESET_SHOES.map(s => s.label).join(' | ')}
+OUTPUT REQUIREMENTS:
+- Give exactly 3 distinct outfit suggestions.
+- "reason": Provide a detailed fashion breakdown (30-50 words). Explain the visual balance between the shirt's fit and the bottoms, the color theory, and why it suits ${weather.condition} weather.
+- "fit_logic": (30-50 words) Specifically explain how this combination compensates for or highlights the shirt's ${fit?.easeChestCm}cm chest ease.
+- Output ONLY a valid JSON array.
 
-OUTPUT FORMAT:
+JSON STRUCTURE:
 [
   {
-    "bottom":    "<exact label from ALLOWED BOTTOMS>",
-    "shoes":     "<exact label from ALLOWED SHOES>",
-    "accessory": "<exact label from ALLOWED ACCESSORIES>",
-    "reason":    "<why this works with the shirt and weather>",
-    "comfort":   "<one short comfort note>",
-    "vibe":      "<2-word style vibe, e.g. Smart Casual>"
+    "bottom": "...",
+    "shoes": "...",
+    "reason": "...",
+    "comfort": "...",
+    "vibe": "...",
+    "fit_logic": "..."
   }
 ]`;
 }
@@ -738,16 +757,28 @@ export default function StyleSuggestionsPage() {
                   </div>
 
                   {/* Reason + comfort */}
-                  <div className="px-4 pb-4 space-y-1.5">
-                    <div className="rounded-xl p-3 border" style={{ backgroundColor: '#f0f9f4', borderColor: '#bbf7d0' }}>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-0.5">Why it works</p>
-                      <p className="text-[11px] text-green-900 leading-relaxed">{s.reason}</p>
-                    </div>
-                    <div className="rounded-xl p-3 border" style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-0.5">Comfort note</p>
-                      <p className="text-[11px] text-amber-900 leading-relaxed">{s.comfort}</p>
-                    </div>
+                  <div className="px-4 pb-4 space-y-3">
+                  {/* Fit Logic Section */}
+                  <div className="rounded-xl p-3 border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">📐 Fit-Specific Styling</p>
+                    <p className="text-[11px] text-gray-700 leading-relaxed italic">
+                      {s.fit_logic}
+                    </p>
                   </div>
+
+                  {/* Detailed Reason Section */}
+                  <div className="rounded-xl p-4 border" style={{ backgroundColor: '#f0f9f4', borderColor: '#bbf7d0' }}>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1.5">Stylist's Breakdown</p>
+                    <p className="text-[12px] text-green-900 leading-relaxed font-medium">
+                      {s.reason}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                    <span className="text-sm">☁️</span>
+                    <p className="text-[11px] text-amber-900 font-bold">{s.comfort}</p>
+                  </div>
+                </div>
                 </div>
               ))}
             </div>

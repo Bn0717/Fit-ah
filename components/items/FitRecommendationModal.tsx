@@ -97,25 +97,25 @@ function buildPrompt(
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const color = (item as any).color ?? 'unknown color';
-  return `You are a concise fashion stylist.
+  return `You are a professional fashion consultant and technical stylist.
 
 CONTEXT:
-Weather: ${weather.tempC}°C, ${weather.condition}, humidity ${weather.humidity}%.
-Shirt: "${item.name}" by ${item.brand} (${color}, ${item.category}).
+Weather: ${weather.tempC}°C, ${weather.condition}, Humidity: ${weather.humidity}%.
+Shirt: "${item.name}" by ${item.brand} (${color}).
 ${fitLine}
 
-RULES:
-- Only pick from the exact labels in ALLOWED LISTS. No other items.
-- Return exactly 3 outfit combos with distinct vibes.
-- "reason" ≤ 18 words. "comfort" ≤ 12 words.
-- Output ONLY a valid JSON array, no markdown.
-- Return ONLY the exact label string for "bottom" and "shoes" from the allowed lists. 
-- Do NOT include material or color in the "bottom" or "shoes" fields.
+STYLING RULES:
+1. Return exactly 3 outfit suggestions with distinct vibes.
+2. "reason": Write 40-60 words. Explain the visual balance between the top and bottom. Discuss how the ${fitLabel} fit of the shirt pairs with the silhouette of the bottoms and how the colors harmonize.
+3. "comfort": Write 30-50 words. Explain how the fabric and the ease (${row.chest - (profile?.chest ?? 0)}cm) will feel against the skin in ${weather.tempC}°C heat and ${weather.humidity}% humidity.
+4. Output ONLY a valid JSON array. No conversational text.
 
-ALLOWED BOTTOMS: ${PRESET_BOTTOMS.map(b => b.label).join(' | ')}
-ALLOWED SHOES (label — material, color): ${PRESET_SHOES.map(s => `${s.label} (${s.material}, ${s.color})`).join(' | ')}
+ALLOWED LISTS:
+- BOTTOMS: ${PRESET_BOTTOMS.map(b => b.label).join(' | ')}
+- SHOES: ${PRESET_SHOES.map(s => s.label).join(' | ')}
 
-OUTPUT: [{"bottom":"...","shoes":"...","reason":"...","comfort":"...","vibe":"2-word style"}]`;
+OUTPUT FORMAT:
+[{"bottom":"...","shoes":"...","reason":"...","comfort":"...","vibe":"..."}]`;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -664,13 +664,14 @@ function StyleOverlay({
                   </div>
 
                   <div className="px-3 pb-3 pt-2 space-y-2" style={{ backgroundColor: 'white' }}>
-                    <div className="rounded-xl px-3 py-2.5 border" style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                      <p className="text-[8px] font-black uppercase tracking-widest text-green-700 mb-1">💬 Why it works</p>
-                      <p className="text-[11px] leading-relaxed text-green-900">{o.reason}</p>
+                    <div className="rounded-xl px-4 py-3.5 border" style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1.5">💬 Stylist Breakdown</p>
+                      <p className="text-[12px] leading-relaxed text-green-900 font-medium">{o.reason}</p>
                     </div>
-                    <div className="rounded-xl px-3 py-2.5 border" style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
-                      <p className="text-[8px] font-black uppercase tracking-widest text-amber-700 mb-1">🌡️ Comfort note</p>
-                      <p className="text-[11px] leading-relaxed text-amber-900">{o.comfort}</p>
+
+                    <div className="rounded-xl px-4 py-3.5 border" style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-1.5">🌡️ Fit & Comfort Detail</p>
+                      <p className="text-[12px] leading-relaxed text-amber-900 font-medium">{o.comfort}</p>
                     </div>
                   </div>
                 </div>
