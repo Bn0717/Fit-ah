@@ -201,7 +201,7 @@ export default function DashboardPage() {
               {/* Size Variability */}
               <div className="bg-white rounded-xl p-6 shadow-sm border-2" style={{ borderColor: colors.peach }}>
                 <h3 className="text-xl font-bold mb-4" style={{ color: colors.navy }}>
-                  📊 Your Size Varies by Brand
+                  📊 Size Varies by Brand
                 </h3>
                 
                 {Object.keys(sizesByBrand).length > 0 ? (

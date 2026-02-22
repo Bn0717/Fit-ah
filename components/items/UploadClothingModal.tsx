@@ -11,7 +11,7 @@ const colors = {
   pink: '#FA9EBC'
 };
 
-const DEFAULT_CATEGORIES = ['Short Sleeve Shirt', 'Shirt', 'Jacket', 'Pants', 'Hoodie', 'Shoes', 'Accessories'];
+const DEFAULT_CATEGORIES = ['Short Sleeve Shirt'];//, 'Shirt', 'Jacket', 'Pants', 'Hoodie', 'Shoes', 'Accessories'];
 
 // TNT CO Default Size Chart
 const TNT_DEFAULT_SIZE_CHART: SizeChart[] = [

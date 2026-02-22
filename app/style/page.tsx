@@ -192,8 +192,8 @@ export default function StyleSuggestionsPage() {
     setWeatherLoading(true);
     setWeatherError(null);
     try {
-      const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-      if (!key) throw new Error('Missing NEXT_PUBLIC_OPENWEATHER_API_KEY in .env.local');
+      const key = process.env.OPENWEATHER_API_KEY;
+      if (!key) throw new Error('Missing OPENWEATHER_API_KEY in .env.local');
       const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${key}`;
       const res  = await fetch(url);
       if (!res.ok) throw new Error(`Weather API error ${res.status}`);
@@ -223,8 +223,8 @@ export default function StyleSuggestionsPage() {
     setWeatherLoading(true);
     setWeatherError(null);
     try {
-      const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-      if (!key) throw new Error('Missing NEXT_PUBLIC_OPENWEATHER_API_KEY in .env.local');
+      const key = process.env.OPENWEATHER_API_KEY;
+      if (!key) throw new Error('Missing OPENWEATHER_API_KEY in .env.local');
       const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(manualCity)}&units=metric&appid=${key}`;
       const res  = await fetch(url);
       if (!res.ok) throw new Error('City not found. Try a different spelling.');

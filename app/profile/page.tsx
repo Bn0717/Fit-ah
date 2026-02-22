@@ -10,9 +10,9 @@ import { processImage } from '@/lib/mediapipe/poseDetection';
 import type { ClothingItem, OutfitCombination } from '@/lib/types/clothing';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
-const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29 };
-const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54 };
-type Measurements = { height: number; chest: number; waist: number; shoulder: number };
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, bodyLength: 60 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, bodyLength: 90 };
+type Measurements = { height: number; chest: number; bodyLength: number; shoulder: number };
 const clamp  = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const norm01 = (cm: number, base: number, max: number) => clamp((cm - base) / (max - base), 0, 1);
 
@@ -32,8 +32,8 @@ export default function ProfilePage() {
   const [savingInfo,   setSavingInfo]   = useState(false);
 
   // ── Body measurements ─────────────────────────────────────────
-  const [saved,       setSaved]       = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
-  const [draft,       setDraft]       = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
+  const [saved,       setSaved]       = useState<Measurements>({ height: 170, chest: 90, bodyLength: 72, shoulder: 44 });
+  const [draft,       setDraft]       = useState<Measurements>({ height: 170, chest: 90, bodyLength: 72, shoulder: 44 });
   const [savingBody,  setSavingBody]  = useState(false);
   const [bodySuccess, setBodySuccess] = useState(false);
   // slider is always visible — no toggle state needed
@@ -44,6 +44,7 @@ export default function ProfilePage() {
   const [activeTab,      setActiveTab]      = useState<'items' | 'outfits'>('items');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [selectedItem,   setSelectedItem]   = useState<ClothingItem | null>(null);
+  const [selectedShirtSize, setSelectedShirtSize] = useState<string>('');
   const [sidebarView,    setSidebarView]    = useState<'2d' | '3d'>('2d');
   const [loadingData,    setLoadingData]    = useState(true);
 
@@ -68,15 +69,16 @@ export default function ProfilePage() {
     setLoadingData(true);
     Promise.all([getAvatar(user.uid), getUserClothingItems(user.uid), getUserOutfits(user.uid)])
       .then(([profile, clothingItems, userOutfits]) => {
-        if (!profile) {
-          router.replace('/onboarding');
-          return;
-        }
         if (profile) {
-          const m: Measurements = { height: profile.height, chest: profile.chest, waist: profile.waist, shoulder: profile.shoulder };
-          setSaved(m); setDraft(m);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = profile as any;
+          const m: Measurements = {
+            height: p.height ?? 170,
+            chest: p.chest ?? 90,
+            shoulder: p.shoulder ?? 44,
+            bodyLength: p.bodyLength ?? p.waist ?? 72,   // fallback to old waist field
+          };
+          setSaved(m); setDraft(m);
           setDisplayName(p.displayName || ''); setAge(p.age ? String(p.age) : ''); setGender(p.gender || '');
           if (p.photoUrl) setPhotoPreview(p.photoUrl);
         }
@@ -132,10 +134,10 @@ export default function ProfilePage() {
 
       function updateBody(m: Measurements) {
         if (!bodyMesh) return;
-        setMorph('CHEST_WIDE',    norm01(m.chest,    BODY_BASE.chest,    BODY_MAX.chest)    * 3.0);
-        setMorph('SHOULDER_WIDE', norm01(m.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder) * 0.5);
-        setMorph('HEIGHT',        norm01(m.height,   BODY_BASE.height,   BODY_MAX.height)   * 0.8);
-        setMorph('WAIST_WIDE',    norm01(m.waist,    BODY_BASE.waist,    BODY_MAX.waist)    * 10.0);
+        setMorph('CHEST_WIDE',    norm01(m.chest,      BODY_BASE.chest,      BODY_MAX.chest)      * 3.0);
+        setMorph('SHOULDER_WIDE', norm01(m.shoulder,   BODY_BASE.shoulder,   BODY_MAX.shoulder)   * 0.5);
+        setMorph('HEIGHT',        norm01(m.height,     BODY_BASE.height,     BODY_MAX.height)     * 0.8);
+        setMorph('WAIST_WIDE',    norm01(m.bodyLength, BODY_BASE.bodyLength, BODY_MAX.bodyLength) * 4.0);
         setMorph('HIP_WIDE',      clamp(norm01(m.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 0, 1) * 2.0);
         setMorph('BODY_LENGTH',   1.5);
       }
@@ -263,6 +265,11 @@ export default function ProfilePage() {
     } else {
       const url = selectedItem.frontImageUrl || selectedItem.imageUrl || null;
       sceneRef.current?.tryOnShirt(url);
+      // Set default size: middle of available sizes (not the biggest)
+      if (selectedItem.sizeChart.length > 0) {
+        const midIdx = Math.floor((selectedItem.sizeChart.length - 1) / 2);
+        setSelectedShirtSize(selectedItem.sizeChart[midIdx].size);
+      }
     }
   }, [selectedItem]);
 
@@ -283,7 +290,12 @@ export default function ProfilePage() {
       await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = photoPreview; });
       const result = await processImage(img, draft.height);
       if (result && result.confidence >= 0.5) {
-        const m: Measurements = { height: result.height, chest: result.chest, waist: result.waist, shoulder: result.shoulder };
+        const m: Measurements = {
+          height: result.height,
+          chest: result.chest,
+          shoulder: result.shoulder,
+          bodyLength: draft.bodyLength,   // not from pose, keep user value
+        };
         setDraft(m); setDetectMsg('✅ Updated!');
       } else {
         setDetectMsg('⚠️ Could not detect. Adjust manually.');
@@ -431,7 +443,7 @@ export default function ProfilePage() {
                 <div className="pt-2 border-t" style={{ borderColor: C.peach }}>
                   <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Saved Measurements</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {([['Height', saved.height], ['Chest', saved.chest], ['Waist', saved.waist], ['Shldr', saved.shoulder]] as const).map(([k, v]) => (
+                    {([['Height', saved.height], ['Chest', saved.chest], ['Body L.', saved.bodyLength], ['Shldr', saved.shoulder]] as const).map(([k, v]) => (
                       <div key={k} className="rounded-lg px-2 py-1 text-center" style={{ backgroundColor: C.peach }}>
                         <p className="text-[8px] font-black text-gray-400 uppercase">{k}</p>
                         <p className="text-sm font-black" style={{ color: C.navy }}>{v}<span className="text-[8px] font-medium opacity-60">cm</span></p>
@@ -470,10 +482,10 @@ export default function ProfilePage() {
             </div>
             <div className="px-3 py-2.5 space-y-3">
               {([
-                { key: 'height',   label: 'Height',   min: 150, max: 198 },
-                { key: 'chest',    label: 'Chest',    min: 50,  max: 150 },
-                { key: 'waist',    label: 'Waist',    min: 40,  max: 140 },
-                { key: 'shoulder', label: 'Shoulder', min: 30,  max: 70  },
+                { key: 'height',     label: 'Height',      min: 150, max: 198 },
+                { key: 'chest',      label: 'Chest',       min: 50,  max: 150 },
+                { key: 'shoulder',   label: 'Shoulder',    min: 30,  max: 70  },
+                { key: 'bodyLength', label: 'Body Length', min: 55,  max: 90  },
               ] as const).map(({ key, label, min, max }) => (
                 <div key={key}>
                   <div className="flex items-center justify-between mb-1.5">
@@ -580,36 +592,104 @@ export default function ProfilePage() {
             ) : activeTab === 'items' ? (
               filteredItems.length === 0
                 ? <p className="text-[10px] text-center text-gray-400 pt-8">No items yet. Add from Wardrobe.</p>
-                : <div className="grid grid-cols-2 gap-2">
-                    {filteredItems.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => setSelectedItem(prev => prev?.id === item.id ? null : item)}
-                        className="rounded-xl overflow-hidden border-2 transition-all hover:scale-[1.03] hover:shadow-md text-left"
-                        style={{
-                          borderColor: selectedItem?.id === item.id ? C.navy : C.peach,
-                          boxShadow:   selectedItem?.id === item.id ? `0 0 0 2.5px ${C.pink}` : 'none',
-                        }}>
-                        <div className="aspect-square bg-white relative overflow-hidden">
-                          {sidebarView === '2d' ? (
-                            (item.frontImageUrl || item.imageUrl)
-                              ? <img src={item.frontImageUrl || item.imageUrl} alt={item.name}
-                                  className="w-full h-full object-cover" crossOrigin="anonymous" />
-                              : <div className="w-full h-full flex items-center justify-center"><span className="text-2xl">👕</span></div>
-                          ) : (
-                            <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
-                          )}
-                          {selectedItem?.id === item.id && (
-                            <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shadow"
-                                 style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                : <div className="space-y-2">
+                    {filteredItems.map(item => {
+                      const isSelected = selectedItem?.id === item.id;
+                      // Fit analysis for selected size
+                      const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
+                      const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
+                      const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
+                      const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
+
+                      return (
+                        <div key={item.id} className="rounded-xl overflow-hidden border-2 transition-all"
+                          style={{
+                            borderColor: isSelected ? C.navy : C.peach,
+                            boxShadow:   isSelected ? `0 0 0 2px ${C.pink}` : 'none',
+                          }}>
+                          {/* Item row */}
+                          <button
+                            onClick={() => setSelectedItem(prev => prev?.id === item.id ? null : item)}
+                            className="w-full flex items-center gap-2.5 p-2 text-left transition-all hover:opacity-90"
+                            style={{ backgroundColor: isSelected ? C.peach : 'white' }}>
+                            {/* Thumbnail */}
+                            <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
+                              {sidebarView === '2d' ? (
+                                (item.frontImageUrl || item.imageUrl)
+                                  ? <img src={item.frontImageUrl || item.imageUrl} alt={item.name}
+                                      className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                  : <div className="w-full h-full flex items-center justify-center text-xl">👕</div>
+                              ) : (
+                                <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
+                              )}
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[9px] font-bold text-gray-400 truncate">{item.brand}</p>
+                              <p className="text-xs font-black truncate" style={{ color: C.navy }}>{item.name}</p>
+                              <p className="text-[8px] text-gray-400 mt-0.5">{item.category}</p>
+                            </div>
+                            {/* Selected check */}
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-black"
+                                style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                            )}
+                          </button>
+
+                          {/* ── Size selector + fit — only when selected ── */}
+                          {isSelected && item.sizeChart.length > 0 && (
+                            <div className="px-3 pb-3 pt-1 space-y-2.5" style={{ backgroundColor: '#fafaf8' }}>
+                              {/* Size chips */}
+                              <div>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Select Size</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {item.sizeChart.map(sc => (
+                                    <button key={sc.size}
+                                      onClick={() => setSelectedShirtSize(sc.size)}
+                                      className="px-2.5 py-1 rounded-lg font-bold text-[10px] transition-all"
+                                      style={{
+                                        backgroundColor: selectedShirtSize === sc.size ? C.navy : C.peach,
+                                        color:           selectedShirtSize === sc.size ? 'white' : C.navy,
+                                        transform:       selectedShirtSize === sc.size ? 'scale(1.05)' : 'scale(1)',
+                                      }}>
+                                      {sc.size}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* Size measurements */}
+                              {sizeRow && (
+                                <div className="grid grid-cols-4 gap-1">
+                                  {([
+                                    { label: 'Chest',  val: sizeRow.chest    },
+                                    { label: 'Length', val: sizeRow.length   },
+                                    { label: 'Shldr',  val: sizeRow.shoulder },
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    ...((sizeRow as any).sleeve ? [{ label: 'Sleeve', val: (sizeRow as any).sleeve }] : []),
+                                  ]).map(({ label, val }) => (
+                                    <div key={label} className="rounded-lg p-1.5 text-center border" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
+                                      <p className="text-[7px] font-black text-gray-400 uppercase">{label}</p>
+                                      <p className="text-[10px] font-black" style={{ color: C.navy }}>{val}<span className="text-[7px] opacity-50">cm</span></p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Fit badge */}
+                              {fitLabel && (
+                                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+                                  style={{ backgroundColor: fitColor + '18' }}>
+                                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
+                                  <p className="text-[10px] font-bold" style={{ color: fitColor }}>
+                                    {fitLabel}
+                                    {fitRatio && ` — ${fitRatio > 1 ? '+' : ''}${((sizeRow!.chest - saved.chest)).toFixed(1)}cm ease`}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
-                        <div className="px-1.5 py-1" style={{ backgroundColor: selectedItem?.id === item.id ? C.peach : C.cream }}>
-                          <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{item.name}</p>
-                          <p className="text-[8px] opacity-50 truncate" style={{ color: C.navy }}>{item.brand}</p>
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
             ) : (
               outfits.length === 0

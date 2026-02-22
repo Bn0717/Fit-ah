@@ -39,26 +39,78 @@ const R_SLEEVE_RECT = { x: 1024, y: 1536, w: 1024, h: 512  };
 // SHOES: add your own shoe photos to /public/shoes/ and reference here
 // Each shoe needs: label (shown to AI), emoji (fallback), imageUrl (your photo)
 const PRESET_BOTTOMS = [
-  { id: 'b1', label: 'Baggy Wide-Leg Jeans',  emoji: '', tags: ['formal','rain','cold'] },
-  { id: 'b2', label: 'Casual Sweatpants',           emoji: '', tags: ['casual','cold'] },
-  { id: 'b3', label: 'Baggy Cargo Pants',          emoji: '', tags: ['casual','warm','smart'] },
-  { id: 'b4', label: 'Wide-Leg Sweatpants',               emoji: '', tags: ['hot','casual'] },
-  { id: 'b5', label: 'Pleated Wide-Leg Trousers',             emoji: '', tags: ['cold','casual','cosy'] },
-  { id: 'b6', label: 'Casual Shorts',           emoji: '', tags: ['casual','rain','outdoor'] },
-  { id: 'b7', label: 'Slacks',        emoji: '', tags: ['smart','casual','warm'] },
+  {
+    id: 'b1',
+    label: 'Baggy Wide-Leg Jeans',
+    emoji: '👖',
+    tags: ['formal', 'rain', 'cold'],
+    imageUrl: '/bottoms/baggy-wide-leg-jeans-black.jpg',
+    material: 'denim',
+    color: 'black',
+  },
+  {
+    id: 'b2',
+    label: 'Casual Sweatpants',
+    emoji: '🩳',
+    tags: ['casual', 'cold'],
+    imageUrl: '/bottoms/casual-sweatpants-white.jpg',
+    material: 'cotton fleece',
+    color: 'white',
+  },
+  {
+    id: 'b3',
+    label: 'Baggy Cargo Pants',
+    emoji: '🪖',
+    tags: ['casual', 'warm', 'smart'],
+    imageUrl: '/bottoms/baggy-cargo-pants-olivegreen.jpg',
+    material: 'cotton twill',
+    color: 'olive green',
+  },
+  {
+    id: 'b4',
+    label: 'Wide-Leg Sweatpants',
+    emoji: '🩲',
+    tags: ['hot', 'casual'],
+    imageUrl: '/bottoms/wide-leg-sweatpants.jpg',
+    material: 'cotton blend',
+    color: 'grey',
+  },
+  {
+    id: 'b5',
+    label: 'Pleated Wide-Leg Trousers',
+    emoji: '👔',
+    tags: ['cold', 'casual', 'cosy'],
+    imageUrl: '/bottoms/pleated-whide-leg-trousers-beige.jpg',
+    material: 'polyester blend',
+    color: 'beige',
+  },
+  {
+    id: 'b6',
+    label: 'Casual Shorts',
+    emoji: '🩳',
+    tags: ['casual', 'rain', 'outdoor'],
+    imageUrl: '/bottoms/casual-shorts-cream.jpg',
+    material: 'cotton',
+    color: 'cream',
+  },
+  {
+    id: 'b7',
+    label: 'Slacks',
+    emoji: '👖',
+    tags: ['smart', 'casual', 'warm'],
+    imageUrl: '/bottoms/slacks-black.png',
+    material: 'wool blend',
+    color: 'black',
+  },
 ];
 
-
-
 // ── ADD YOUR SHOE PHOTOS HERE ────────────────────────────────────────────────
-// Put PNG/JPG files (no background) in /public/shoes/ then set imageUrl below.
-// label = what Gemini sees; material/color/style helps Gemini choose correctly.
 const PRESET_SHOES: { id: string; label: string; emoji: string; imageUrl: string | null; material: string; color: string }[] = [
-  { id: 's1', label: 'White & Light Grey Chunky Sneakers',  emoji: '👟', imageUrl: '/shoes/chunky-sneaker.jpeg',  material: 'leather',  color: 'white light grey'  },
-  { id: 's2', label: 'Classic Low-Top Sneakers',           emoji: '👟', imageUrl: '/shoes/classic-low-top-sneaker-white.jpeg', material: 'leather',     color: 'black'  },
-  { id: 's3', label: 'Casual Slip-on Loafers',    emoji: '👞', imageUrl: '/shoes/casual-slipon-loafer.jpeg',           material: 'leather',  color: 'black'  },
-  { id: 's4', label: 'Slip-on Clog',    emoji: '🥿', imageUrl: '/shoes/slip-on-clog.jpeg',   material: 'rubber',   color: 'white'  },
-  { id: 's5', label: 'Winter Boots',      emoji: '🥾', imageUrl: '/shoes/winter-boot.jpeg',    material: 'suede',  color: 'brown'  },
+  { id: 's1', label: 'White & Light Grey Chunky Sneakers',  emoji: '👟', imageUrl: '/shoes/chunky-sneaker.png',  material: 'leather',  color: 'white light grey'  },
+  { id: 's2', label: 'Classic Low-Top Sneakers',           emoji: '👟', imageUrl: '/shoes/classic-low-top-sneaker-white.png', material: 'leather',     color: 'black'  },
+  { id: 's3', label: 'Casual Slip-on Loafers',    emoji: '👞', imageUrl: '/shoes/casual-slipon-loafer.png',           material: 'leather',  color: 'black'  },
+  { id: 's4', label: 'Slip-on Clog',    emoji: '🥿', imageUrl: '/shoes/slip-on-clog.png',   material: 'rubber',   color: 'white'  },
+  { id: 's5', label: 'Winter Boots',      emoji: '🥾', imageUrl: '/shoes/winter-boot.png',    material: 'suede',  color: 'brown'  },
 ];
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -119,9 +171,7 @@ RULES:
 - Output ONLY a valid JSON array, no markdown.
 
 ALLOWED BOTTOMS: ${PRESET_BOTTOMS.map(b => b.label).join(' | ')}
-ALLOWED SHOES: ${PRESET_SHOES.map(s => s.label).join(' | ')}
-SHOE NOTES: ${PRESET_SHOES.map(s => `${s.label}: ${s.material}, ${s.color}`).join(' | ')}
-ALLOWED SHOES: ${PRESET_SHOES.map(s => s.label).join(' | ')}
+ALLOWED SHOES (label — material, color): ${PRESET_SHOES.map(s => `${s.label} (${s.material}, ${s.color})`).join(' | ')}
 
 OUTPUT: [{"bottom":"...","shoes":"...","reason":"...","comfort":"...","vibe":"2-word style"}]`;
 }
@@ -141,6 +191,102 @@ interface WeatherData  { tempC: number; condition: string; humidity: number; cit
 const pEmoji = (label: string, list: { label: string; emoji: string }[]) =>
   list.find(x => x.label === label)?.emoji ?? '•';
 
+// ─── Heatmap types + helpers ──────────────────────────────────────────────────
+interface FitHeatmap {
+  score:    number;           // 0–100
+  chest:    number;           // 0–1 tightness
+  shoulder: number;
+  waist:    number;
+  sleeve:   number;
+  clipping: number;           // penetrating vertex count
+  colors:   Float32Array | null;   // r,g,b per shirt vertex
+}
+
+// tightness 0→1  →  blue / green / yellow / orange / red
+function tightnessColor(t: number): [number, number, number] {
+  if (t < 0.25)  return [0.20, 0.50, 1.00];  // blue   — very loose
+  if (t < 0.45)  return [0.15, 0.85, 0.45];  // green  — good fit
+  if (t < 0.65)  return [1.00, 0.85, 0.10];  // yellow — slightly tight
+  if (t < 0.80)  return [1.00, 0.45, 0.10];  // orange — tight
+  return               [1.00, 0.15, 0.15];   // red    — very tight / clipping
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeHeatmap(shirtMesh: any, bodyMesh: any, THREE: any): FitHeatmap {
+  const empty: FitHeatmap = { score: 0, chest: 0, shoulder: 0, waist: 0, sleeve: 0, clipping: 0, colors: null };
+  if (!shirtMesh?.geometry?.attributes?.position || !bodyMesh?.geometry?.attributes?.position) return empty;
+
+  shirtMesh.updateMatrixWorld(true);
+  bodyMesh.updateMatrixWorld(true);
+
+  const sPos  = shirtMesh.geometry.attributes.position;
+  const bPos  = bodyMesh.geometry.attributes.position;
+  const bNorm = bodyMesh.geometry.attributes.normal;
+  const sCount = sPos.count;
+  const bCount = bPos.count;
+
+  const sv = new THREE.Vector3(), bv = new THREE.Vector3(), bn = new THREE.Vector3();
+  const colors = new Float32Array(sCount * 3);
+  let clipping = 0;
+
+  const reg: Record<string, [number, number]> = {
+    chest:    [0, 0], shoulder: [0, 0], waist: [0, 0], sleeve: [0, 0],
+  };
+
+  shirtMesh.geometry.computeBoundingBox();
+  const sBox  = shirtMesh.geometry.boundingBox!;
+  const sMinY = sBox.min.y + shirtMesh.position.y;
+  const sRngY = (sBox.max.y - sBox.min.y) || 1;
+  const sHalfW = ((sBox.max.x - sBox.min.x) / 2) || 1;
+
+  for (let i = 0; i < sCount; i++) {
+    sv.fromBufferAttribute(sPos, i).applyMatrix4(shirtMesh.matrixWorld);
+
+    // brute-force nearest body vertex (fast for < 20 k verts)
+    let minDist = Infinity, minJ = 0;
+    for (let j = 0; j < bCount; j++) {
+      bv.fromBufferAttribute(bPos, j).applyMatrix4(bodyMesh.matrixWorld);
+      const d = sv.distanceToSquared(bv);
+      if (d < minDist) { minDist = d; minJ = j; }
+    }
+    const dist = Math.sqrt(minDist);
+
+    // penetration check via body normal
+    let inside = false;
+    if (bNorm) {
+      bn.fromBufferAttribute(bNorm, minJ).transformDirection(bodyMesh.matrixWorld);
+      bv.fromBufferAttribute(bPos, minJ).applyMatrix4(bodyMesh.matrixWorld);
+      if (sv.clone().sub(bv).dot(bn) < 0) { inside = true; clipping++; }
+    }
+
+    // dist → tightness: 0 = penetrating (1.0), 0.02 m = good (≈0.67), > 0.06 m = loose (0)
+    const tightness = inside ? 1.0 : Math.max(0, Math.min(1, 1.0 - dist / 0.06));
+    const [r, g, b] = tightnessColor(tightness);
+    colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = b;
+
+    // classify by position
+    const normY = (sv.y - sMinY) / sRngY;
+    const normX = Math.abs(sv.x) / sHalfW;
+    if      (normX > 0.75) { reg.sleeve[0]   += tightness; reg.sleeve[1]++; }
+    else if (normY > 0.75) { reg.shoulder[0] += tightness; reg.shoulder[1]++; }
+    else if (normY > 0.45) { reg.chest[0]    += tightness; reg.chest[1]++; }
+    else                   { reg.waist[0]    += tightness; reg.waist[1]++; }
+  }
+
+  const avg = ([s, c]: [number, number]) => c > 0 ? s / c : 0;
+  const chest    = avg(reg.chest    as [number, number]);
+  const shoulder = avg(reg.shoulder as [number, number]);
+  const waist    = avg(reg.waist    as [number, number]);
+  const sleeve   = avg(reg.sleeve   as [number, number]);
+
+  const pen = (t: number) => t < 0.25 ? (0.25 - t) * 40 : t > 0.65 ? (t - 0.65) * 80 : 0;
+  const score = Math.max(0, Math.min(100, Math.round(
+    100 - pen(chest) - pen(shoulder) - pen(waist) - pen(sleeve) - Math.min(clipping * 0.5, 20)
+  )));
+
+  return { score, chest, shoulder, waist, sleeve, clipping, colors };
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // STYLE SUGGESTIONS OVERLAY
 // ══════════════════════════════════════════════════════════════════════════════
@@ -158,6 +304,7 @@ function StyleOverlay({
   const [aiError,    setAiError]    = useState<string | null>(null);
   const [generated,  setGenerated]  = useState(false);
   const [activeIdx,  setActiveIdx]  = useState(0);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   // Compute fit summary for display
   const fitInfo = (() => {
@@ -174,11 +321,9 @@ function StyleOverlay({
   const fetchByCoords = useCallback(async (lat: number, lon: number) => {
     setWxLoading(true); setWxError(null);
     try {
-      const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-      if (!key) throw new Error('Add NEXT_PUBLIC_OPENWEATHER_API_KEY to .env.local');
-      const r   = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${key}`);
-      if (!r.ok) throw new Error(`Weather API ${r.status}`);
+      const r = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
       const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `Weather API error ${r.status}`);
       setWeather({ tempC: Math.round(d.main.temp), condition: d.weather[0]?.main ?? 'Clear', humidity: d.main.humidity, city: d.name });
       setLocState('granted');
     } catch (e: any) { setWxError(e.message); }
@@ -190,11 +335,9 @@ function StyleOverlay({
     if (!manualCity.trim()) return;
     setWxLoading(true); setWxError(null);
     try {
-      const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-      if (!key) throw new Error('Add NEXT_PUBLIC_OPENWEATHER_API_KEY to .env.local');
-      const r   = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(manualCity)}&units=metric&appid=${key}`);
-      if (!r.ok) throw new Error('City not found — check spelling.');
+      const r = await fetch(`/api/weather?city=${encodeURIComponent(manualCity)}`);
       const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? 'City not found — check spelling.');
       setWeather({ tempC: Math.round(d.main.temp), condition: d.weather[0]?.main ?? 'Clear', humidity: d.main.humidity, city: d.name });
       setLocState('granted');
     } catch (e: any) { setWxError(e.message); }
@@ -231,18 +374,21 @@ function StyleOverlay({
       } catch { /* text-only fallback */ }
     }
     try {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error('Add GEMINI_API_KEY to .env.local');
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } }) }
-      );
+      // ✅ Server-side route — key never exposed to browser
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+        }),
+      });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Gemini error ${res.status}`);
       const raw  = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       setOutfits(JSON.parse(raw.replace(/```json|```/g, '').trim()));
       setGenerated(true); setActiveIdx(0);
-    } catch (e: any) { setAiError('Could not generate. Check API keys in .env.local'); }
+    } catch (e: any) { setAiError('Could not generate. Check GEMINI_API_KEY in server .env.local'); }
     finally { setAiLoading(false); }
   }, [weather, item, selectedSize, userProfile]);
 
@@ -574,14 +720,20 @@ function StyleOverlay({
                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Shirt</p>
                         </div>
 
-                        {/* Bottom — emoji + label (no photo for bottoms) */}
+                        {/* Bottom — real photo if available, emoji fallback */}
                         <div className="flex flex-col items-center gap-1">
-                          <div className="w-full aspect-square rounded-lg border bg-white flex flex-col items-center justify-center gap-1 px-1"
+                          <div className="w-full aspect-square rounded-lg border bg-white flex flex-col items-center justify-center overflow-hidden"
                             style={{ borderColor: C.peach }}>
-                            <span className="text-2xl">{pEmoji(o.bottom, PRESET_BOTTOMS)}</span>
-                            <p className="text-[8px] font-bold text-center leading-tight" style={{ color: C.navy }}>
-                              {o.bottom.replace(' pants','').replace(' jeans','').replace(' shorts','').replace(' chinos','').replace(' sweatpants','')}
-                            </p>
+                            {(() => {
+                              const bottom = PRESET_BOTTOMS.find(b => b.label === o.bottom);
+                              return bottom?.imageUrl
+                                ? <img src={bottom.imageUrl} alt={bottom.label}
+                                    className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                : <><span className="text-2xl">{pEmoji(o.bottom, PRESET_BOTTOMS)}</span>
+                                   <p className="text-[8px] font-bold text-center leading-tight px-1" style={{ color: C.navy }}>
+                                     {o.bottom.replace(/ pants| jeans| shorts| chinos| sweatpants/g, '')}
+                                   </p></>;
+                            })()}
                           </div>
                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Bottom</p>
                         </div>
@@ -672,16 +824,26 @@ function StyleOverlay({
           <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between text-[10px] font-black uppercase tracking-widest"
             style={{ backgroundColor: C.cream, color: C.navy }}>
             <span>👔 Preset wardrobe AI picks from</span>
-            <span className="text-gray-400 font-normal normal-case text-[9px]">bottoms &amp; shoes only</span>
+            <span className="text-gray-400 font-normal normal-case text-[9px]">Click photo to zoom</span>
           </summary>
           <div className="p-4 grid grid-cols-2 gap-6" style={{ backgroundColor: 'white' }}>
             {/* Bottoms */}
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: C.navy }}>👖 Bottoms</p>
               {PRESET_BOTTOMS.map(x => (
-                <div key={x.id} className="flex items-center gap-1.5 py-0.5">
-                  <span className="text-xs">{x.emoji}</span>
-                  <span className="text-[9px]" style={{ color: C.navy }}>{x.label}</span>
+                <div key={x.id} className="flex items-center gap-3 py-1.5">
+                  <div 
+                    onClick={() => x.imageUrl && setLightbox({ src: x.imageUrl, alt: x.label })}
+                    className="w-10 h-10 rounded-xl overflow-hidden border flex-shrink-0 bg-white flex items-center justify-center cursor-zoom-in hover:shadow-md transition-all hover:scale-105"
+                    style={{ borderColor: C.peach }}>
+                    {x.imageUrl
+                      ? <img src={x.imageUrl} alt={x.label} className="w-full h-full object-cover" crossOrigin="anonymous" />
+                      : <span className="text-sm">{x.emoji}</span>}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold truncate" style={{ color: C.navy }}>{x.label}</p>
+                    <p className="text-[9px] text-gray-400 truncate">{x.material} · {x.color}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -689,24 +851,42 @@ function StyleOverlay({
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: C.navy }}>👟 Shoes</p>
               {PRESET_SHOES.map(x => (
-                <div key={x.id} className="flex items-center gap-2 py-1">
-                  <div className="w-8 h-8 rounded-lg overflow-hidden border flex-shrink-0 bg-white flex items-center justify-center"
+                <div key={x.id} className="flex items-center gap-3 py-1.5">
+                  <div 
+                    onClick={() => x.imageUrl && setLightbox({ src: x.imageUrl, alt: x.label })}
+                    className="w-10 h-10 rounded-xl overflow-hidden border flex-shrink-0 bg-white flex items-center justify-center cursor-zoom-in hover:shadow-md transition-all hover:scale-105"
                     style={{ borderColor: C.peach }}>
                     {x.imageUrl
-                      ? <img src={x.imageUrl} alt={x.label} className="w-full h-full object-contain p-0.5" crossOrigin="anonymous" />
+                      ? <img src={x.imageUrl} alt={x.label} className="w-full h-full object-contain p-1" crossOrigin="anonymous" />
                       : <span className="text-sm">{x.emoji}</span>}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{x.label}</p>
-                    <p className="text-[8px] text-gray-400 truncate">{x.material} · {x.color}</p>
+                    <p className="text-[10px] font-bold truncate" style={{ color: C.navy }}>{x.label}</p>
+                    <p className="text-[9px] text-gray-400 truncate">{x.material} · {x.color}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </details>
-
       </div>
+      {/* ── LIGHTBOX ── */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setLightbox(null)}>
+          <div className="relative max-w-md w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setLightbox(null)}
+              className="absolute -top-12 right-0 text-white/70 hover:text-white text-4xl font-light transition-colors">
+              ×
+            </button>
+            <div className="bg-white p-2 rounded-2xl shadow-2xl w-full">
+              <img src={lightbox.src} alt={lightbox.alt} className="w-full max-h-[60vh] object-contain rounded-xl" crossOrigin="anonymous" />
+            </div>
+            <p className="text-center text-white text-sm mt-4 font-bold tracking-wide">{lightbox.alt}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -723,6 +903,17 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     applySize: (s: string) => void;
     updateBody: (b: BodyDraft) => void;
     ro: ResizeObserver;
+    // heatmap
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shirtMesh: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bodyMesh: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    THREE: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    atlasTexture: any;
+    runHeatmap: () => void;
+    clearHeatmap: () => void;
   } | null>(null);
 
   const [selectedSize,  setSelectedSize]  = useState<string>('M');
@@ -737,6 +928,11 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   const [savedBody,   setSavedBody]   = useState<BodyDraft>({ ...bodyDraft });
   const [savingBody,  setSavingBody]  = useState(false);
   const [bodySavedOk, setBodySavedOk] = useState(false);
+
+  // ── Heatmap state ─────────────────────────────────────────────────────────
+  const [heatmapOn,   setHeatmapOn]   = useState(false);
+  const [heatmapData, setHeatmapData] = useState<FitHeatmap | null>(null);
+  const [heatmapBusy, setHeatmapBusy] = useState(false);
 
   // Sync body from profile
   useEffect(() => {
@@ -817,6 +1013,40 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         if (!atlasTexture) { atlasTexture = new THREE.CanvasTexture(atlasCanvas); atlasTexture.flipY = false; atlasTexture.colorSpace = THREE.SRGBColorSpace; } else { atlasTexture.needsUpdate = true; }
         if (morphMesh) { morphMesh.material.map = atlasTexture; morphMesh.material.needsUpdate = true; }
       }
+
+      // ── Heatmap vertex-colour helpers ─────────────────────────────────
+      function applyHeatmapColors(cols: Float32Array) {
+        if (!morphMesh) return;
+        const geo = morphMesh.geometry;
+        let colAttr = geo.attributes.color;
+        if (!colAttr) {
+          colAttr = new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3);
+          geo.setAttribute('color', colAttr);
+        }
+        const src = cols.length === geo.attributes.position.count * 3 ? cols : new Float32Array(geo.attributes.position.count * 3).fill(0.6);
+        (colAttr.array as Float32Array).set(src);
+        colAttr.needsUpdate = true;
+        morphMesh.material.vertexColors = true;
+        morphMesh.material.map = null;      // hide texture while heatmap is on
+        morphMesh.material.needsUpdate = true;
+      }
+
+      function clearHeatmapColors() {
+        if (!morphMesh) return;
+        morphMesh.material.vertexColors = false;
+        morphMesh.material.map = atlasTexture;
+        morphMesh.material.needsUpdate = true;
+      }
+
+      // Run computation on next tick (so morphs have time to flush)
+      function runHeatmap() {
+        setTimeout(() => {
+          const result = computeHeatmap(morphMesh, bodyMesh, THREE);
+          setHeatmapData(result);
+          setHeatmapBusy(false);
+          if (result.colors) applyHeatmapColors(result.colors);
+        }, 80);
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function setShirtMorph(prefix: string, value: number, mesh: any) { if (!mesh?.morphTargetDictionary) return; const k = Object.keys(mesh.morphTargetDictionary).find((k: string) => k === prefix || k.startsWith(prefix)); if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value; }
       function applySize(size: string) { const d = SIZE_DATA[size]; if (!d) return; setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest), morphMesh); setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder), morphMesh); setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length), morphMesh); setShirtMorph('SLEEVE_LONG', cmToMorph(d.sleeve, BASE.sleeve, MAX.sleeve), morphMesh); }
@@ -835,8 +1065,27 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         model.traverse((obj: any) => {
           if (!obj.isMesh || !obj.morphTargetDictionary) return;
           const lkeys = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
-          if (!morphMesh && lkeys.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) { morphMesh = obj; obj.material = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide }); rebuildAtlas(); applySize(selectedSize); if (sceneRef.current) sceneRef.current.applySize = applySize; setSceneReady(true); }
-          if (!bodyMesh && lkeys.some((k: string) => k.includes('body_length') || (k.includes('height') && k.includes('body')))) { bodyMesh = obj; if (sceneRef.current) sceneRef.current.updateBody = updateBody; }
+          if (!morphMesh && lkeys.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) {
+            morphMesh = obj;
+            obj.material = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
+            rebuildAtlas(); applySize(selectedSize);
+            if (sceneRef.current) {
+              sceneRef.current.applySize = applySize;
+              sceneRef.current.shirtMesh = morphMesh;
+              sceneRef.current.runHeatmap = runHeatmap;
+              sceneRef.current.clearHeatmap = clearHeatmapColors;
+              sceneRef.current.atlasTexture = atlasTexture;
+            }
+            setSceneReady(true);
+          }
+          if (!bodyMesh && lkeys.some((k: string) => k.includes('body_length') || (k.includes('height') && k.includes('body')))) {
+            bodyMesh = obj;
+            if (sceneRef.current) {
+              sceneRef.current.updateBody = updateBody;
+              sceneRef.current.bodyMesh = bodyMesh;
+              sceneRef.current.THREE = THREE;
+            }
+          }
         });
         setModelLoading(false);
       }, undefined, () => setModelLoading(false));
@@ -852,13 +1101,37 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       const ro = new ResizeObserver(() => { const w = canvas.clientWidth, h = canvas.clientHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false); });
       ro.observe(canvas);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      sceneRef.current = { renderer, animId, applySize, updateBody: (b: BodyDraft) => updateBody(b), ro };
+      sceneRef.current = { renderer, animId, applySize, updateBody: (b: BodyDraft) => updateBody(b), ro,
+        shirtMesh: morphMesh, bodyMesh, THREE, atlasTexture,
+        runHeatmap, clearHeatmap: clearHeatmapColors };
     });
     return () => { cancelled = true; if (sceneRef.current) { cancelAnimationFrame(sceneRef.current.animId); sceneRef.current.renderer.dispose(); sceneRef.current.ro.disconnect(); sceneRef.current = null; } setSceneReady(false); setModelLoading(true); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   useEffect(() => { sceneRef.current?.applySize(selectedSize); }, [selectedSize]);
+
+  // Re-run heatmap when sliders or size changes (if currently active)
+  useEffect(() => {
+    if (!heatmapOn) return;
+    setHeatmapBusy(true);
+    sceneRef.current?.runHeatmap();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyDraft, selectedSize, heatmapOn]);
+
+  const toggleHeatmap = useCallback(() => {
+    setHeatmapOn(prev => {
+      const next = !prev;
+      if (next) {
+        setHeatmapBusy(true);
+        sceneRef.current?.runHeatmap();
+      } else {
+        sceneRef.current?.clearHeatmap();
+        setHeatmapData(null);
+      }
+      return next;
+    });
+  }, []);
 
   const handleSaveBodyPermanently = async () => {
     if (!user) return; setSavingBody(true);
@@ -887,6 +1160,39 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
             </div>
           )}
           <canvas ref={canvasRef} className="w-full flex-1" style={{ display: 'block', minHeight: 0 }} />
+
+          {/* ── Heatmap toggle — top-right of canvas ── */}
+          <button onClick={toggleHeatmap}
+            className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-lg"
+            style={{
+              backgroundColor: heatmapOn ? 'rgba(239,68,68,0.9)' : 'rgba(255,255,255,0.12)',
+              color:           heatmapOn ? 'white' : 'rgba(255,255,255,0.85)',
+              border:          `1px solid ${heatmapOn ? '#ef4444' : 'rgba(255,255,255,0.2)'}`,
+              backdropFilter:  'blur(8px)',
+            }}>
+            {heatmapBusy
+              ? <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />Computing…</>
+              : <>{heatmapOn ? '🌡️ Heatmap ON' : '🌡️ Fit Heatmap'}</>}
+          </button>
+
+          {/* ── Heatmap colour legend — bottom-right ── */}
+          {heatmapOn && !heatmapBusy && (
+            <div className="absolute bottom-[96px] right-3 z-10 rounded-xl p-2.5 space-y-1"
+              style={{ backgroundColor: 'rgba(10,10,26,0.88)', backdropFilter: 'blur(8px)' }}>
+              {[
+                { label: 'Clipping / Very Tight', color: '#ef4444' },
+                { label: 'Tight',                 color: '#f97316' },
+                { label: 'Slightly Snug',         color: '#eab308' },
+                { label: 'Good Fit',              color: '#22c55e' },
+                { label: 'Loose',                 color: '#3b82f6' },
+              ].map(({ label, color }) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Body size panel */}
           {showBodyPanel && (
@@ -986,6 +1292,65 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
                 </p>
               </div>
             )}
+
+            {/* ── Heatmap region metrics ── */}
+            {heatmapOn && heatmapBusy && (
+              <div className="flex items-center gap-2 py-2">
+                <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin flex-shrink-0"
+                  style={{ borderColor: C.red, borderTopColor: 'transparent' }} />
+                <p className="text-[10px] text-gray-400">Computing fit heatmap…</p>
+              </div>
+            )}
+            {heatmapOn && !heatmapBusy && heatmapData && (() => {
+              const regionColor = (v: number) =>
+                v > 0.65 ? '#ef4444' : v > 0.45 ? '#f97316' : v > 0.25 ? '#22c55e' : '#3b82f6';
+              const regionLabel = (v: number) =>
+                v > 0.65 ? 'Tight' : v > 0.45 ? 'Snug' : v > 0.25 ? 'OK' : 'Loose';
+              const scoreColor = heatmapData.score >= 75 ? '#166534' : heatmapData.score >= 50 ? '#713f12' : '#991b1b';
+              const scoreBg    = heatmapData.score >= 75 ? '#dcfce7' : heatmapData.score >= 50 ? '#fef9c3' : '#fee2e2';
+              return (
+                <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: '#ef4444' }}>
+                  {/* Score header */}
+                  <div className="px-3 py-2.5 flex items-center justify-between" style={{ backgroundColor: '#fef2f2' }}>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-red-700">🌡️ Fit Heatmap</p>
+                    <span className="text-xs font-black px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: scoreBg, color: scoreColor }}>
+                      {heatmapData.score}/100
+                    </span>
+                  </div>
+                  {/* Region grid */}
+                  <div className="p-3 grid grid-cols-2 gap-1.5" style={{ backgroundColor: 'white' }}>
+                    {([
+                      { label: 'Chest',    val: heatmapData.chest    },
+                      { label: 'Shoulder', val: heatmapData.shoulder },
+                      { label: 'Waist',    val: heatmapData.waist    },
+                      { label: 'Sleeve',   val: heatmapData.sleeve   },
+                    ] as const).map(({ label, val }) => (
+                      <div key={label} className="rounded-lg px-2 py-1.5 border" style={{ borderColor: C.peach }}>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">{label}</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${Math.round(val * 100)}%`, backgroundColor: regionColor(val) }} />
+                          </div>
+                          <span className="text-[9px] font-black flex-shrink-0"
+                            style={{ color: regionColor(val) }}>
+                            {regionLabel(val)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Clipping warning */}
+                  {heatmapData.clipping > 0 && (
+                    <div className="mx-3 mb-3 px-2.5 py-1.5 rounded-lg text-[9px] font-bold"
+                      style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
+                      ⚠️ {heatmapData.clipping} verts clipping through body
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div>
               <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Size Chart</p>

@@ -47,12 +47,12 @@ export default function Navbar() {
 
   return (
     <nav className="border-b sticky top-0 z-40" style={{ backgroundColor: colors.cream, borderColor: colors.peach }}>
-      <div className="max-w-7xl mx-auto px-6 py-4">
+      <div className="max-w-7xl mx-auto px-6 py-2.5">
         <div className="flex items-center justify-between">
           
           {/* Logo */}
           <Link href="/" className="text-2xl font-bold transition-opacity hover:opacity-80" style={{ color: colors.navy }}>
-            FitCheck
+            Fit-ah
           </Link>
 
           {/* Navigation Links - SMOOTH HOVER VERSION */}
