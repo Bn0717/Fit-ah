@@ -15,6 +15,13 @@ const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, bodyLength: 90 };
 type Measurements = { height: number; chest: number; bodyLength: number; shoulder: number };
 const clamp  = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const norm01 = (cm: number, base: number, max: number) => clamp((cm - base) / (max - base), 0, 1);
+const SIZE_DATA: Record<string, { chest: number; shoulder: number; length: number; sleeve: number }> = {
+  S:     { chest: 54.5, shoulder: 43, length: 71, sleeve: 22   },
+  '4XL': { chest: 69.5, shoulder: 55, length: 79, sleeve: 29.5 },
+};
+const BASE = SIZE_DATA['S'];
+const MAX  = SIZE_DATA['4XL'];
+const cmToMorph = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
@@ -47,16 +54,18 @@ export default function ProfilePage() {
   const [selectedShirtSize, setSelectedShirtSize] = useState<string>('');
   const [sidebarView,    setSidebarView]    = useState<'2d' | '3d'>('2d');
   const [loadingData,    setLoadingData]    = useState(true);
+  const [showSizeDetails, setShowSizeDetails] = useState(false);
+  const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
 
   // ── 3D body canvas (center) ────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<{
     animId: ReturnType<typeof requestAnimationFrame>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderer: any;
     ro: ResizeObserver;
     updateBody: (m: Measurements) => void;
-    tryOnShirt: (url: string | null) => void;
+    tryOnShirt: (frontUrl: string | null, backUrl?: string | null) => void; // Fixed this line
+    applySize: (size: string, itemData: ClothingItem | null) => void;
   } | null>(null);
   const [bodyReady, setBodyReady] = useState(false);
 
@@ -142,21 +151,105 @@ export default function ProfilePage() {
         setMorph('BODY_LENGTH',   1.5);
       }
 
-      function tryOnShirt(url: string | null) {
+      function setShirtMorph(prefix: string, value: number) {
+        if (!shirtMesh?.morphTargetDictionary) return;
+        const k = Object.keys(shirtMesh.morphTargetDictionary).find(k => k.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (k) shirtMesh.morphTargetInfluences[shirtMesh.morphTargetDictionary[k]] = value;
+      }
+
+      function applySize(size: string, itemData: ClothingItem | null) {
+        if (!shirtMesh || !itemData) return;
+        const d = itemData.sizeChart.find((s: any) => s.size === size);
+        if (!d) return;
+        setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest));
+        setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder));
+        setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length));
+        setShirtMorph('SLEEVE_LONG', cmToMorph((d as any).sleeve || 25, BASE.sleeve, MAX.sleeve));
+      }
+
+      const ATLAS_SIZE    = 2048;
+      const FRONT_RECT    = { x: 0,    y: 0,    w: 1024, h: 1536 };
+      const BACK_RECT     = { x: 1024, y: 0,    w: 1024, h: 1536 };
+      const L_SLEEVE_RECT = { x: 0,    y: 1536, w: 1024, h: 512  };
+      const R_SLEEVE_RECT = { x: 1024, y: 1536, w: 1024, h: 512  };
+
+      const atlasCanvas = document.createElement('canvas');
+      atlasCanvas.width = atlasCanvas.height = ATLAS_SIZE;
+      const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
+      let atlasTexture: any = null;
+
+      function processShirtTexture(
+        ctx: CanvasRenderingContext2D,
+        img: HTMLImageElement,
+        rect: { x: number; y: number; w: number; h: number },
+        isFront: boolean
+      ) {
+        const tmp = document.createElement('canvas'); tmp.width = img.width; tmp.height = img.height;
+        const tCtx = tmp.getContext('2d')!; tCtx.drawImage(img, 0, 0);
+        const data = tCtx.getImageData(0, 0, tmp.width, tmp.height).data;
+        let minX = img.width, minY = img.height, maxX = 0, maxY = 0, found = false;
+        for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+          const i = (y * img.width + x) * 4;
+          if (data[i+3] > 20 && (data[i] < 250 || data[i+1] < 250 || data[i+2] < 250)) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y; found = true;
+          }
+        }
+        if (!found) return;
+        const sw = maxX - minX, sh = maxY - minY;
+        const ss = Math.min(sw * 0.25, 200);
+        const pat = document.createElement('canvas'); pat.width = pat.height = ss;
+        const pCtx = pat.getContext('2d')!;
+        pCtx.drawImage(img, minX + sw*0.5 - ss/2, minY + sh*0.6 - ss/2, ss, ss, 0, 0, ss, ss);
+        ctx.fillStyle = ctx.createPattern(pat, 'repeat')!;
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        if (isFront) {
+          ctx.fillRect(L_SLEEVE_RECT.x, L_SLEEVE_RECT.y, L_SLEEVE_RECT.w, L_SLEEVE_RECT.h);
+          ctx.fillRect(R_SLEEVE_RECT.x, R_SLEEVE_RECT.y, R_SLEEVE_RECT.w, R_SLEEVE_RECT.h);
+        }
+        const tw = sw * 0.8;
+        ctx.drawImage(img, minX + (sw-tw)/2, minY, tw, sh, rect.x, rect.y, rect.w, rect.h);
+      }
+
+      function tryOnShirt(frontUrl: string | null, backUrl?: string | null) {
         if (!shirtMesh) return;
-        if (!url) {
-          // Hide shirt by making it transparent
+        if (!frontUrl) {
           shirtMesh.visible = false;
           return;
         }
         shirtMesh.visible = true;
-        const tex = new THREE.TextureLoader().load(url);
-        tex.flipY = false;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        shirtMesh.material = new THREE.MeshStandardMaterial({
-          map: tex, roughness: 0.8, side: THREE.DoubleSide,
-        });
-        shirtMesh.material.needsUpdate = true;
+
+        atlasCtx.fillStyle = '#ffffff';
+        atlasCtx.fillRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
+
+        let loaded = 0;
+        const totalToLoad = backUrl ? 2 : 1;
+
+        function onAllLoaded() {
+          if (!atlasTexture) {
+            atlasTexture = new THREE.CanvasTexture(atlasCanvas);
+            atlasTexture.flipY = false;
+            atlasTexture.colorSpace = THREE.SRGBColorSpace;
+          } else {
+            atlasTexture.needsUpdate = true;
+          }
+          shirtMesh.material = new THREE.MeshStandardMaterial({
+            map: atlasTexture, roughness: 0.8, side: THREE.DoubleSide,
+          });
+          shirtMesh.material.needsUpdate = true;
+        }
+
+        const frontImg = new Image(); frontImg.crossOrigin = 'anonymous';
+        frontImg.onload = () => { processShirtTexture(atlasCtx, frontImg, FRONT_RECT, true); loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
+        frontImg.onerror = () => { loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
+        frontImg.src = frontUrl;
+
+        if (backUrl) {
+          const backImg = new Image(); backImg.crossOrigin = 'anonymous';
+          backImg.onload = () => { processShirtTexture(atlasCtx, backImg, BACK_RECT, false); loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
+          backImg.onerror = () => { loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
+          backImg.src = backUrl;
+        }
       }
 
       // Load the combined body+shirt model
@@ -239,7 +332,7 @@ export default function ProfilePage() {
       });
       ro.observe(canvas);
 
-      sceneRef.current = { animId, renderer, ro, updateBody, tryOnShirt };
+      sceneRef.current = { animId, renderer, ro, updateBody, tryOnShirt, applySize };
     });
 
     return () => {
@@ -260,18 +353,36 @@ export default function ProfilePage() {
 
   // Try shirt on body when selectedItem changes
   useEffect(() => {
-    if (!selectedItem) {
+    // 1. Determine which item to show: either the "Inside" item or the "Drawer" item
+    const itemToShow = selectedItem || items.find(i => i.id === activePreviewId);
+    
+    if (!itemToShow) {
       sceneRef.current?.tryOnShirt(null);
     } else {
-      const url = selectedItem.frontImageUrl || selectedItem.imageUrl || null;
-      sceneRef.current?.tryOnShirt(url);
-      // Set default size: middle of available sizes (not the biggest)
-      if (selectedItem.sizeChart.length > 0) {
-        const midIdx = Math.floor((selectedItem.sizeChart.length - 1) / 2);
-        setSelectedShirtSize(selectedItem.sizeChart[midIdx].size);
+      const frontUrl = itemToShow.frontImageUrl || itemToShow.imageUrl || null;
+      const backUrl  = itemToShow.backImageUrl || null;
+      
+      // 2. Put it on the body immediately
+      sceneRef.current?.tryOnShirt(frontUrl, backUrl);
+      
+      // 3. Set and apply the correct size morph
+      const targetSize = itemToShow.userWearingSize || 
+        (itemToShow.sizeChart.length > 0 ? itemToShow.sizeChart[Math.floor((itemToShow.sizeChart.length - 1) / 2)].size : 'M');
+      
+      setSelectedShirtSize(targetSize);
+      
+      if (sceneRef.current?.applySize) {
+        sceneRef.current.applySize(targetSize, itemToShow);
       }
     }
-  }, [selectedItem]);
+  }, [selectedItem, activePreviewId, items]);
+
+  // Apply Morph Targets when user clicks a different size
+  useEffect(() => {
+    if (selectedItem && selectedShirtSize) {
+      sceneRef.current?.applySize(selectedShirtSize, selectedItem);
+    }
+  }, [selectedShirtSize, selectedItem]);
 
   // ── Handlers ──────────────────────────────────────────────────
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -590,107 +701,145 @@ export default function ProfilePage() {
                 <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
               </div>
             ) : activeTab === 'items' ? (
-              filteredItems.length === 0
-                ? <p className="text-[10px] text-center text-gray-400 pt-8">No items yet. Add from Wardrobe.</p>
-                : <div className="space-y-2">
-                    {filteredItems.map(item => {
-                      const isSelected = selectedItem?.id === item.id;
-                      // Fit analysis for selected size
-                      const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
-                      const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
-                      const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
-                      const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
-
-                      return (
-                        <div key={item.id} className="rounded-xl overflow-hidden border-2 transition-all"
-                          style={{
-                            borderColor: isSelected ? C.navy : C.peach,
-                            boxShadow:   isSelected ? `0 0 0 2px ${C.pink}` : 'none',
-                          }}>
-                          {/* Item row */}
-                          <button
-                            onClick={() => setSelectedItem(prev => prev?.id === item.id ? null : item)}
-                            className="w-full flex items-center gap-2.5 p-2 text-left transition-all hover:opacity-90"
-                            style={{ backgroundColor: isSelected ? C.peach : 'white' }}>
-                            {/* Thumbnail */}
-                            <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
-                              {sidebarView === '2d' ? (
-                                (item.frontImageUrl || item.imageUrl)
-                                  ? <img src={item.frontImageUrl || item.imageUrl} alt={item.name}
-                                      className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                  : <div className="w-full h-full flex items-center justify-center text-xl">👕</div>
-                              ) : (
-                                <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
-                              )}
-                            </div>
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[9px] font-bold text-gray-400 truncate">{item.brand}</p>
-                              <p className="text-xs font-black truncate" style={{ color: C.navy }}>{item.name}</p>
-                              <p className="text-[8px] text-gray-400 mt-0.5">{item.category}</p>
-                            </div>
-                            {/* Selected check */}
-                            {isSelected && (
-                              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-black"
-                                style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
-                            )}
-                          </button>
-
-                          {/* ── Size selector + fit — only when selected ── */}
-                          {isSelected && item.sizeChart.length > 0 && (
-                            <div className="px-3 pb-3 pt-1 space-y-2.5" style={{ backgroundColor: '#fafaf8' }}>
-                              {/* Size chips */}
-                              <div>
-                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Select Size</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {item.sizeChart.map(sc => (
-                                    <button key={sc.size}
-                                      onClick={() => setSelectedShirtSize(sc.size)}
-                                      className="px-2.5 py-1 rounded-lg font-bold text-[10px] transition-all"
-                                      style={{
-                                        backgroundColor: selectedShirtSize === sc.size ? C.navy : C.peach,
-                                        color:           selectedShirtSize === sc.size ? 'white' : C.navy,
-                                        transform:       selectedShirtSize === sc.size ? 'scale(1.05)' : 'scale(1)',
-                                      }}>
-                                      {sc.size}
-                                    </button>
-                                  ))}
-                                </div>
+            filteredItems.length === 0
+              ? <p className="text-[10px] text-center text-gray-400 pt-8">No items yet. Add from Wardrobe.</p>
+              : <div className="space-y-4">
+                  
+                  {/* VIEW 1: THE GRID LIST */}
+                  {!selectedItem && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {filteredItems.map(item => {
+                        const isDrawerOpen = activePreviewId === item.id;
+                        return (
+                          <div key={item.id} className="flex flex-col">
+                            {/* THE MAIN CARD */}
+                            <button
+                              onClick={() => {
+                                setActivePreviewId(isDrawerOpen ? null : item.id);
+                                setShowSizeDetails(false);
+                              }}
+                              className="w-full rounded-2xl overflow-hidden border-2 transition-all text-left bg-white hover:shadow-md"
+                              style={{ 
+                                borderColor: isDrawerOpen ? C.navy : C.peach,
+                                transform: isDrawerOpen ? 'scale(1.02)' : 'scale(1)'
+                              }}>
+                              <div className="aspect-square bg-white relative overflow-hidden flex items-center justify-center p-2">
+                                {sidebarView === '2d' ? (
+                                  <img src={item.frontImageUrl || item.imageUrl} alt={item.name} className="w-[90%] h-[90%] object-contain" crossOrigin="anonymous" />
+                                ) : (
+                                  <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
+                                )}
+                                {isDrawerOpen && (
+                                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm"
+                                       style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                                )}
                               </div>
-                              {/* Size measurements */}
-                              {sizeRow && (
-                                <div className="grid grid-cols-4 gap-1">
-                                  {([
-                                    { label: 'Chest',  val: sizeRow.chest    },
-                                    { label: 'Length', val: sizeRow.length   },
-                                    { label: 'Shldr',  val: sizeRow.shoulder },
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    ...((sizeRow as any).sleeve ? [{ label: 'Sleeve', val: (sizeRow as any).sleeve }] : []),
-                                  ]).map(({ label, val }) => (
-                                    <div key={label} className="rounded-lg p-1.5 text-center border" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
-                                      <p className="text-[7px] font-black text-gray-400 uppercase">{label}</p>
-                                      <p className="text-[10px] font-black" style={{ color: C.navy }}>{val}<span className="text-[7px] opacity-50">cm</span></p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Fit badge */}
-                              {fitLabel && (
-                                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
-                                  style={{ backgroundColor: fitColor + '18' }}>
-                                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
-                                  <p className="text-[10px] font-bold" style={{ color: fitColor }}>
-                                    {fitLabel}
-                                    {fitRatio && ` — ${fitRatio > 1 ? '+' : ''}${((sizeRow!.chest - saved.chest)).toFixed(1)}cm ease`}
-                                  </p>
-                                </div>
-                              )}
+                              <div className="px-3 py-2 border-t" style={{ backgroundColor: isDrawerOpen ? C.peach : C.cream, borderColor: C.peach }}>
+                                <p className="text-[11px] font-black truncate" style={{ color: C.navy }}>
+                                    {item.name} {item.userWearingSize ? `(${item.userWearingSize})` : ''}
+                                </p>
+                                <p className="text-[9px] opacity-60 truncate uppercase tracking-wider font-bold" style={{ color: C.navy }}>{item.brand}</p>
+                              </div>
+                            </button>
+
+                            {/* THE DROPDOWN CONTAINER */}
+                            {isDrawerOpen && (
+                              <div className="mt-1 rounded-xl border-2 bg-white overflow-hidden animate-in slide-in-from-top-2 duration-200"
+                                style={{ borderColor: C.navy }}>
+                                <button 
+                                  onClick={() => {
+                                    setSelectedItem(item);
+                                    setActivePreviewId(null);
+                                  }}
+                                  className="w-full py-2.5 px-2 flex items-center justify-between group/btn hover:bg-gray-50 transition-colors"
+                                >
+                                  <span className="text-[9px] font-black uppercase tracking-tighter text-left leading-tight" style={{ color: C.navy }}>
+                                    Change size or<br/>see details?
+                                  </span>
+                                  <span className="text-sm font-bold" style={{ color: C.navy }}>→</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* VIEW 2: THE DETAILED PAGE (Shows after clicking the drawer button) */}
+                  {selectedItem && (() => {
+                    const item = selectedItem;
+                    const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
+                    const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
+                    const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
+                    const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
+
+                    return (
+                      <div className="animate-in fade-in zoom-in-95 duration-200">
+                        <button onClick={() => setSelectedItem(null)} className="text-[10px] font-black hover:opacity-70 mb-3 flex items-center gap-1 px-2 uppercase tracking-widest" style={{ color: C.navy }}>
+                          ← Back to list
+                        </button>
+                        
+                        <div className="rounded-2xl overflow-hidden border-2 shadow-lg bg-white" style={{ borderColor: C.pink }}>
+                          <div className="px-4 py-3 flex items-center justify-between border-b" style={{ backgroundColor: C.peach + '40', borderColor: C.peach }}>
+                            <div>
+                              <p className="text-[9px] font-black opacity-60 uppercase tracking-widest mb-0.5" style={{ color: C.navy }}>{item.brand}</p>
+                              <h3 className="text-lg font-black leading-tight" style={{ color: C.navy }}>
+                                {item.name} 
+                                {item.userWearingSize && <span className="text-sm opacity-50 font-bold ml-1.5">({item.userWearingSize})</span>}
+                              </h3>
                             </div>
-                          )}
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-sm" style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                          </div>
+
+                          <div className="p-4 space-y-4">
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Select Size</p>
+                              <div className="flex flex-wrap gap-2">
+                                {item.sizeChart.map(sc => (
+                                  <button key={sc.size}
+                                    onClick={() => setSelectedShirtSize(sc.size)}
+                                    className="px-4 py-1.5 rounded-lg font-black text-xs transition-all border-2"
+                                    style={{
+                                      backgroundColor: selectedShirtSize === sc.size ? C.navy : 'white',
+                                      color:           selectedShirtSize === sc.size ? 'white' : C.navy,
+                                      borderColor:     selectedShirtSize === sc.size ? C.navy : C.peach,
+                                    }}>
+                                    {sc.size}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-2">
+                              {([
+                                { label: 'Chest',  val: sizeRow.chest    },
+                                { label: 'Length', val: sizeRow.length   },
+                                { label: 'Shldr',  val: sizeRow.shoulder },
+                                ...((sizeRow as any).sleeve ? [{ label: 'Sleeve', val: (sizeRow as any).sleeve }] : []),
+                              ]).map(({ label, val }) => (
+                                <div key={label} className="rounded-xl p-2 text-center border-2 bg-white" style={{ borderColor: C.peach }}>
+                                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{label}</p>
+                                  <p className="text-xs font-black" style={{ color: C.navy }}>{val}<span className="text-[9px] opacity-50 ml-0.5">cm</span></p>
+                                </div>
+                              ))}
+                            </div>
+
+                            {fitLabel && (
+                              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mt-2"
+                                style={{ backgroundColor: fitColor + '10', borderColor: fitColor + '30' }}>
+                                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
+                                <p className="text-[11px] font-bold" style={{ color: fitColor }}>
+                                  {fitLabel} — {((sizeRow!.chest - saved.chest)).toFixed(1)}cm ease
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })()}
+                </div>
             ) : (
               outfits.length === 0
                 ? <p className="text-[10px] text-center text-gray-400 pt-8">No outfits yet.</p>
@@ -757,7 +906,7 @@ function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: strin
       const H = canvas.clientHeight || 130;
 
       const scene    = new THREE.Scene();
-      scene.background = new THREE.Color(0xfaf7f2);
+      scene.background = new THREE.Color(0xffffff);
       const camera   = new THREE.PerspectiveCamera(45, W / H, 0.1, 50);
       camera.position.set(0, 0.15, 1.9);
 

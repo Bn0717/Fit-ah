@@ -642,12 +642,14 @@ export default function ItemsPage() {
                         style={{ backgroundColor: C.pink, color: C.navy }}>{item.brand}</span>
                       {/* Name + price */}
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        <h3 className="font-semibold truncate" style={{ color: C.navy }}>{item.name}</h3>
+                        {/* Show Name and the specific Size they uploaded */}
+                        <h3 className="font-semibold truncate" style={{ color: C.navy }}>
+                          {item.name} {item.userWearingSize ? <span className="text-gray-400 font-normal">({item.userWearingSize})</span> : ''}
+                        </h3>
                         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                         {(item as any).price && (
                           <span className="flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full"
                             style={{ backgroundColor: C.peach, color: C.navy }}>
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                             RM {Number((item as any).price).toFixed(0)}
                           </span>
                         )}

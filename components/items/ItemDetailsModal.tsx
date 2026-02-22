@@ -361,16 +361,24 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                     </tr>
                   </thead>
                   <tbody>
-                    {item.sizeChart.map((size, idx) => (
-                      <tr key={idx} className="border-b" style={{ borderColor: colors.peach }}>
-                        <td className="px-3 py-3 font-bold" style={{ color: colors.navy }}>{size.size}</td>
-                        <td className="px-3 py-3" style={{ color: colors.navy }}>{size.chest} cm</td>
-                        <td className="px-3 py-3" style={{ color: colors.navy }}>{size.length} cm</td>
-                        <td className="px-3 py-3" style={{ color: colors.navy }}>{size.shoulder} cm</td>
-                        {size.sleeve !== undefined && <td className="px-3 py-3" style={{ color: colors.navy }}>{size.sleeve} cm</td>}
-                        {size.waist  !== undefined && <td className="px-3 py-3" style={{ color: colors.navy }}>{size.waist} cm</td>}
-                      </tr>
-                    ))}
+                    {item.sizeChart.map((size, idx) => {
+                      const isMySize = size.size === item.userWearingSize;
+                      return (
+                        <tr key={idx} className="border-b transition-colors" 
+                            style={{ 
+                              borderColor: colors.peach, 
+                              backgroundColor: isMySize ? colors.pink + '30' : 'transparent' 
+                            }}>
+                          <td className="px-3 py-3 font-bold flex items-center gap-2" style={{ color: colors.navy }}>
+                            {size.size}
+                          </td>
+                          <td className="px-3 py-3" style={{ color: colors.navy }}>{size.chest} cm</td>
+                          <td className="px-3 py-3" style={{ color: colors.navy }}>{size.length} cm</td>
+                          <td className="px-3 py-3" style={{ color: colors.navy }}>{size.shoulder} cm</td>
+                          {size.sleeve !== undefined && <td className="px-3 py-3" style={{ color: colors.navy }}>{size.sleeve} cm</td>}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

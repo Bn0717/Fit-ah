@@ -26,8 +26,8 @@ const SIZE_DATA: Record<string, { chest: number; shoulder: number; length: numbe
 const BASE      = SIZE_DATA['S'];
 const MAX       = SIZE_DATA['4XL'];
 const cmToMorph = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
-const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29 };
-const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54 };
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, bodyLength: 60 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, bodyLength: 75 };
 const bodyNorm  = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
 const ATLAS_SIZE    = 2048;
 const FRONT_RECT    = { x: 0,    y: 0,    w: 1024, h: 1536 };
@@ -183,7 +183,7 @@ interface Props {
   item: ClothingItem;
   userProfile: ParametricAvatar | null;
 }
-type BodyDraft = { height: number; chest: number; waist: number; shoulder: number };
+type BodyDraft = { height: number; chest: number; bodyLength: number; shoulder: number };
 interface StyleOutfit { bottom: string; shoes: string; reason: string; comfort: string; vibe: string; }
 interface WeatherData  { tempC: number; condition: string; humidity: number; city: string; }
 
@@ -896,6 +896,7 @@ function StyleOverlay({
 // ══════════════════════════════════════════════════════════════════════════════
 export default function FitRecommendationModal({ isOpen, onClose, item, userProfile }: Props) {
   const { user } = useAuth();
+  const [selectedSize, setSelectedSize] = useState<string>(item.userWearingSize || 'M');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<{
     renderer: { dispose: () => void };
@@ -916,7 +917,6 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     clearHeatmap: () => void;
   } | null>(null);
 
-  const [selectedSize,  setSelectedSize]  = useState<string>('M');
   const [fitStatus,     setFitStatus]     = useState<{ text: string; color: string } | null>(null);
   const [modelLoading,  setModelLoading]  = useState(true);
   const [sceneReady,    setSceneReady]    = useState(false);
@@ -924,7 +924,12 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
 
   // Body slider state
   const [showBodyPanel, setShowBodyPanel] = useState(false);
-  const [bodyDraft,   setBodyDraft]   = useState<BodyDraft>({ height: userProfile?.height ?? 170, chest: userProfile?.chest ?? 90, waist: userProfile?.waist ?? 75, shoulder: userProfile?.shoulder ?? 44 });
+  const [bodyDraft, setBodyDraft] = useState<BodyDraft>({ 
+    height: userProfile?.height ?? 150, 
+    chest: userProfile?.chest ?? 30, 
+    bodyLength: (userProfile as any)?.bodyLength ?? (userProfile as any)?.waist ?? 60, 
+    shoulder: userProfile?.shoulder ?? 43 
+  });
   const [savedBody,   setSavedBody]   = useState<BodyDraft>({ ...bodyDraft });
   const [savingBody,  setSavingBody]  = useState(false);
   const [bodySavedOk, setBodySavedOk] = useState(false);
@@ -937,7 +942,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   // Sync body from profile
   useEffect(() => {
     if (!userProfile) return;
-    const b: BodyDraft = { height: userProfile.height, chest: userProfile.chest, waist: userProfile.waist, shoulder: userProfile.shoulder };
+    const b: BodyDraft = { height: userProfile.height, chest: userProfile.chest, bodyLength: (userProfile as any).bodyLength ?? (userProfile as any).waist ?? 72, shoulder: userProfile.shoulder };
     setBodyDraft(b); setSavedBody(b);
   }, [userProfile]);
 
@@ -1052,7 +1057,16 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       function applySize(size: string) { const d = SIZE_DATA[size]; if (!d) return; setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest), morphMesh); setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder), morphMesh); setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length), morphMesh); setShirtMorph('SLEEVE_LONG', cmToMorph(d.sleeve, BASE.sleeve, MAX.sleeve), morphMesh); }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function setBodyMorph(prefix: string, value: number, mesh: any) { if (!mesh?.morphTargetDictionary) return; const k = (Object.keys(mesh.morphTargetDictionary) as string[]).find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase())); if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value; }
-      function updateBody(b: BodyDraft) { if (!bodyMesh) return; setBodyMorph('CHEST_WIDE', bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 3.0, bodyMesh); setBodyMorph('SHOULDER_WIDE', bodyNorm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder) * 0.5, bodyMesh); setBodyMorph('HEIGHT', bodyNorm(b.height, BODY_BASE.height, BODY_MAX.height) * 0.8, bodyMesh); setBodyMorph('WAIST_WIDE', bodyNorm(b.waist, BODY_BASE.waist, BODY_MAX.waist) * 10.0, bodyMesh); setBodyMorph('HIP_WIDE', Math.min(bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 1) * 2.0, bodyMesh); setBodyMorph('BODY_LENGTH', 1.5, bodyMesh); }
+      function updateBody(b: BodyDraft) { 
+        if (!bodyMesh) return; 
+        setBodyMorph('CHEST_WIDE', bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 3.0, bodyMesh); 
+        setBodyMorph('SHOULDER_WIDE', bodyNorm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder) * 0.5, bodyMesh); 
+        setBodyMorph('HEIGHT', bodyNorm(b.height, BODY_BASE.height, BODY_MAX.height) * 0.8, bodyMesh); 
+        // 👇 CHANGED HERE TO MATCH PROFILE EXACTLY 👇
+        setBodyMorph('WAIST_WIDE', bodyNorm(b.bodyLength, BODY_BASE.bodyLength, BODY_MAX.bodyLength) * 4.0, bodyMesh); 
+        setBodyMorph('HIP_WIDE', Math.min(bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 1) * 2.0, bodyMesh); 
+        setBodyMorph('BODY_LENGTH', 1.5, bodyMesh); 
+      }
 
       const loader = new GLTFLoader();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1204,10 +1218,10 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
               </div>
               <div className="p-3 space-y-3">
                 {([
-                  { key: 'height',   label: 'Height',   min: 150, max: 198, unit: 'cm' },
-                  { key: 'chest',    label: 'Chest',    min: 50,  max: 150, unit: 'cm' },
-                  { key: 'waist',    label: 'Waist',    min: 40,  max: 140, unit: 'cm' },
-                  { key: 'shoulder', label: 'Shoulder', min: 30,  max: 70,  unit: 'cm' },
+                  { key: 'height',     label: 'Height',      min: 150, max: 198, unit: 'cm' },
+                  { key: 'chest',      label: 'Chest',       min: 50,  max: 150, unit: 'cm' },
+                  { key: 'bodyLength', label: 'Body Length', min: 40,  max: 140, unit: 'cm' }, // changed to bodyLength
+                  { key: 'shoulder',   label: 'Shoulder',    min: 30,  max: 70,  unit: 'cm' },
                 ] as const).map(({ key, label, min, max, unit }) => (
                   <div key={key}>
                     <div className="flex justify-between items-center mb-1">
