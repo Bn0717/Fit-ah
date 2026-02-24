@@ -75,7 +75,7 @@ export default function OnboardingPage() {
       const scene    = new THREE.Scene(); scene.background = new THREE.Color(0xf8f3ea);
       const camera   = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
       camera.position.set(0, 0.9, 4.2);
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
       renderer.setSize(W, H, false); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.minDistance = 1.5; controls.maxDistance = 6;
@@ -101,6 +101,30 @@ export default function OnboardingPage() {
         setMorph('BODY_LENGTH',   1.5);
       }
       const loader = new GLTFLoader();
+      function forceOpaque(obj: any) {
+        if (!obj?.isMesh) return;
+
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) {
+          if (!m) continue;
+
+          // Make it SOLID
+          m.transparent = false;
+          m.opacity = 1;
+          m.alphaTest = 0;
+          m.depthWrite = true;
+          m.depthTest = true;
+
+          // Optional: avoid “inside showing through”
+          // If your mesh needs to be double sided, change this to THREE.DoubleSide
+          m.side = THREE.FrontSide;
+
+          // Some glTF materials still keep an alpha mode flag
+          if ('alphaMode' in m) (m as any).alphaMode = 'OPAQUE';
+
+          m.needsUpdate = true;
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       loader.load('/models/humanlatest.glb?v=' + Date.now(), (gltf: any) => {
         if (cancelled) return;
@@ -109,6 +133,7 @@ export default function OnboardingPage() {
         scene.add(model);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model.traverse((obj: any) => {
+          forceOpaque(obj);
           if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
           const lk = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
           if (lk.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {

@@ -233,6 +233,26 @@ export default function ProfilePage() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let bodyMesh: any  = null;
+
+      function forceOpaqueMaterial(obj: any, THREE: any) {
+  if (!obj?.isMesh) return;
+
+  const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+  mats.forEach((m: any) => {
+    if (!m) return;
+
+    // Turn off transparency completely
+    m.transparent = false;
+    m.opacity = 1;
+    m.alphaTest = 0;
+    m.depthWrite = true;
+    m.depthTest = true;
+
+    // If Blender exported as "double sided + transparent", fix it
+    m.side = THREE.FrontSide; // or DoubleSide if you really need it
+    m.needsUpdate = true;
+  });
+}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let shirtMesh: any = null;
 
@@ -252,6 +272,7 @@ export default function ProfilePage() {
         setMorph('HIP_WIDE',      clamp(norm01(m.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 0, 1) * 2.0);
         setMorph('BODY_LENGTH',   1.5);
       }
+        
 
       function setShirtMorph(prefix: string, value: number) {
         if (!shirtMesh?.morphTargetDictionary) return;
@@ -328,7 +349,12 @@ export default function ProfilePage() {
             atlasTexture.colorSpace = THREE.SRGBColorSpace;
           } else { atlasTexture.needsUpdate = true; }
           shirtMesh.material = new THREE.MeshStandardMaterial({
-            map: atlasTexture, roughness: 0.8, side: THREE.DoubleSide,
+            map: atlasTexture,
+            roughness: 0.8,
+            side: THREE.DoubleSide,
+            transparent: false,
+            opacity: 1,
+            depthWrite: true,
           });
           shirtMesh.material.needsUpdate = true;
         }
@@ -346,7 +372,7 @@ export default function ProfilePage() {
 
       const loader = new GLTFLoader();
       loader.load(
-        '/models/fitcheck_human3d_shirt3dnew.glb?v=' + Date.now(),
+        '/models/humanlatestwithshirt.glb?v=' + Date.now(),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (gltf: any) => {
           if (cancelled) return;
@@ -356,6 +382,7 @@ export default function ProfilePage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model.traverse((obj: any) => {
             if (!obj.isMesh) return;
+            forceOpaqueMaterial(obj, THREE);
             const lk = obj.morphTargetDictionary
               ? Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase())
               : [];
@@ -388,6 +415,7 @@ export default function ProfilePage() {
               scene.add(model);
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               model.traverse((obj: any) => {
+                forceOpaqueMaterial(obj, THREE);
                 if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
                 const lk = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
                 if (lk.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {

@@ -872,6 +872,11 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let atlasTexture: any = null, morphMesh: any = null, bodyMesh: any = null;
+
+      // ✅ NEW: animation
+      let mixer: any = null;
+      let activeAction: any = null;
+      const clock = new THREE.Clock();
       let frontImg: HTMLImageElement | null = null, backImg: HTMLImageElement | null = null;
 
       function processShirtTexture(ctx: CanvasRenderingContext2D, img: HTMLImageElement, rect: typeof FRONT_RECT, isFront: boolean) {
@@ -941,19 +946,53 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
 
       const loader = new GLTFLoader();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/fitcheck_human3d_shirt3dnew.glb?v=' + Date.now(), (gltf: any) => {
+      loader.load('/models/humanlatestwithshirt.glb?v=' + Date.now(), (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
         model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
         scene.add(model);
+
+                // ✅ NEW: apply Blender "relaxed pose" animation (first clip)
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(model);
+
+          const clip = gltf.animations[0];        // your pose clip
+          activeAction = mixer.clipAction(clip);
+
+          // Play once then freeze at time=0 (frame 1 pose)
+          activeAction.reset();
+          activeAction.play();
+          activeAction.paused = true;
+          activeAction.time = 0;                   // start of clip
+          mixer.update(0);                         // force apply pose now
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model.traverse((obj: any) => {
-          if (!obj.isMesh || !obj.morphTargetDictionary) return;
-          const lkeys = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
+          if (!obj.isMesh) return;
+
+          // 🛠️ FIX FOR THE X-RAY / TRANSPARENCY ISSUE
+          if (obj.material) {
+            obj.material.transparent = false; // Makes skin solid
+            obj.material.depthWrite = true;   // Ensures correct layering (nose in front of mouth)
+            obj.material.side = 0;            // Forces Three.js to only draw the outside (THREE.FrontSide)
+          }
+
+          const lkeys = Object.keys(obj.morphTargetDictionary || {}).map((k: string) => k.toLowerCase());
+          
+          // 👕 IDENTIFY SHIRT MESH
           if (!morphMesh && lkeys.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) {
             morphMesh = obj;
-            obj.material = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
-            rebuildAtlas(); applySize(selectedSize);
+            
+            // Shirt needs to be DoubleSide so we can see the inside of the collar
+            obj.material = new THREE.MeshStandardMaterial({ 
+              roughness: 0.8, 
+              side: 2,           // THREE.DoubleSide
+              transparent: false 
+            });
+
+            rebuildAtlas(); 
+            applySize(selectedSize);
+
             if (sceneRef.current) {
               sceneRef.current.applySize  = applySize;
               sceneRef.current.shirtMesh  = morphMesh;
@@ -963,8 +1002,14 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
             }
             setSceneReady(true);
           }
+
+          // 🧍 IDENTIFY BODY MESH
           if (!bodyMesh && lkeys.some((k: string) => k.includes('body_length') || (k.includes('height') && k.includes('body')))) {
             bodyMesh = obj;
+            
+            // IMPORTANT: Skin must only be FrontSide (0) to prevent X-ray mouth
+            obj.material.side = 0; 
+
             if (sceneRef.current) {
               sceneRef.current.updateBody = updateBody;
               sceneRef.current.bodyMesh   = bodyMesh;
@@ -981,7 +1026,19 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       else if (item.imageUrl) loadImg(item.imageUrl,      img => { frontImg = img; });
 
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
-      const animate = () => { animId = requestAnimationFrame(animate); controls.update(); if (bodyMesh) setBodyMorph('BODY_LENGTH', 1.5, bodyMesh); renderer.render(scene, camera); };
+      const animate = () => {
+        animId = requestAnimationFrame(animate);
+        controls.update();
+
+        // ✅ NEW: keep animation pose "locked"
+        if (mixer) {
+          // If paused, update(0) is enough to keep pose consistent
+          mixer.update(0);
+        }
+
+        if (bodyMesh) setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
+        renderer.render(scene, camera);
+      };
       animate();
       const ro = new ResizeObserver(() => { const w = canvas.clientWidth, h = canvas.clientHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false); });
       ro.observe(canvas);
