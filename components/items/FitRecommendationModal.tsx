@@ -26,8 +26,11 @@ const SIZE_DATA: Record<string, { chest: number; shoulder: number; length: numbe
 const BASE      = SIZE_DATA['S'];
 const MAX       = SIZE_DATA['4XL'];
 const cmToMorph = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
-const BODY_BASE = { height: 150, chest: 30, shoulder: 43, bodyLength: 60 };
-const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, bodyLength: 75 };
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29, hip: 40, armLen: 56, bodyLen: 60 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54, hip: 62, armLen: 84, bodyLen: 75 };
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const norm = (v: number, b: number, m: number) => clamp01((v - b) / (m - b));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const bodyNorm  = (v: number, b: number, m: number) => Math.max(0, Math.min(1, (v - b) / (m - b)));
 const ATLAS_SIZE    = 2048;
 const FRONT_RECT    = { x: 0,    y: 0,    w: 1024, h: 1536 };
@@ -125,7 +128,7 @@ interface Props {
   item: ClothingItem;
   userProfile: ParametricAvatar | null;
 }
-type BodyDraft = { height: number; chest: number; bodyLength: number; shoulder: number };
+type BodyDraft = { height: number; chest: number; shoulder: number; waist: number };
 interface StyleOutfit { bottom: string; shoes: string; reason: string; comfort: string; vibe: string; }
 interface WeatherData  { tempC: number; condition: string; humidity: number; city: string; }
 
@@ -802,10 +805,10 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   // Body slider state
   const [showBodyPanel, setShowBodyPanel] = useState(false);
   const [bodyDraft, setBodyDraft] = useState<BodyDraft>({
-    height:     userProfile?.height     ?? 150,
-    chest:      userProfile?.chest      ?? 30,
-    bodyLength: (userProfile as any)?.bodyLength ?? (userProfile as any)?.waist ?? 60,
-    shoulder:   userProfile?.shoulder   ?? 43,
+    height:   userProfile?.height   ?? 150,
+    chest:    userProfile?.chest    ?? 30,
+    shoulder: userProfile?.shoulder ?? 43,
+    waist:    (userProfile as any)?.waist ?? 29,
   });
   const [savedBody,   setSavedBody]   = useState<BodyDraft>({ ...bodyDraft });
   const [savingBody,  setSavingBody]  = useState(false);
@@ -822,12 +825,13 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   useEffect(() => {
     if (!userProfile) return;
     const b: BodyDraft = {
-      height:     userProfile.height,
-      chest:      userProfile.chest,
-      bodyLength: (userProfile as any).bodyLength ?? (userProfile as any).waist ?? 72,
-      shoulder:   userProfile.shoulder,
+      height:   userProfile.height,
+      chest:    userProfile.chest,
+      shoulder: userProfile.shoulder,
+      waist:    (userProfile as any).waist ?? 29,
     };
-    setBodyDraft(b); setSavedBody(b);
+    setBodyDraft(b);
+    setSavedBody(b);
   }, [userProfile]);
 
   useEffect(() => { sceneRef.current?.updateBody(bodyDraft); }, [bodyDraft]);
@@ -872,6 +876,60 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let atlasTexture: any = null, morphMesh: any = null, bodyMesh: any = null;
+
+      // ✅ HEIGHT BONE
+      let heightBone: any = null;
+
+      // ✅ Shirt follow (move only, no scale)
+      let shirtBaseY: number | null = null;
+      let unitsPerCm: number | null = null;
+
+      const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height; // 198/150 = 1.32
+
+      function getBoneByNameLike(skinned: any, nameLike: string) {
+        const key = nameLike.toLowerCase();
+        return skinned?.skeleton?.bones?.find((bn: any) =>
+          (bn.name || '').toLowerCase().includes(key)
+        ) ?? null;
+      }
+
+      function initShirtFollow(THREE: any) {
+        if (!bodyMesh || !morphMesh) return;
+
+        // cache the original shirt Y
+        if (shirtBaseY == null) shirtBaseY = morphMesh.position.y;
+
+        // compute "world units per cm" using body bbox at BASE height
+        const box = new THREE.Box3().setFromObject(bodyMesh);
+        const bodyHeightUnits = box.max.y - box.min.y;
+
+        unitsPerCm = (bodyHeightUnits / BODY_BASE.height) * 0.85; // BASE is 150cm
+        console.log('✅ initShirtFollow unitsPerCm:', unitsPerCm);
+      }
+
+      function findHeightBone(root: any) {
+        heightBone = null;
+
+        root.traverse((o: any) => {
+          // Bones exist in skeleton of skinned meshes
+          if (!o.isSkinnedMesh || !o.skeleton) return;
+
+          // Try find by name (adjust if your bone name differs)
+          const b = o.skeleton.bones.find((bn: any) => {
+            const n = (bn.name || '').toLowerCase();
+            return n === 'height_ctrl' || n.includes('height_ctrl');
+          });
+
+          if (b) heightBone = b;
+        });
+
+        // Debug (optional)
+        if (!heightBone) {
+          console.warn('❌ heightBone not found. Check bone name in Blender export.');
+        } else {
+          console.log('✅ heightBone found:', heightBone.name);
+        }
+      }
 
       // ✅ NEW: animation
       let mixer: any = null;
@@ -936,12 +994,59 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       function setBodyMorph(prefix: string, value: number, mesh: any) { if (!mesh?.morphTargetDictionary) return; const k = (Object.keys(mesh.morphTargetDictionary) as string[]).find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase())); if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value; }
       function updateBody(b: BodyDraft) {
         if (!bodyMesh) return;
-        setBodyMorph('CHEST_WIDE',    bodyNorm(b.chest,      BODY_BASE.chest,      BODY_MAX.chest)      * 3.0, bodyMesh);
-        setBodyMorph('SHOULDER_WIDE', bodyNorm(b.shoulder,   BODY_BASE.shoulder,   BODY_MAX.shoulder)   * 0.5, bodyMesh);
-        setBodyMorph('HEIGHT',        bodyNorm(b.height,     BODY_BASE.height,     BODY_MAX.height)     * 0.8, bodyMesh);
-        setBodyMorph('WAIST_WIDE',    bodyNorm(b.bodyLength, BODY_BASE.bodyLength, BODY_MAX.bodyLength) * 4.0, bodyMesh);
-        setBodyMorph('HIP_WIDE',      Math.min(bodyNorm(b.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 1) * 2.0, bodyMesh);
-        setBodyMorph('BODY_LENGTH',   1.5, bodyMesh);
+
+        // 0..1 normalized based on YOUR human base/max
+        const tH = norm(b.height,   BODY_BASE.height,   BODY_MAX.height);
+        const tC = norm(b.chest,    BODY_BASE.chest,    BODY_MAX.chest);
+        const tS = norm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder);
+        const tW = norm(b.waist,    BODY_BASE.waist,    BODY_MAX.waist);
+
+        // ✅ HEIGHT via bone
+        if (heightBone) {
+          const sY = 1 + tH * (HEIGHT_SCALE_MAX - 1);
+          heightBone.scale.set(sY, sY, sY);
+          heightBone.updateMatrixWorld(true);
+          if (bodyMesh?.skeleton) bodyMesh.skeleton.update();
+        }
+
+        // ✅ move shirt up/down by height delta, WITHOUT scaling shirt
+        if (morphMesh && shirtBaseY != null && unitsPerCm != null) {
+          const deltaCm = b.height - BODY_BASE.height;
+          morphMesh.position.y = shirtBaseY + deltaCm * unitsPerCm;
+        }
+
+        // Auto cm derived from your scaling
+        const armLenCm  = lerp(BODY_BASE.armLen,  BODY_MAX.armLen,  tH); // height drives arm length
+        const hipT      = clamp01(0.6 * tW + 0.4 * tC);                  // hip depends on waist+chest
+        const hipCm     = lerp(BODY_BASE.hip, BODY_MAX.hip, hipT);
+
+        // ── Main “visible” body morphs (your ranges) ──────────────────────
+        setBodyMorph('SHOULDER_WIDE', tS * 0.5,  bodyMesh); // 0..0.5
+        setBodyMorph('CHEST_WIDE',    tC * 3.0,  bodyMesh); // 0..3.0
+        setBodyMorph('WAIST_WIDE',    tW * 10.0, bodyMesh); // 0..10.0
+        setBodyMorph('HIP_WIDE',      norm(hipCm, BODY_BASE.hip, BODY_MAX.hip) * 2.0, bodyMesh); // 0..2.0
+
+        // ── Auto length morphs (not sliders) ──────────────────────────────
+        setBodyMorph('ARM_LENGTH',  norm(armLenCm, BODY_BASE.armLen, BODY_MAX.armLen) * 3.0, bodyMesh); // 0..3.0
+
+        // Height is now BONE scaling (recommended) — so DO NOT drive HEIGHT shapekey here.
+        // If you still kept HEIGHT shapekey, use: setBodyMorph('HEIGHT', tH * 0.8, bodyMesh);
+
+        // ── Auto “BIG” morphs (not sliders) ───────────────────────────────
+        const upperArmT = clamp01(0.7 * tC + 0.3 * tS);
+        const lowerArmT = clamp01(0.5 * tC + 0.5 * tS);
+        const upperLegT = clamp01(0.7 * tW + 0.3 * tC);
+
+        setBodyMorph('LEFT_UPPERARM_BIG',  upperArmT * 3.0, bodyMesh);
+        setBodyMorph('RIGHT_UPPERARM_BIG', upperArmT * 3.0, bodyMesh);
+        setBodyMorph('LEFT_LOWERARM_BIG',  lowerArmT * 2.0, bodyMesh);
+        setBodyMorph('RIGHT_LOWERARM_BIG', lowerArmT * 2.0, bodyMesh);
+
+        setBodyMorph('LEFT_UPPERLEG_BIG',  upperLegT * 2.0, bodyMesh);
+        setBodyMorph('RIGHT_UPPERLEG_BIG', upperLegT * 2.0, bodyMesh);
+
+        // Keep your base body length locked (your “no change apply to make my base”)
+        setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
       }
 
       const loader = new GLTFLoader();
@@ -952,7 +1057,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
         scene.add(model);
 
-                // ✅ NEW: apply Blender "relaxed pose" animation (first clip)
+        // ✅ NEW: apply Blender "relaxed pose" animation (first clip)
         if (gltf.animations && gltf.animations.length > 0) {
           mixer = new THREE.AnimationMixer(model);
 
@@ -1000,21 +1105,31 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
               sceneRef.current.clearHeatmap = clearHeatmapColors;
               sceneRef.current.atlasTexture = atlasTexture;
             }
+            initShirtFollow(THREE);
             setSceneReady(true);
           }
 
           // 🧍 IDENTIFY BODY MESH
-          if (!bodyMesh && lkeys.some((k: string) => k.includes('body_length') || (k.includes('height') && k.includes('body')))) {
+          if (!bodyMesh && obj.isSkinnedMesh && obj !== morphMesh) {
             bodyMesh = obj;
-            
-            // IMPORTANT: Skin must only be FrontSide (0) to prevent X-ray mouth
-            obj.material.side = 0; 
+            obj.material.side = 0;
+
+            // ✅ find height bone ONLY on body skeleton
+            heightBone = getBoneByNameLike(bodyMesh, 'height_ctrl');
+            if (!heightBone) {
+              console.warn('❌ height_ctrl not found on BODY skeleton. Check bone name in Blender.');
+            } else {
+              console.log('✅ heightBone found on body:', heightBone.name);
+            }
 
             if (sceneRef.current) {
               sceneRef.current.updateBody = updateBody;
-              sceneRef.current.bodyMesh   = bodyMesh;
-              sceneRef.current.THREE      = THREE;
+              sceneRef.current.bodyMesh = bodyMesh;
+              sceneRef.current.THREE = THREE;
             }
+
+            // ✅ if shirt already exists, init follow now
+            initShirtFollow(THREE);
           }
         });
         setModelLoading(false);
@@ -1091,9 +1206,9 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
               <div className="p-3 space-y-3">
                 {([
                   { key: 'height',     label: 'Height',      min: 150, max: 198, unit: 'cm' },
-                  { key: 'chest',      label: 'Chest',       min: 50,  max: 150, unit: 'cm' },
-                  { key: 'bodyLength', label: 'Body Length', min: 40,  max: 140, unit: 'cm' },
-                  { key: 'shoulder',   label: 'Shoulder',    min: 30,  max: 70,  unit: 'cm' },
+                  { key: 'chest', label: 'Chest', min: 30, max: 57, unit: 'cm' },
+                  { key: 'waist', label: 'Waist', min: 29, max: 54, unit: 'cm' },
+                  { key: 'shoulder',   label: 'Shoulder',    min: 43,  max: 55,  unit: 'cm' },
                 ] as const).map(({ key, label, min, max, unit }) => (
                   <div key={key}>
                     <div className="flex justify-between items-center mb-1">

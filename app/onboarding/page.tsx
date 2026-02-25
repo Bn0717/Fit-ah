@@ -10,11 +10,16 @@ import { uploadUserPhoto } from '@/lib/firebase/storage';
 import { processImage } from '@/lib/mediapipe/poseDetection';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
-const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29 };
-const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54 };
+
+// 🟢 1. REPLACED CONSTANTS TO MATCH MODAL EXACTLY
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29, hip: 40, armLen: 56, bodyLen: 60 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54, hip: 62, armLen: 84, bodyLen: 75 };
 type Measurements = { height: number; chest: number; waist: number; shoulder: number };
-const clamp  = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const norm01 = (cm: number, base: number, max: number) => clamp((cm - base) / (max - base), 0, 1);
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const norm = (v: number, b: number, m: number) => clamp01((v - b) / (m - b));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height; // 198/150 = 1.32
 
 const STEPS = ['Your Info', 'Body Scan', '3D Preview'];
 
@@ -35,7 +40,7 @@ export default function OnboardingPage() {
   const [detecting,    setDetecting]    = useState(false);
   const [detected,     setDetected]     = useState(false);
   const [detectMsg,    setDetectMsg]    = useState<string | null>(null);
-  const [measurements, setMeasurements] = useState<Measurements>({ height: 170, chest: 90, waist: 75, shoulder: 44 });
+  const [measurements, setMeasurements] = useState<Measurements>({ height: 170, chest: 45, waist: 35, shoulder: 48 });
 
   // Step 2 – 3D preview
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,78 +79,136 @@ export default function OnboardingPage() {
       const W = canvas.clientWidth || 400, H = canvas.clientHeight || 480;
       const scene    = new THREE.Scene(); scene.background = new THREE.Color(0xf8f3ea);
       const camera   = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
-      camera.position.set(0, 0.9, 4.2);
+      camera.position.set(0, 0, 4.5);
       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
       renderer.setSize(W, H, false); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.minDistance = 1.5; controls.maxDistance = 6;
-      controls.target.set(0, 0.6, 0);
+      controls.target.set(0, 0, 0);
       scene.add(new THREE.AmbientLight(0xffffff, 1.1));
       const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(3, 5, 3); scene.add(key);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let bodyMesh: any = null;
+      let heightBone: any = null;
+      
+      // Animation vars to freeze pose
+      let mixer: any = null;
+      let activeAction: any = null;
+
+      function getBoneByNameLike(skinned: any, nameLike: string) {
+        const key = nameLike.toLowerCase();
+        return skinned?.skeleton?.bones?.find((bn: any) => (bn.name || '').toLowerCase().includes(key)) ?? null;
+      }
+
       function setMorph(prefix: string, value: number) {
         if (!bodyMesh?.morphTargetDictionary) return;
-        const k = (Object.keys(bodyMesh.morphTargetDictionary) as string[])
-          .find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
+        const k = (Object.keys(bodyMesh.morphTargetDictionary) as string[]).find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
         if (k) bodyMesh.morphTargetInfluences[bodyMesh.morphTargetDictionary[k]] = value;
       }
+
+      // 🟢 3. ADVANCED BODY MATH EXACTLY LIKE MODAL
       function updateBody(m: Measurements) {
         if (!bodyMesh) return;
-        setMorph('CHEST_WIDE',    norm01(m.chest,    BODY_BASE.chest,    BODY_MAX.chest)    * 3.0);
-        setMorph('SHOULDER_WIDE', norm01(m.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder) * 0.5);
-        setMorph('HEIGHT',        norm01(m.height,   BODY_BASE.height,   BODY_MAX.height)   * 0.8);
-        setMorph('WAIST_WIDE',    norm01(m.waist,    BODY_BASE.waist,    BODY_MAX.waist)    * 10.0);
-        setMorph('HIP_WIDE',      clamp(norm01(m.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 0, 1) * 2.0);
-        setMorph('BODY_LENGTH',   1.5);
+        const tH = norm(m.height,   BODY_BASE.height,   BODY_MAX.height);
+        const tC = norm(m.chest,    BODY_BASE.chest,    BODY_MAX.chest);
+        const tS = norm(m.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder);
+        const tW = norm(m.waist,    BODY_BASE.waist,    BODY_MAX.waist);
+
+        if (heightBone) {
+          const sY = 1 + tH * (HEIGHT_SCALE_MAX - 1);
+          heightBone.scale.set(sY, sY, sY);
+          heightBone.updateMatrixWorld(true);
+          if (bodyMesh?.skeleton) bodyMesh.skeleton.update();
+        }
+
+        const armLenCm  = lerp(BODY_BASE.armLen,  BODY_MAX.armLen,  tH);
+        const hipT      = clamp01(0.6 * tW + 0.4 * tC);
+        const hipCm     = lerp(BODY_BASE.hip, BODY_MAX.hip, hipT);
+
+        setMorph('SHOULDER_WIDE', tS * 0.5);
+        setMorph('CHEST_WIDE',    tC * 3.0);
+        setMorph('WAIST_WIDE',    tW * 10.0);
+        setMorph('HIP_WIDE',      norm(hipCm, BODY_BASE.hip, BODY_MAX.hip) * 2.0);
+        setMorph('ARM_LENGTH',    norm(armLenCm, BODY_BASE.armLen, BODY_MAX.armLen) * 3.0);
+
+        const upperArmT = clamp01(0.7 * tC + 0.3 * tS), lowerArmT = clamp01(0.5 * tC + 0.5 * tS), upperLegT = clamp01(0.7 * tW + 0.3 * tC);
+        setMorph('LEFT_UPPERARM_BIG',  upperArmT * 3.0); setMorph('RIGHT_UPPERARM_BIG', upperArmT * 3.0);
+        setMorph('LEFT_LOWERARM_BIG',  lowerArmT * 2.0); setMorph('RIGHT_LOWERARM_BIG', lowerArmT * 2.0);
+        setMorph('LEFT_UPPERLEG_BIG',  upperLegT * 2.0); setMorph('RIGHT_UPPERLEG_BIG', upperLegT * 2.0);
+        setMorph('BODY_LENGTH', 1.5);
       }
-      const loader = new GLTFLoader();
+
       function forceOpaque(obj: any) {
         if (!obj?.isMesh) return;
-
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         for (const m of mats) {
           if (!m) continue;
-
-          // Make it SOLID
-          m.transparent = false;
-          m.opacity = 1;
-          m.alphaTest = 0;
-          m.depthWrite = true;
-          m.depthTest = true;
-
-          // Optional: avoid “inside showing through”
-          // If your mesh needs to be double sided, change this to THREE.DoubleSide
+          m.transparent = false; m.opacity = 1; m.alphaTest = 0; m.depthWrite = true; m.depthTest = true;
           m.side = THREE.FrontSide;
-
-          // Some glTF materials still keep an alpha mode flag
-          if ('alphaMode' in m) (m as any).alphaMode = 'OPAQUE';
-
           m.needsUpdate = true;
         }
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/humanlatest.glb?v=' + Date.now(), (gltf: any) => {
+
+      const loader = new GLTFLoader();
+      loader.load('/models/humanlatestwithshirt.glb?v=' + Date.now(), (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
+        
+        // Center the model
         model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
         scene.add(model);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
+        // Lock Animation Pose
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(model);
+          activeAction = mixer.clipAction(gltf.animations[0]);
+          activeAction.reset(); activeAction.play(); activeAction.paused = true; activeAction.time = 0; mixer.update(0);
+        }
+
         model.traverse((obj: any) => {
-          forceOpaque(obj);
-          if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
-          const lk = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
-          if (lk.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
-            bodyMesh = obj; updateBody(measurements);
+          if (!obj.isMesh) return;
+          
+          // 1. Safely force the material to be solid (no transparency bugs)
+          if (obj.material) {
+            obj.material.transparent = false;
+            obj.material.depthWrite = true;
+            obj.material.side = 0; // THREE.FrontSide
+            obj.material.needsUpdate = true;
+          }
+
+          const lkeys = Object.keys(obj.morphTargetDictionary || {}).map((k: string) => k.toLowerCase());
+
+          // 2. HIDE THE SHIRT (Check for shirt-specific morphs or names)
+          if (lkeys.some((k: string) => k.includes('len_long') || k.includes('sleeve')) || obj.name?.toLowerCase().includes('shirt')) {
+            obj.visible = false; 
+          }
+          // 3. GRAB THE BODY (If it's a skinned mesh and we haven't hidden it)
+          else if (!bodyMesh && obj.isSkinnedMesh) {
+            bodyMesh = obj;
+            heightBone = getBoneByNameLike(bodyMesh, 'height_ctrl');
+            
+            // Apply the sliders immediately
+            updateBody(measurements);
             if (sceneRef.current) sceneRef.current.updateBody = updateBody;
           }
         });
+        
         setModelReady(true);
-      }, undefined, () => setModelReady(true));
+      }, 
+      undefined, 
+      (error: any) => {
+        console.error("Failed to load 3D model:", error);
+        setModelReady(true); // Stops the loading spinner even if it fails
+      });
 
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
-      const animate = () => { animId = requestAnimationFrame(animate); controls.update(); setMorph('BODY_LENGTH', 1.5); renderer.render(scene, camera); };
+      const animate = () => { 
+        animId = requestAnimationFrame(animate); 
+        controls.update(); 
+        if (mixer) mixer.update(0);
+        if (bodyMesh) setMorph('BODY_LENGTH', 1.5); 
+        renderer.render(scene, camera); 
+      };
       animate();
       const ro = new ResizeObserver(() => {
         const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -307,12 +370,12 @@ export default function OnboardingPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <input
-                    type="range" min="140" max="210" step="1"
+                    type="range" min="150" max="198" step="1"
                     value={heightInput}
                     onChange={e => setHeightInput(e.target.value)}
                     className="flex-1" style={{ accentColor: C.navy }} />
                   <div className="relative">
-                    <input type="number" min="140" max="210"
+                    <input type="number" min="150" max="198"
                       value={heightInput}
                       onChange={e => setHeightInput(e.target.value)}
                       className="w-20 px-3 py-2 rounded-xl border-2 font-black text-lg text-center focus:outline-none"
@@ -388,9 +451,9 @@ export default function OnboardingPage() {
               </p>
               <div className="space-y-3">
                 {([
-                  { key: 'chest',    label: 'Chest',    unit: 'cm', min: 50,  max: 150, emoji: '💪' },
-                  { key: 'waist',    label: 'Waist',    unit: 'cm', min: 40,  max: 140, emoji: '⬤'  },
-                  { key: 'shoulder', label: 'Shoulder', unit: 'cm', min: 30,  max: 70,  emoji: '↔️' },
+                  { key: 'chest',    label: 'Chest',    unit: 'cm', min: 30,  max: 57,  emoji: '💪' },
+                  { key: 'waist',    label: 'Waist',    unit: 'cm', min: 29,  max: 54,  emoji: '⬤'  },
+                  { key: 'shoulder', label: 'Shoulder', unit: 'cm', min: 43,  max: 55,  emoji: '↔️' },
                 ] as const).map(({ key, label, unit, min, max, emoji }) => (
                   <div key={key} className="p-4 rounded-xl border-2 bg-white" style={{ borderColor: C.peach }}>
                     <div className="flex justify-between items-center mb-2">
@@ -458,10 +521,10 @@ export default function OnboardingPage() {
 
               <div className="flex-1 space-y-4">
                 {([
-                  { key: 'height',   label: 'Height',   unit: 'cm', min: 100, max: 220, emoji: '📏' },
-                  { key: 'chest',    label: 'Chest',    unit: 'cm', min: 50,  max: 150, emoji: '💪' },
-                  { key: 'waist',    label: 'Waist',    unit: 'cm', min: 40,  max: 140, emoji: '⬤'  },
-                  { key: 'shoulder', label: 'Shoulder', unit: 'cm', min: 30,  max: 70,  emoji: '↔️' },
+                  { key: 'height',   label: 'Height',   unit: 'cm', min: 150, max: 198, emoji: '📏' },
+                  { key: 'chest',    label: 'Chest',    unit: 'cm', min: 30,  max: 57,  emoji: '💪' },
+                  { key: 'waist',    label: 'Waist',    unit: 'cm', min: 29,  max: 54,  emoji: '⬤'  },
+                  { key: 'shoulder', label: 'Shoulder', unit: 'cm', min: 43,  max: 55,  emoji: '↔️' },
                 ] as const).map(({ key, label, unit, min, max, emoji }) => (
                   <div key={key} className="flex items-center gap-3">
                     <span className="text-base w-6 text-center">{emoji}</span>
