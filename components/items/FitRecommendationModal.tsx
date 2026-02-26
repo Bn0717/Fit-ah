@@ -1060,9 +1060,9 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         const puffStrength = Math.max(tC * 1.1, tW * 1.4);   // waist pushes a bit more
         
         // Map to your desired scale range: 1.2 → 1.6
-        const zScale = 1.2 + (1.6 - 1.2) * clamp01(puffStrength);
+        const zScale = 1.2 + (1.9 - 1.2) * clamp01(puffStrength);
 
-        const forwardPush = (zScale - 1.2) * 0.4; 
+        const forwardPush = (zScale - 1.2) * 0.22; 
     morphMesh.position.z = (shirtBaseZ ?? 0) + forwardPush;
         
         // Apply ONLY to Z axis (forward/backward depth)

@@ -246,6 +246,7 @@ export default function ProfilePage() {
       let shirtMesh: any = null;
       let heightBone: any = null;
       let shirtBaseY: number | null = null;
+      let shirtBaseZ: number | null = null; 
       let unitsPerCm: number | null = null;
       let mixer: any = null;
       let activeAction: any = null;
@@ -269,6 +270,7 @@ export default function ProfilePage() {
       function initShirtFollow(THREE: any) {
         if (!bodyMesh || !shirtMesh) return;
         if (shirtBaseY == null) shirtBaseY = shirtMesh.position.y;
+        if (shirtBaseZ == null) shirtBaseZ = shirtMesh.position.z;
         const box = new THREE.Box3().setFromObject(bodyMesh);
         unitsPerCm = ((box.max.y - box.min.y) / BODY_BASE.height) * 0.85;
       }
@@ -302,8 +304,21 @@ export default function ProfilePage() {
         }
 
         // Shirt stays on shoulders
-        if (shirtMesh && shirtBaseY != null && unitsPerCm != null) {
+        if (shirtMesh && shirtBaseY != null && shirtBaseZ != null && unitsPerCm != null) {
+          // 1. Handle Height position
           shirtMesh.position.y = shirtBaseY + (b.height - BODY_BASE.height) * unitsPerCm;
+
+          // 2. Handle Puffiness (Z-Expansion)
+          const puffStrength = Math.max(tC * 1.1, tW * 1.4);
+          const zScale = 1.2 + (1.9 - 1.2) * clamp01(puffStrength);
+
+          // 3. Handle Frontward Push
+          // Using 0.4 multiplier as seen in your last paste
+          const forwardPush = (zScale - 1.2) * 0.22; 
+          shirtMesh.position.z = shirtBaseZ + forwardPush;
+
+          // Apply the scale
+          shirtMesh.scale.set(1, 1, zScale);
         }
         
         const armLenCm  = lerp(BODY_BASE.armLen,  BODY_MAX.armLen,  tH);
