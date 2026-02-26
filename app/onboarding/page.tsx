@@ -150,7 +150,7 @@ export default function OnboardingPage() {
       }
 
       const loader = new GLTFLoader();
-      loader.load('/models/humanlatestwithshirt.glb?v=' + Date.now(), (gltf: any) => {
+      loader.load('/models/humanlatestwithshirt2.glb?v=1.0', (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
         

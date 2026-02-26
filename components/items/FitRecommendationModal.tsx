@@ -778,6 +778,7 @@ function StyleOverlay({
 export default function FitRecommendationModal({ isOpen, onClose, item, userProfile }: Props) {
   const { user } = useAuth();
   const [selectedSize, setSelectedSize] = useState<string>(item.userWearingSize || 'M');
+  const [isRotating, setIsRotating] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<{
     renderer: { dispose: () => void };
@@ -785,6 +786,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     applySize: (s: string) => void;
     updateBody: (b: BodyDraft) => void;
     ro: ResizeObserver;
+    controls: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     shirtMesh: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -844,6 +846,12 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     setFitStatus(r < 0.96 ? { text: 'Tight', color: C.red } : r > 1.15 ? { text: 'Loose', color: C.orange } : { text: 'Just Right', color: C.green });
   }, [selectedSize, userProfile, item]);
 
+  useEffect(() => {
+  if (sceneRef.current?.controls) {
+    sceneRef.current.controls.autoRotate = isRotating;
+  }
+}, [isRotating]);
+
   // ── Three.js scene ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || !canvasRef.current) return;
@@ -882,6 +890,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
 
       // ✅ Shirt follow (move only, no scale)
       let shirtBaseY: number | null = null;
+      let shirtBaseZ: number | null = null; 
       let unitsPerCm: number | null = null;
 
       const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height; // 198/150 = 1.32
@@ -898,6 +907,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
 
         // cache the original shirt Y
         if (shirtBaseY == null) shirtBaseY = morphMesh.position.y;
+        if (shirtBaseZ == null) shirtBaseZ = morphMesh.position.z;
 
         // compute "world units per cm" using body bbox at BASE height
         const box = new THREE.Box3().setFromObject(bodyMesh);
@@ -1045,13 +1055,27 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
         setBodyMorph('LEFT_UPPERLEG_BIG',  upperLegT * 2.0, bodyMesh);
         setBodyMorph('RIGHT_UPPERLEG_BIG', upperLegT * 2.0, bodyMesh);
 
+        if (morphMesh) {
+        // 0.0 = base (no puff), 1.0 = maximum puff
+        const puffStrength = Math.max(tC * 1.1, tW * 1.4);   // waist pushes a bit more
+        
+        // Map to your desired scale range: 1.2 → 1.6
+        const zScale = 1.2 + (1.6 - 1.2) * clamp01(puffStrength);
+
+        const forwardPush = (zScale - 1.2) * 0.4; 
+    morphMesh.position.z = (shirtBaseZ ?? 0) + forwardPush;
+        
+        // Apply ONLY to Z axis (forward/backward depth)
+        morphMesh.scale.set(1, 1, zScale);
+    }
+    
         // Keep your base body length locked (your “no change apply to make my base”)
         setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
       }
 
       const loader = new GLTFLoader();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      loader.load('/models/humanlatestwithshirt.glb?v=' + Date.now(), (gltf: any) => {
+      loader.load('/models/humanlatestwithshirt2.glb?v=1.0', (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
         model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
@@ -1157,7 +1181,7 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
       animate();
       const ro = new ResizeObserver(() => { const w = canvas.clientWidth, h = canvas.clientHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false); });
       ro.observe(canvas);
-      sceneRef.current = { renderer, animId, applySize, updateBody: (b: BodyDraft) => updateBody(b), ro,
+      sceneRef.current = { renderer, animId, applySize, updateBody: (b: BodyDraft) => updateBody(b), ro, controls,
         shirtMesh: morphMesh, bodyMesh, THREE, atlasTexture, runHeatmap, clearHeatmap: clearHeatmapColors };
     });
     return () => { cancelled = true; if (sceneRef.current) { cancelAnimationFrame(sceneRef.current.animId); sceneRef.current.renderer.dispose(); sceneRef.current.ro.disconnect(); sceneRef.current = null; } setSceneReady(false); setModelLoading(true); };
@@ -1184,6 +1208,17 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
 
         {/* ══ LEFT: 3D canvas ══════════════════════════════════════════════ */}
         <div className="flex-1 bg-[#0d0d1a] relative flex flex-col min-w-0">
+          <button 
+            onClick={() => setIsRotating(!isRotating)}
+            className="absolute top-4 right-4 z-30 px-3 py-2 rounded-xl border border-white/20 text-white font-bold text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 hover:bg-white/10"
+            style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}
+          >
+            {isRotating ? (
+              <><span>⏸ Stop Rotation</span></>
+            ) : (
+              <><span>▶ Resume Rotation</span></>
+            )}
+          </button>
           {modelLoading && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-[#0d0d1a]">
               <div className="w-12 h-12 border-4 border-t-transparent border-blue-400 rounded-full animate-spin" />

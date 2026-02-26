@@ -104,14 +104,6 @@ export default function Navbar() {
                   </div>
 
                   <div className="p-2">
-                    <Link
-                      href="/profile"
-                      onClick={() => setShowDropdown(false)}
-                      className="block px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-70"
-                      style={{ color: colors.navy }}
-                    >
-                      ⚙️ Settings
-                    </Link>
                     <button
                       onClick={handleLogout}
                       disabled={loading}

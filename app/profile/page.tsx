@@ -10,11 +10,17 @@ import { processImage } from '@/lib/mediapipe/poseDetection';
 import type { ClothingItem, OutfitCombination } from '@/lib/types/clothing';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
-const BODY_BASE = { height: 150, chest: 30, shoulder: 43, bodyLength: 60 };
-const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, bodyLength: 90 };
-type Measurements = { height: number; chest: number; bodyLength: number; shoulder: number };
-const clamp  = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const norm01 = (cm: number, base: number, max: number) => clamp((cm - base) / (max - base), 0, 1);
+
+// 🟢 1. REPLACED CONSTANTS TO MATCH MODAL EXACTLY
+const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29, hip: 40, armLen: 56, bodyLen: 60 };
+const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54, hip: 62, armLen: 84, bodyLen: 75 };
+type Measurements = { height: number; chest: number; waist: number; shoulder: number };
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const norm = (v: number, b: number, m: number) => clamp01((v - b) / (m - b));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height; // 198/150 = 1.32
+
 const SIZE_DATA: Record<string, { chest: number; shoulder: number; length: number; sleeve: number }> = {
   S:     { chest: 54.5, shoulder: 43, length: 71, sleeve: 22   },
   '4XL': { chest: 69.5, shoulder: 55, length: 79, sleeve: 29.5 },
@@ -142,8 +148,8 @@ export default function ProfilePage() {
   const [showProfileGuide, setShowProfileGuide] = useState(false);
 
   // ── Body measurements ─────────────────────────────────────────
-  const [saved,       setSaved]       = useState<Measurements>({ height: 170, chest: 90, bodyLength: 72, shoulder: 44 });
-  const [draft,       setDraft]       = useState<Measurements>({ height: 170, chest: 90, bodyLength: 72, shoulder: 44 });
+  const [saved,       setSaved]       = useState<Measurements>({ height: 170, chest: 45, waist: 35, shoulder: 48 });
+  const [draft,       setDraft]       = useState<Measurements>({ height: 170, chest: 45, waist: 35, shoulder: 48 });
   const [savingBody,  setSavingBody]  = useState(false);
   const [bodySuccess, setBodySuccess] = useState(false);
 
@@ -181,19 +187,25 @@ export default function ProfilePage() {
     Promise.all([getAvatar(user.uid), getUserClothingItems(user.uid), getUserOutfits(user.uid)])
       .then(([profile, clothingItems, userOutfits]) => {
         if (profile) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = profile as any;
+          // 🟢 SYNCED FIELDS: Reads exactly what Onboarding saves
           const m: Measurements = {
             height: p.height ?? 170,
-            chest: p.chest ?? 90,
-            shoulder: p.shoulder ?? 44,
-            bodyLength: p.bodyLength ?? p.waist ?? 72,
+            chest: p.chest ?? 45,
+            shoulder: p.shoulder ?? 48,
+            waist: p.waist ?? 35, // This is the synced waist field
           };
-          setSaved(m); setDraft(m);
-          setDisplayName(p.displayName || ''); setAge(p.age ? String(p.age) : ''); setGender(p.gender || '');
+          setSaved(m); 
+          setDraft(m);
+          setDisplayName(p.displayName || ''); 
+          setAge(p.age ? String(p.age) : ''); 
+          setGender(p.gender || '');
+          
+          // 🟢 PHOTO SYNC: Ensure the photo from onboarding shows up
           if (p.photoUrl) setPhotoPreview(p.photoUrl);
         }
-        setItems(clothingItems); setOutfits(userOutfits);
+        setItems(clothingItems); 
+        setOutfits(userOutfits);
         setLoadingData(false);
       });
   }, [user]);
@@ -207,7 +219,6 @@ export default function ProfilePage() {
       import('three'),
       import('three/addons/loaders/GLTFLoader.js'),
       import('three/addons/controls/OrbitControls.js'),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
       if (cancelled || !canvasRef.current) return;
       const canvas = canvasRef.current;
@@ -231,63 +242,95 @@ export default function ProfilePage() {
       const key  = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 2);  scene.add(key);
       const fill = new THREE.DirectionalLight(0xfff4e0, 0.4); fill.position.set(-3, 1, -2); scene.add(fill);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let bodyMesh: any  = null;
+      let shirtMesh: any = null;
+      let heightBone: any = null;
+      let shirtBaseY: number | null = null;
+      let unitsPerCm: number | null = null;
+      let mixer: any = null;
+      let activeAction: any = null;
 
       function forceOpaqueMaterial(obj: any, THREE: any) {
-  if (!obj?.isMesh) return;
-
-  const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-  mats.forEach((m: any) => {
-    if (!m) return;
-
-    // Turn off transparency completely
-    m.transparent = false;
-    m.opacity = 1;
-    m.alphaTest = 0;
-    m.depthWrite = true;
-    m.depthTest = true;
-
-    // If Blender exported as "double sided + transparent", fix it
-    m.side = THREE.FrontSide; // or DoubleSide if you really need it
-    m.needsUpdate = true;
-  });
-}
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let shirtMesh: any = null;
-
-      function setMorph(prefix: string, value: number) {
-        if (!bodyMesh?.morphTargetDictionary) return;
-        const k = (Object.keys(bodyMesh.morphTargetDictionary) as string[])
-          .find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
-        if (k) bodyMesh.morphTargetInfluences[bodyMesh.morphTargetDictionary[k]] = value;
+        if (!obj?.isMesh) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((m: any) => {
+          if (!m) return;
+          m.transparent = false; m.opacity = 1; m.alphaTest = 0; m.depthWrite = true; m.depthTest = true;
+          m.side = THREE.FrontSide;
+          m.needsUpdate = true;
+        });
       }
 
-      function updateBody(m: Measurements) {
+      function getBoneByNameLike(skinned: any, nameLike: string) {
+        const key = nameLike.toLowerCase();
+        return skinned?.skeleton?.bones?.find((bn: any) => (bn.name || '').toLowerCase().includes(key)) ?? null;
+      }
+
+      function initShirtFollow(THREE: any) {
+        if (!bodyMesh || !shirtMesh) return;
+        if (shirtBaseY == null) shirtBaseY = shirtMesh.position.y;
+        const box = new THREE.Box3().setFromObject(bodyMesh);
+        unitsPerCm = ((box.max.y - box.min.y) / BODY_BASE.height) * 0.85;
+      }
+
+      function setBodyMorph(prefix: string, value: number, mesh: any) {
+        if (!mesh?.morphTargetDictionary) return;
+        const k = (Object.keys(mesh.morphTargetDictionary) as string[]).find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value;
+      }
+
+      function setShirtMorph(prefix: string, value: number, mesh: any) {
+        if (!mesh?.morphTargetDictionary) return;
+        const k = Object.keys(mesh.morphTargetDictionary).find(k => k.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value;
+      }
+
+      function updateBody(b: Measurements) {
         if (!bodyMesh) return;
-        setMorph('CHEST_WIDE',    norm01(m.chest,      BODY_BASE.chest,      BODY_MAX.chest)      * 3.0);
-        setMorph('SHOULDER_WIDE', norm01(m.shoulder,   BODY_BASE.shoulder,   BODY_MAX.shoulder)   * 0.5);
-        setMorph('HEIGHT',        norm01(m.height,     BODY_BASE.height,     BODY_MAX.height)     * 0.8);
-        setMorph('WAIST_WIDE',    norm01(m.bodyLength, BODY_BASE.bodyLength, BODY_MAX.bodyLength) * 4.0);
-        setMorph('HIP_WIDE',      clamp(norm01(m.chest, BODY_BASE.chest, BODY_MAX.chest) * 0.4, 0, 1) * 2.0);
-        setMorph('BODY_LENGTH',   1.5);
-      }
-        
 
-      function setShirtMorph(prefix: string, value: number) {
-        if (!shirtMesh?.morphTargetDictionary) return;
-        const k = Object.keys(shirtMesh.morphTargetDictionary).find(k => k.toLowerCase().startsWith(prefix.toLowerCase()));
-        if (k) shirtMesh.morphTargetInfluences[shirtMesh.morphTargetDictionary[k]] = value;
+        const tH = norm(b.height,   BODY_BASE.height,   BODY_MAX.height);
+        const tC = norm(b.chest,    BODY_BASE.chest,    BODY_MAX.chest);
+        const tS = norm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder);
+        const tW = norm(b.waist,    BODY_BASE.waist,    BODY_MAX.waist);
+
+        // HEIGHT via bone scaling
+        if (heightBone) {
+          const sY = 1 + tH * (HEIGHT_SCALE_MAX - 1);
+          heightBone.scale.set(sY, sY, sY);
+          heightBone.updateMatrixWorld(true);
+          if (bodyMesh?.skeleton) bodyMesh.skeleton.update();
+        }
+
+        // Shirt stays on shoulders
+        if (shirtMesh && shirtBaseY != null && unitsPerCm != null) {
+          shirtMesh.position.y = shirtBaseY + (b.height - BODY_BASE.height) * unitsPerCm;
+        }
+        
+        const armLenCm  = lerp(BODY_BASE.armLen,  BODY_MAX.armLen,  tH);
+        const hipT      = clamp01(0.6 * tW + 0.4 * tC);
+        const hipCm     = lerp(BODY_BASE.hip, BODY_MAX.hip, hipT);
+
+        setBodyMorph('SHOULDER_WIDE', tS * 0.5,  bodyMesh);
+        setBodyMorph('CHEST_WIDE',    tC * 3.0,  bodyMesh);
+        setBodyMorph('WAIST_WIDE',    tW * 10.0, bodyMesh);
+        setBodyMorph('HIP_WIDE',      norm(hipCm, BODY_BASE.hip, BODY_MAX.hip) * 2.0, bodyMesh);
+        setBodyMorph('ARM_LENGTH',    norm(armLenCm, BODY_BASE.armLen, BODY_MAX.armLen) * 3.0, bodyMesh);
+
+        const upperArmT = clamp01(0.7 * tC + 0.3 * tS), lowerArmT = clamp01(0.5 * tC + 0.5 * tS), upperLegT = clamp01(0.7 * tW + 0.3 * tC);
+        setBodyMorph('LEFT_UPPERARM_BIG',  upperArmT * 3.0, bodyMesh); setBodyMorph('RIGHT_UPPERARM_BIG', upperArmT * 3.0, bodyMesh);
+        setBodyMorph('LEFT_LOWERARM_BIG',  lowerArmT * 2.0, bodyMesh); setBodyMorph('RIGHT_LOWERARM_BIG', lowerArmT * 2.0, bodyMesh);
+        setBodyMorph('LEFT_UPPERLEG_BIG',  upperLegT * 2.0, bodyMesh); setBodyMorph('RIGHT_UPPERLEG_BIG', upperLegT * 2.0, bodyMesh);
+        setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
       }
 
       function applySize(size: string, itemData: ClothingItem | null) {
         if (!shirtMesh || !itemData) return;
         const d = itemData.sizeChart.find((s: any) => s.size === size);
         if (!d) return;
-        setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest));
-        setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder));
-        setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length));
-        setShirtMorph('SLEEVE_LONG', cmToMorph((d as any).sleeve || 25, BASE.sleeve, MAX.sleeve));
+        setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest), shirtMesh);
+        setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder), shirtMesh);
+        setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length), shirtMesh);
+        setShirtMorph('SLEEVE_LONG', cmToMorph((d as any).sleeve || 25, BASE.sleeve, MAX.sleeve), shirtMesh);
       }
 
       const ATLAS_SIZE    = 2048;
@@ -301,12 +344,7 @@ export default function ProfilePage() {
       const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
       let atlasTexture: any = null;
 
-      function processShirtTexture(
-        ctx: CanvasRenderingContext2D,
-        img: HTMLImageElement,
-        rect: { x: number; y: number; w: number; h: number },
-        isFront: boolean
-      ) {
+      function processShirtTexture(ctx: CanvasRenderingContext2D, img: HTMLImageElement, rect: any, isFront: boolean) {
         const tmp = document.createElement('canvas'); tmp.width = img.width; tmp.height = img.height;
         const tCtx = tmp.getContext('2d')!; tCtx.drawImage(img, 0, 0);
         const data = tCtx.getImageData(0, 0, tmp.width, tmp.height).data;
@@ -342,26 +380,26 @@ export default function ProfilePage() {
         atlasCtx.fillRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
         let loaded = 0;
         const totalToLoad = backUrl ? 2 : 1;
+
         function onAllLoaded() {
           if (!atlasTexture) {
             atlasTexture = new THREE.CanvasTexture(atlasCanvas);
             atlasTexture.flipY = false;
             atlasTexture.colorSpace = THREE.SRGBColorSpace;
-          } else { atlasTexture.needsUpdate = true; }
+          } else {
+            atlasTexture.needsUpdate = true;
+          }
           shirtMesh.material = new THREE.MeshStandardMaterial({
-            map: atlasTexture,
-            roughness: 0.8,
-            side: THREE.DoubleSide,
-            transparent: false,
-            opacity: 1,
-            depthWrite: true,
+            map: atlasTexture, roughness: 0.8, side: THREE.DoubleSide, transparent: false, depthWrite: true
           });
           shirtMesh.material.needsUpdate = true;
         }
+
         const frontImg = new Image(); frontImg.crossOrigin = 'anonymous';
         frontImg.onload = () => { processShirtTexture(atlasCtx, frontImg, FRONT_RECT, true); loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
         frontImg.onerror = () => { loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
         frontImg.src = frontUrl;
+
         if (backUrl) {
           const backImg = new Image(); backImg.crossOrigin = 'anonymous';
           backImg.onload = () => { processShirtTexture(atlasCtx, backImg, BACK_RECT, false); loaded++; if(loaded>=totalToLoad) onAllLoaded(); };
@@ -371,71 +409,63 @@ export default function ProfilePage() {
       }
 
       const loader = new GLTFLoader();
-      loader.load(
-        '/models/humanlatestwithshirt.glb?v=' + Date.now(),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (gltf: any) => {
-          if (cancelled) return;
-          const model = gltf.scene;
-          model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
-          scene.add(model);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model.traverse((obj: any) => {
-            if (!obj.isMesh) return;
-            forceOpaqueMaterial(obj, THREE);
-            const lk = obj.morphTargetDictionary
-              ? Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase())
-              : [];
-            if (!bodyMesh && lk.some((k: string) =>
-              k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
-              bodyMesh = obj;
-              updateBody(saved);
-              if (sceneRef.current) sceneRef.current.updateBody = updateBody;
-            }
-            if (!shirtMesh && (
-              lk.some((k: string) => k.includes('len_long') || k.includes('sleeve_long')) ||
-              obj.name?.toLowerCase().includes('shirt') ||
-              obj.name?.toLowerCase().includes('tshirt')
-            )) {
-              shirtMesh = obj;
-              shirtMesh.visible = false;
-              if (sceneRef.current) sceneRef.current.tryOnShirt = tryOnShirt;
-            }
-          });
-          setBodyReady(true);
-        },
-        undefined,
-        () => {
-          loader.load('/models/humanlatest.glb?v=' + Date.now(),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (gltf: any) => {
-              if (cancelled) return;
-              const model = gltf.scene;
-              model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
-              scene.add(model);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              model.traverse((obj: any) => {
-                forceOpaqueMaterial(obj, THREE);
-                if (!obj.isMesh || !obj.morphTargetDictionary || bodyMesh) return;
-                const lk = Object.keys(obj.morphTargetDictionary).map((k: string) => k.toLowerCase());
-                if (lk.some((k: string) => k.includes('chest') || k.includes('height') || k.includes('body_length'))) {
-                  bodyMesh = obj; updateBody(saved);
-                  if (sceneRef.current) sceneRef.current.updateBody = updateBody;
-                }
-              });
-              setBodyReady(true);
-            },
-            undefined,
-            () => setBodyReady(true)
-          );
+      loader.load('/models/humanlatestwithshirt2.glb?v=1.0', (gltf: any) => {
+        if (cancelled) return;
+        const model = gltf.scene;
+        model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
+        scene.add(model);
+
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(model);
+          activeAction = mixer.clipAction(gltf.animations[0]);
+          activeAction.reset(); activeAction.play(); activeAction.paused = true; activeAction.time = 0; mixer.update(0);
         }
-      );
+
+        // 1. Find all parts first
+        model.traverse((obj: any) => {
+          if (!obj.isMesh) return;
+          forceOpaqueMaterial(obj, THREE);
+          const lk = Object.keys(obj.morphTargetDictionary || {}).map((k: string) => k.toLowerCase());
+          
+          if (!shirtMesh && lk.some((k: string) => k.includes('len_long') || k.includes('chest_wide'))) {
+            shirtMesh = obj;
+            shirtMesh.material.side = THREE.DoubleSide;
+            shirtMesh.visible = false;
+          }
+          else if (!bodyMesh && obj.isSkinnedMesh && obj !== shirtMesh) {
+            bodyMesh = obj;
+            bodyMesh.material.side = THREE.FrontSide;
+            heightBone = getBoneByNameLike(bodyMesh, 'height_ctrl');
+          }
+        });
+
+        // 🟢 2. THE DIRECT SYNC FIX
+        if (bodyMesh) {
+          // Calculate the math needed for the shirt to follow the body
+          initShirtFollow(THREE); 
+          
+          // Force Three.js to calculate the body's position right now
+          bodyMesh.updateMatrixWorld(true); 
+          
+          // ⭐️ APPLY THE MEASUREMENTS AUTOMATICALLY ⭐️
+          // We use 'draft' here because 'draft' is what the sliders are currently showing
+          updateBody(draft); 
+          
+          if (sceneRef.current) {
+            sceneRef.current.updateBody = updateBody;
+            sceneRef.current.tryOnShirt = tryOnShirt;
+          }
+        }
+        
+        setBodyReady(true);
+      });
 
       let animId: ReturnType<typeof requestAnimationFrame> = 0;
       const animate = () => {
         animId = requestAnimationFrame(animate);
         controls.update();
-        setMorph('BODY_LENGTH', 1.5);
+        if (mixer) mixer.update(0);
+        if (bodyMesh) setBodyMorph('BODY_LENGTH', 1.5, bodyMesh);
         renderer.render(scene, camera);
       };
       animate();
@@ -452,14 +482,10 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
       if (sceneRef.current) {
-        cancelAnimationFrame(sceneRef.current.animId);
-        sceneRef.current.renderer.dispose();
-        sceneRef.current.ro.disconnect();
-        sceneRef.current = null;
+        cancelAnimationFrame(sceneRef.current.animId); sceneRef.current.renderer.dispose(); sceneRef.current.ro.disconnect(); sceneRef.current = null;
       }
       setBodyReady(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { sceneRef.current?.updateBody(draft); }, [draft]);
@@ -500,7 +526,7 @@ export default function ProfilePage() {
       await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = photoPreview; });
       const result = await processImage(img, draft.height);
       if (result && result.confidence >= 0.5) {
-        const m: Measurements = { height: result.height, chest: result.chest, shoulder: result.shoulder, bodyLength: draft.bodyLength };
+        const m: Measurements = { height: result.height, chest: result.chest, shoulder: result.shoulder, waist: draft.waist };
         setDraft(m); setDetectMsg('✅ Updated!');
       } else { setDetectMsg('⚠️ Could not detect. Adjust manually.'); }
     } catch { setDetectMsg('❌ Detection failed.'); }
@@ -518,7 +544,14 @@ export default function ProfilePage() {
         if (r?.url) setPhotoPreview(r.url);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await saveAvatar({ userId: user.uid, ...draft, displayName, age: parseInt(age) || 0, gender, photoUrl } as any);
+      await saveAvatar({ 
+        userId: user.uid, 
+        ...draft, 
+        displayName, 
+        age: parseInt(age) || 0, 
+        gender, 
+        photoUrl 
+      } as any);
       setSaved({ ...draft }); setEditingInfo(false);
     } finally { setSavingInfo(false); }
   };
@@ -527,8 +560,14 @@ export default function ProfilePage() {
     if (!user) return;
     setSavingBody(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await saveAvatar({ userId: user.uid, ...draft, displayName, age: parseInt(age) || 0, gender } as any);
-    setSaved({ ...draft });
+    await saveAvatar({ 
+      userId: user.uid, 
+      ...draft, 
+      displayName, 
+      age: parseInt(age) || 0, 
+      gender,
+      photoUrl: photoPreview 
+    } as any);
     setBodySuccess(true); setTimeout(() => setBodySuccess(false), 2500);
     setSavingBody(false);
   };
@@ -637,16 +676,22 @@ export default function ProfilePage() {
                 </div>
               ))}
               <div className="pt-2 border-t" style={{ borderColor: C.peach }}>
-                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Saved Measurements</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {([['Height', saved.height], ['Chest', saved.chest], ['Body L.', saved.bodyLength], ['Shldr', saved.shoulder]] as const).map(([k, v]) => (
-                    <div key={k} className="rounded-lg px-2 py-1 text-center" style={{ backgroundColor: C.peach }}>
-                      <p className="text-[8px] font-black text-gray-400 uppercase">{k}</p>
-                      <p className="text-sm font-black" style={{ color: C.navy }}>{v}<span className="text-[8px] font-medium opacity-60">cm</span></p>
-                    </div>
-                  ))}
+                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Saved Measurements</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* 🟢 SYNCED UI: Maps to 'waist' instead of 'bodyLength' */}
+                    {([
+                      ['Height', saved.height], 
+                      ['Chest', saved.chest], 
+                      ['Waist', saved.waist], 
+                      ['Shldr', saved.shoulder]
+                    ] as const).map(([k, v]) => (
+                      <div key={k} className="rounded-lg px-2 py-1 text-center" style={{ backgroundColor: C.peach }}>
+                        <p className="text-[8px] font-black text-gray-400 uppercase">{k}</p>
+                        <p className="text-sm font-black" style={{ color: C.navy }}>{v}<span className="text-[8px] font-medium opacity-60">cm</span></p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
             </>
           )}
         </div>
@@ -680,9 +725,9 @@ export default function ProfilePage() {
           <div className="px-3 py-2.5 space-y-3">
             {([
               { key: 'height',     label: 'Height',      min: 150, max: 198 },
-              { key: 'chest',      label: 'Chest',       min: 50,  max: 150 },
-              { key: 'shoulder',   label: 'Shoulder',    min: 30,  max: 70  },
-              { key: 'bodyLength', label: 'Body Length', min: 55,  max: 90  },
+              { key: 'chest',      label: 'Chest',       min: 30,  max: 57  },
+              { key: 'waist',      label: 'Waist',       min: 29,  max: 54  },
+              { key: 'shoulder',   label: 'Shoulder',    min: 43,  max: 55  },
             ] as const).map(({ key, label, min, max }) => (
               <div key={key}>
                 <div className="flex items-center justify-between mb-1.5">
