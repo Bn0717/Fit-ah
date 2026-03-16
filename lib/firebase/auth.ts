@@ -3,6 +3,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -17,6 +18,7 @@ export const signIn = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
+    console.error("Email Login Error:", error.code);
     return { user: null, error: error.message };
   }
 };
@@ -27,25 +29,36 @@ export const signUp = async (email: string, password: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
+    console.error("Email Signup Error:", error.code);
     return { user: null, error: error.message };
   }
 };
 
-// Sign in with Google
 export const signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
   try {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
+    // Try popup first (better user experience)
     const result = await signInWithPopup(auth, provider);
     return { user: result.user, error: null };
   } catch (error: any) {
     const errorCode = error.code;
-    if (errorCode === 'auth/popup-closed-by-user' || errorCode === 'auth/cancelled-popup-request') {
+    
+    // If popups are blocked, switch to redirect automatically
+    if (errorCode === 'auth/popup-blocked') {
+      try {
+        await signInWithRedirect(auth, provider);
+        return { user: null, error: null }; // Page will refresh
+      } catch (redirError: any) {
+        return { user: null, error: redirError.message };
+      }
+    }
+
+    if (errorCode === 'auth/popup-closed-by-user') {
       return { user: null, error: 'popup-closed-by-user' };
     }
-    if (errorCode === 'auth/popup-blocked') {
-      return { user: null, error: 'Popup blocked by browser. Please allow popups for this site.' };
-    }
+    
     return { user: null, error: error.message };
   }
 };

@@ -1,3 +1,4 @@
+// components/profile/RPMAvatarCreator.tsx - Not use in latest development, but keep for reference
 'use client';
 
 import { AvatarCreator, AvatarCreatorConfig } from '@readyplayerme/react-avatar-creator';

@@ -11,7 +11,6 @@ import type { ClothingItem, OutfitCombination } from '@/lib/types/clothing';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
 
-// 🟢 1. REPLACED CONSTANTS TO MATCH MODAL EXACTLY
 const BODY_BASE = { height: 150, chest: 30, shoulder: 43, waist: 29, hip: 40, armLen: 56, bodyLen: 60 };
 const BODY_MAX  = { height: 198, chest: 57, shoulder: 55, waist: 54, hip: 62, armLen: 84, bodyLen: 75 };
 type Measurements = { height: number; chest: number; waist: number; shoulder: number };
@@ -19,7 +18,7 @@ type Measurements = { height: number; chest: number; waist: number; shoulder: nu
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const norm = (v: number, b: number, m: number) => clamp01((v - b) / (m - b));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height; // 198/150 = 1.32
+const HEIGHT_SCALE_MAX = BODY_MAX.height / BODY_BASE.height;
 
 const SIZE_DATA: Record<string, { chest: number; shoulder: number; length: number; sleeve: number }> = {
   S:     { chest: 54.5, shoulder: 43, length: 71, sleeve: 22   },
@@ -43,7 +42,7 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
       title: 'Customise Your 3D Model',
       desc: 'Use this page to adjust your 3D model with your real body measurements.',
       note: 'Drag the sliders on the left to update the 3D body live.',
-      color: '#EFF6FF', // Blue theme
+      color: '#EFF6FF',
       border: '#BFDBFE',
     },
     {
@@ -51,7 +50,7 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
       title: 'Virtual Try-On',
       desc: 'Tap any clothing card from your Wardrobe to try it on your 3D body and check fit.',
       note: null,
-      color: '#F0FDF4', // Green theme
+      color: '#F0FDF4',
       border: '#BBF7D0',
     },
     {
@@ -59,7 +58,7 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
       title: 'Add Items First!',
       desc: 'If the Items tab is empty, head to the Wardrobe page to upload shirts first.',
       note: 'Go to Wardrobe → Add Items → come back here!',
-      color: '#FDF4FF', // Purple theme
+      color: '#FDF4FF',
       border: '#E9D5FF',
     },
   ];
@@ -75,7 +74,6 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
         onClick={e => e.stopPropagation()}
         style={{ backgroundColor: 'white' }}
       >
-        {/* Header */}
         <div className="px-6 py-5" style={{ background: `linear-gradient(135deg, ${C.navy} 0%, #1a2f7a 100%)` }}>
           <div className="flex items-center justify-between">
             <div>
@@ -89,7 +87,6 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Steps */}
         <div className="p-5 space-y-3">
           {steps.map((step) => (
             <div
@@ -116,7 +113,6 @@ function ProfileUserGuideModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {/* Footer */}
         <div className="px-5 pb-5">
           <button
             onClick={onClose}
@@ -165,10 +161,17 @@ export default function ProfilePage() {
   const [showSizeDetails, setShowSizeDetails] = useState(false);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
 
+  // ── Mobile Responsive State ─────────────────────────────────────
+  const [mobileTab, setMobileTab] = useState<'3d' | 'profile'>('3d');
+  const [isWardrobeExpanded, setIsWardrobeExpanded] = useState(false);
+  const [showMobileBodySize, setShowMobileBodySize] = useState(false);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
   // ── 3D body canvas (center) ────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<{
     animId: ReturnType<typeof requestAnimationFrame>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderer: any;
     ro: ResizeObserver;
     updateBody: (m: Measurements) => void;
@@ -177,31 +180,27 @@ export default function ProfilePage() {
   } | null>(null);
   const [bodyReady, setBodyReady] = useState(false);
 
-  // Auth guard
   useEffect(() => { if (!authLoading && !user) router.push('/login'); }, [user, authLoading, router]);
 
-  // Load profile + wardrobe
   useEffect(() => {
     if (!user) return;
     setLoadingData(true);
     Promise.all([getAvatar(user.uid), getUserClothingItems(user.uid), getUserOutfits(user.uid)])
       .then(([profile, clothingItems, userOutfits]) => {
         if (profile) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = profile as any;
-          // 🟢 SYNCED FIELDS: Reads exactly what Onboarding saves
           const m: Measurements = {
             height: p.height ?? 170,
             chest: p.chest ?? 45,
             shoulder: p.shoulder ?? 48,
-            waist: p.waist ?? 35, // This is the synced waist field
+            waist: p.waist ?? 35,
           };
           setSaved(m); 
           setDraft(m);
           setDisplayName(p.displayName || ''); 
           setAge(p.age ? String(p.age) : ''); 
           setGender(p.gender || '');
-          
-          // 🟢 PHOTO SYNC: Ensure the photo from onboarding shows up
           if (p.photoUrl) setPhotoPreview(p.photoUrl);
         }
         setItems(clothingItems); 
@@ -219,6 +218,7 @@ export default function ProfilePage() {
       import('three'),
       import('three/addons/loaders/GLTFLoader.js'),
       import('three/addons/controls/OrbitControls.js'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ]).then(([THREE, { GLTFLoader }, { OrbitControls }]: any[]) => {
       if (cancelled || !canvasRef.current) return;
       const canvas = canvasRef.current;
@@ -242,18 +242,25 @@ export default function ProfilePage() {
       const key  = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 2);  scene.add(key);
       const fill = new THREE.DirectionalLight(0xfff4e0, 0.4); fill.position.set(-3, 1, -2); scene.add(fill);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let bodyMesh: any  = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let shirtMesh: any = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let heightBone: any = null;
       let shirtBaseY: number | null = null;
       let shirtBaseZ: number | null = null; 
       let unitsPerCm: number | null = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let mixer: any = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let activeAction: any = null;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function forceOpaqueMaterial(obj: any, THREE: any) {
         if (!obj?.isMesh) return;
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mats.forEach((m: any) => {
           if (!m) return;
           m.transparent = false; m.opacity = 1; m.alphaTest = 0; m.depthWrite = true; m.depthTest = true;
@@ -262,11 +269,14 @@ export default function ProfilePage() {
         });
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function getBoneByNameLike(skinned: any, nameLike: string) {
         const key = nameLike.toLowerCase();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return skinned?.skeleton?.bones?.find((bn: any) => (bn.name || '').toLowerCase().includes(key)) ?? null;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function initShirtFollow(THREE: any) {
         if (!bodyMesh || !shirtMesh) return;
         if (shirtBaseY == null) shirtBaseY = shirtMesh.position.y;
@@ -275,12 +285,14 @@ export default function ProfilePage() {
         unitsPerCm = ((box.max.y - box.min.y) / BODY_BASE.height) * 0.85;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function setBodyMorph(prefix: string, value: number, mesh: any) {
         if (!mesh?.morphTargetDictionary) return;
         const k = (Object.keys(mesh.morphTargetDictionary) as string[]).find(k => k === prefix || k.toLowerCase().startsWith(prefix.toLowerCase()));
         if (k) mesh.morphTargetInfluences[mesh.morphTargetDictionary[k]] = value;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function setShirtMorph(prefix: string, value: number, mesh: any) {
         if (!mesh?.morphTargetDictionary) return;
         const k = Object.keys(mesh.morphTargetDictionary).find(k => k.toLowerCase().startsWith(prefix.toLowerCase()));
@@ -295,7 +307,6 @@ export default function ProfilePage() {
         const tS = norm(b.shoulder, BODY_BASE.shoulder, BODY_MAX.shoulder);
         const tW = norm(b.waist,    BODY_BASE.waist,    BODY_MAX.waist);
 
-        // HEIGHT via bone scaling
         if (heightBone) {
           const sY = 1 + tH * (HEIGHT_SCALE_MAX - 1);
           heightBone.scale.set(sY, sY, sY);
@@ -303,21 +314,12 @@ export default function ProfilePage() {
           if (bodyMesh?.skeleton) bodyMesh.skeleton.update();
         }
 
-        // Shirt stays on shoulders
         if (shirtMesh && shirtBaseY != null && shirtBaseZ != null && unitsPerCm != null) {
-          // 1. Handle Height position
           shirtMesh.position.y = shirtBaseY + (b.height - BODY_BASE.height) * unitsPerCm;
-
-          // 2. Handle Puffiness (Z-Expansion)
           const puffStrength = Math.max(tC * 1.1, tW * 1.4);
           const zScale = 1.2 + (1.9 - 1.2) * clamp01(puffStrength);
-
-          // 3. Handle Frontward Push
-          // Using 0.4 multiplier as seen in your last paste
           const forwardPush = (zScale - 1.2) * 0.22; 
           shirtMesh.position.z = shirtBaseZ + forwardPush;
-
-          // Apply the scale
           shirtMesh.scale.set(1, 1, zScale);
         }
         
@@ -340,11 +342,13 @@ export default function ProfilePage() {
 
       function applySize(size: string, itemData: ClothingItem | null) {
         if (!shirtMesh || !itemData) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const d = itemData.sizeChart.find((s: any) => s.size === size);
         if (!d) return;
         setShirtMorph('CHEST_WIDE', cmToMorph(d.chest, BASE.chest, MAX.chest), shirtMesh);
         setShirtMorph('SHOULDER_WIDE', cmToMorph(d.shoulder, BASE.shoulder, MAX.shoulder), shirtMesh);
         setShirtMorph('LEN_LONG', cmToMorph(d.length, BASE.length, MAX.length), shirtMesh);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setShirtMorph('SLEEVE_LONG', cmToMorph((d as any).sleeve || 25, BASE.sleeve, MAX.sleeve), shirtMesh);
       }
 
@@ -357,8 +361,10 @@ export default function ProfilePage() {
       const atlasCanvas = document.createElement('canvas');
       atlasCanvas.width = atlasCanvas.height = ATLAS_SIZE;
       const atlasCtx = atlasCanvas.getContext('2d', { willReadFrequently: true })!;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let atlasTexture: any = null;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function processShirtTexture(ctx: CanvasRenderingContext2D, img: HTMLImageElement, rect: any, isFront: boolean) {
         const tmp = document.createElement('canvas'); tmp.width = img.width; tmp.height = img.height;
         const tCtx = tmp.getContext('2d')!; tCtx.drawImage(img, 0, 0);
@@ -424,6 +430,7 @@ export default function ProfilePage() {
       }
 
       const loader = new GLTFLoader();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       loader.load('/models/humanlatestwithshirt2.glb?v=1.0', (gltf: any) => {
         if (cancelled) return;
         const model = gltf.scene;
@@ -436,7 +443,7 @@ export default function ProfilePage() {
           activeAction.reset(); activeAction.play(); activeAction.paused = true; activeAction.time = 0; mixer.update(0);
         }
 
-        // 1. Find all parts first
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model.traverse((obj: any) => {
           if (!obj.isMesh) return;
           forceOpaqueMaterial(obj, THREE);
@@ -454,24 +461,15 @@ export default function ProfilePage() {
           }
         });
 
-        // 🟢 2. THE DIRECT SYNC FIX
         if (bodyMesh) {
-          // Calculate the math needed for the shirt to follow the body
           initShirtFollow(THREE); 
-          
-          // Force Three.js to calculate the body's position right now
           bodyMesh.updateMatrixWorld(true); 
-          
-          // ⭐️ APPLY THE MEASUREMENTS AUTOMATICALLY ⭐️
-          // We use 'draft' here because 'draft' is what the sliders are currently showing
           updateBody(draft); 
-          
           if (sceneRef.current) {
             sceneRef.current.updateBody = updateBody;
             sceneRef.current.tryOnShirt = tryOnShirt;
           }
         }
-        
         setBodyReady(true);
       });
 
@@ -487,7 +485,15 @@ export default function ProfilePage() {
 
       const ro = new ResizeObserver(() => {
         const w = canvas.clientWidth, h = canvas.clientHeight;
+        if (!w || !h) return;
         camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
+        
+        // If height is small (wardrobe open), focus higher on the body to "push" it up
+        if (h < 450) {
+          controls.target.set(0, 1.1, 0); // Focus on neck/head
+        } else {
+          controls.target.set(0, 0.75, 0); // Focus on torso
+        }
       });
       ro.observe(canvas);
 
@@ -587,8 +593,193 @@ export default function ProfilePage() {
     setSavingBody(false);
   };
 
+  // ── Mobile Bottom Sheet Touch ─────────────────────────────────
+  const onSheetTouchStart = (e: React.TouchEvent) => setTouchStartY(e.touches[0].clientY);
+  const onSheetTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const touchEndY = e.changedTouches[0].clientY;
+    const delta = touchStartY - touchEndY;
+    if (delta > 40) setIsWardrobeExpanded(true);
+    if (delta < -40) setIsWardrobeExpanded(false);
+    setTouchStartY(null);
+  };
+
   const categories    = ['All', ...Array.from(new Set(items.map(i => i.category).filter(Boolean)))];
   const filteredItems = activeCategory === 'All' ? items : items.filter(i => i.category === activeCategory);
+
+  // ── Render Helpers for Wardrobe Content (Shared between Desktop/Mobile) ──
+  const renderWardrobeInner = () => {
+    if (loadingData) return (
+      <div className="flex justify-center pt-8 pb-8">
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
+      </div>
+    );
+
+    if (activeTab === 'items') {
+      if (filteredItems.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center pt-12 pb-8 px-4 gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl" style={{ backgroundColor: C.peach }}>👕</div>
+            <div className="text-center">
+              <p className="text-xs font-black mb-1" style={{ color: C.navy }}>No items yet</p>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                Go to the Wardrobe page to upload clothing items, then come back here to try them on!
+              </p>
+            </div>
+            <button
+              onClick={() => setShowProfileGuide(true)}
+              className="px-4 py-2 rounded-xl text-[10px] font-black mt-2"
+              style={{ backgroundColor: C.pink, color: C.navy }}>
+              📖 How does this work?
+            </button>
+          </div>
+        );
+      }
+
+      if (selectedItem) {
+        const item = selectedItem;
+        const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
+        const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
+        const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
+        const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
+
+        return (
+          <div className="animate-in fade-in zoom-in-95 duration-200 pb-2">
+            <button onClick={() => setSelectedItem(null)} className="text-[9px] font-black mb-2 flex items-center gap-1 uppercase tracking-widest text-navy">← Back to List</button>
+            <div className="rounded-xl border-2 bg-white overflow-hidden" style={{ borderColor: C.pink }}>
+              <div className="px-3 py-1.5 flex items-center justify-between border-b bg-peach/20" style={{ borderColor: C.peach }}>
+                <h3 className="text-[11px] font-black text-navy truncate max-w-[150px]">{item.name}</h3>
+                <div className="w-4 h-4 rounded-full bg-navy text-white text-[8px] flex items-center justify-center">✓</div>
+              </div>
+
+              <div className="p-2 space-y-2">
+                <div className="flex flex-wrap gap-1">
+                  {item.sizeChart.map(sc => (
+                    <button key={sc.size} onClick={() => setSelectedShirtSize(sc.size)}
+                      className="px-2 py-1 rounded-md font-black text-[10px] border-2 transition-all"
+                      style={{ backgroundColor: selectedShirtSize === sc.size ? C.navy : 'white', color: selectedShirtSize === sc.size ? 'white' : C.navy, borderColor: selectedShirtSize === sc.size ? C.navy : C.peach }}>
+                      {sc.size}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-3 gap-1">
+                  {[{l:'Chest',v:sizeRow.chest},{l:'Len',v:sizeRow.length},{l:'Sh',v:sizeRow.shoulder}].map(m => (
+                    <div key={m.l} className="rounded-lg p-1 text-center border bg-cream/30">
+                      <p className="text-[7px] font-bold text-gray-400 uppercase">{m.l}</p>
+                      <p className="text-[10px] font-black text-navy">{m.v}cm</p>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="grid grid-cols-4 gap-2">
+                  {([
+                    { label: 'Chest',  val: sizeRow.chest    },
+                    { label: 'Length', val: sizeRow.length   },
+                    { label: 'Shldr',  val: sizeRow.shoulder },
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ...((sizeRow as any).sleeve ? [{ label: 'Sleeve', val: (sizeRow as any).sleeve }] : []),
+                  ]).map(({ label, val }) => (
+                    <div key={label} className="rounded-xl p-2 text-center border-2 bg-white" style={{ borderColor: C.peach }}>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{label}</p>
+                      <p className="text-xs font-black" style={{ color: C.navy }}>{val}<span className="text-[9px] opacity-50 ml-0.5">cm</span></p>
+                    </div>
+                  ))}
+                </div>
+
+                {fitLabel && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mt-2"
+                    style={{ backgroundColor: fitColor + '10', borderColor: fitColor + '30' }}>
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
+                    <p className="text-[11px] font-bold" style={{ color: fitColor }}>
+                      {fitLabel} — {((sizeRow.chest - saved.chest)).toFixed(1)}cm ease
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="grid grid-cols-2 gap-3 pb-6">
+          {filteredItems.map(item => {
+            const isDrawerOpen = activePreviewId === item.id;
+            return (
+              <div key={item.id} className="flex flex-col">
+                <button
+                  onClick={() => { setActivePreviewId(isDrawerOpen ? null : item.id); setShowSizeDetails(false); }}
+                  className="w-full rounded-2xl overflow-hidden border-2 transition-all text-left bg-white hover:shadow-md"
+                  style={{ borderColor: isDrawerOpen ? C.navy : C.peach, transform: isDrawerOpen ? 'scale(1.02)' : 'scale(1)' }}>
+                  <div className="aspect-square bg-white relative overflow-hidden flex items-center justify-center p-2">
+                    {sidebarView === '2d' ? (
+                      <img src={item.frontImageUrl || item.imageUrl} alt={item.name} className="w-[90%] h-[90%] object-contain" crossOrigin="anonymous" />
+                    ) : (
+                      <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
+                    )}
+                    {isDrawerOpen && (
+                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm"
+                            style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
+                    )}
+                  </div>
+                  <div className="px-3 py-2 border-t" style={{ backgroundColor: isDrawerOpen ? C.peach : C.cream, borderColor: C.peach }}>
+                    <p className="text-[11px] font-black truncate" style={{ color: C.navy }}>
+                        {item.name} {item.userWearingSize ? `(${item.userWearingSize})` : ''}
+                    </p>
+                    <p className="text-[9px] opacity-60 truncate uppercase tracking-wider font-bold" style={{ color: C.navy }}>{item.brand}</p>
+                  </div>
+                </button>
+
+                {isDrawerOpen && (
+                  <div className="mt-1 rounded-xl border-2 bg-white overflow-hidden animate-in slide-in-from-top-2 duration-200"
+                    style={{ borderColor: C.navy }}>
+                    <button
+                      onClick={() => { setSelectedItem(item); setActivePreviewId(null); setIsWardrobeExpanded(false); }}
+                      className="w-full py-2.5 px-2 flex items-center justify-between group/btn hover:bg-gray-50 transition-colors">
+                      <span className="text-[9px] font-black uppercase tracking-tighter text-left leading-tight" style={{ color: C.navy }}>
+                        Change size or<br/>see details?
+                      </span>
+                      <span className="text-sm font-bold" style={{ color: C.navy }}>→</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    } else {
+      if (outfits.length === 0) return <p className="text-[10px] text-center text-gray-400 pt-8">No outfits yet.</p>;
+      return (
+        <div className="space-y-2 pb-6">
+          {outfits.map(outfit => {
+            const oi = items.filter(i => outfit.itemIds.includes(i.id));
+            return (
+              <button key={outfit.id}
+                onClick={() => { if (oi[0]) { setSelectedItem(prev => prev?.id === oi[0].id ? null : oi[0]); setIsWardrobeExpanded(false); } }}
+                className="w-full rounded-xl overflow-hidden border-2 text-left hover:scale-[1.02] transition-all"
+                style={{ borderColor: C.peach }}>
+                <div className="grid grid-cols-4 gap-0.5 p-1.5" style={{ backgroundColor: C.cream }}>
+                  {oi.slice(0, 4).map((oi2, idx) => (
+                    <div key={idx} className="aspect-square rounded overflow-hidden bg-white flex items-center justify-center">
+                      {(oi2.frontImageUrl || oi2.imageUrl)
+                        ? <img src={oi2.frontImageUrl || oi2.imageUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                        : <span className="text-xs">👕</span>}
+                    </div>
+                  ))}
+                </div>
+                <div className="px-2 py-1.5" style={{ backgroundColor: C.cream }}>
+                  <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{outfit.name}</p>
+                  <p className="text-[8px] opacity-50" style={{ color: C.navy }}>{oi.length} items</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+  };
 
   if (authLoading || !user) {
     return (
@@ -599,10 +790,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex" style={{ height: 'calc(100vh - 64px)', backgroundColor: C.cream }}>
+    <div className="flex md:flex-row flex-col relative w-full" style={{ height: 'calc(100vh - 64px)', backgroundColor: C.cream, overflow: 'hidden' }}>
 
-      {/* ══ LEFT: Profile info & photo ══ */}
-      <div className="w-60 flex-shrink-0 bg-white border-r flex flex-col overflow-y-auto" style={{ borderColor: C.peach }}>
+      {/* ══ DESKTOP LEFT: Profile info & photo ══ */}
+      <div className="hidden md:flex w-60 flex-shrink-0 bg-white border-r flex-col overflow-y-auto" style={{ borderColor: C.peach }}>
         <div className="p-4 border-b" style={{ borderColor: C.peach }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-black uppercase tracking-widest" style={{ color: C.navy }}>Profile</h2>
@@ -693,7 +884,6 @@ export default function ProfilePage() {
               <div className="pt-2 border-t" style={{ borderColor: C.peach }}>
                   <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Saved Measurements</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {/* 🟢 SYNCED UI: Maps to 'waist' instead of 'bodyLength' */}
                     {([
                       ['Height', saved.height], 
                       ['Chest', saved.chest], 
@@ -712,17 +902,10 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ══ CENTER: 3D body canvas + always-visible slider ══ */}
-      <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: '#f8f3ea' }}>
-        <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />
-          <button
-          onClick={() => setShowProfileGuide(true)}
-          className="absolute top-3 right-3 z-30 px-4 py-2 rounded-xl font-black flex items-center gap-2 border-2 shadow-sm hover:shadow-md transition-all bg-white"
-          style={{ borderColor: C.peach, color: C.navy }}
-        >
-          <span className="text-lg">📖</span>
-          <span className="text-[11px] uppercase tracking-wider">User Guide</span>
-        </button>
+      {/* ══ CENTER: 3D body canvas + controls ══ */}
+      <div className="flex-1 relative w-full h-full bg-[#f8f3ea]">
+        <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-[calc(100%-260px)] md:h-full block" />
+        
         {!bodyReady && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10" style={{ backgroundColor: C.cream }}>
             <div className="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
@@ -730,9 +913,23 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div
-          className="absolute top-3 left-3 z-20 rounded-2xl shadow-xl border"
-          style={{ width: '240px', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderColor: C.peach }}>
+        {/* Desktop Controls */}
+        <button onClick={() => setShowProfileGuide(true)} className="hidden md:flex absolute top-3 right-3 z-30 px-4 py-2 rounded-xl font-black items-center gap-2 border-2 shadow-sm hover:shadow-md transition-all bg-white" style={{ borderColor: C.peach, color: C.navy }}>
+          <span className="text-lg">📖</span>
+          <span className="text-[11px] uppercase tracking-wider">User Guide</span>
+        </button>
+
+        {/* Mobile Controls */}
+        <button onClick={() => setShowProfileGuide(true)} className="md:hidden absolute top-3 right-3 z-30 w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-xl shadow-sm border border-[#FFDBD1]">
+          📖
+        </button>
+        <button onClick={() => setShowMobileBodySize(p => !p)} className="md:hidden absolute top-3 left-3 z-30 px-3 py-2 rounded-xl font-black flex items-center gap-1.5 shadow-sm border bg-white/90 backdrop-blur-md" style={{ borderColor: C.peach, color: C.navy }}>
+          <span className="text-lg">📐</span>
+          <span className="text-[11px] uppercase tracking-wider">Body Size</span>
+        </button>
+
+        {/* Desktop Body Size Slider Panel */}
+        <div className="hidden md:block absolute top-3 left-3 z-20 rounded-2xl shadow-xl border bg-white/95 backdrop-blur-md" style={{ width: '240px', borderColor: C.peach }}>
           <div className="px-3 pt-2.5 pb-1.5 border-b" style={{ borderColor: C.peach }}>
             <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: C.navy }}>📐 Body Size</p>
             <p className="text-[9px] text-gray-400">Drag sliders — updates model live</p>
@@ -747,42 +944,68 @@ export default function ProfilePage() {
               <div key={key}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</span>
-                  <span className="text-[11px] font-black tabular-nums px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: C.peach, color: C.navy, minWidth: '52px', textAlign: 'center' }}>
+                  <span className="text-[11px] font-black tabular-nums px-2 py-0.5 rounded-md text-center min-w-[52px]" style={{ backgroundColor: C.peach, color: C.navy }}>
                     {draft[key]}<span className="text-[9px] font-normal opacity-60"> cm</span>
                   </span>
                 </div>
-                <input type="range" min={min} max={max} step={0.5}
-                  value={draft[key]}
-                  onChange={e => setDraft(p => ({ ...p, [key]: Number(e.target.value) }))}
-                  className="w-full cursor-pointer"
-                  style={{ accentColor: C.navy, height: '4px' }}
-                />
+                <input type="range" min={min} max={max} step={0.5} value={draft[key]} onChange={e => setDraft(p => ({ ...p, [key]: Number(e.target.value) }))} className="w-full cursor-pointer h-1" style={{ accentColor: C.navy }} />
               </div>
             ))}
           </div>
           <div className="px-3 pb-3">
-            <button onClick={handleSaveBody} disabled={savingBody}
-              className="w-full py-2 rounded-xl font-bold text-xs text-white disabled:opacity-50 hover:opacity-90 transition-all"
-              style={{ backgroundColor: C.navy }}>
+            <button onClick={handleSaveBody} disabled={savingBody} className="w-full py-2 rounded-xl font-bold text-xs text-white disabled:opacity-50 hover:opacity-90 transition-all" style={{ backgroundColor: C.navy }}>
               {savingBody ? 'Saving...' : '💾 Save Permanently'}
             </button>
             {bodySuccess && <p className="text-center text-[9px] font-bold text-green-600 mt-1.5">✅ Saved!</p>}
           </div>
         </div>
 
+        {/* Mobile Body Size Dropdown */}
+        {showMobileBodySize && (
+          <div className="md:hidden absolute top-14 left-3 z-30 w-[260px] rounded-2xl shadow-xl border p-3 bg-white/95 backdrop-blur-md" style={{ borderColor: C.peach }}>
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Live Adjust</p>
+              <button onClick={() => setShowMobileBodySize(false)} className="text-gray-400 text-lg font-bold">×</button>
+            </div>
+            <div className="space-y-4 mb-4">
+              {([
+                { key: 'height',     label: 'Height',      min: 150, max: 198 },
+                { key: 'chest',      label: 'Chest',       min: 30,  max: 57  },
+                { key: 'waist',      label: 'Waist',       min: 29,  max: 54  },
+                { key: 'shoulder',   label: 'Shoulder',    min: 43,  max: 55  },
+              ] as const).map(({ key, label, min, max }) => (
+                <div key={key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</span>
+                    <span className="text-[11px] font-black px-2 py-0.5 rounded-md" style={{ backgroundColor: C.peach, color: C.navy }}>
+                      {draft[key]}<span className="opacity-60 font-normal text-[9px]"> cm</span>
+                    </span>
+                  </div>
+                  <input type="range" min={min} max={max} step={0.5} value={draft[key]} onChange={e => setDraft(p => ({ ...p, [key]: Number(e.target.value) }))} className="w-full h-1 cursor-pointer" style={{ accentColor: C.navy }} />
+                </div>
+              ))}
+            </div>
+            <button onClick={handleSaveBody} disabled={savingBody} className="w-full py-2.5 rounded-xl font-bold text-xs text-white shadow-md active:scale-95 transition-transform" style={{ backgroundColor: C.navy }}>
+              {savingBody ? 'Saving...' : '💾 Save Permanently'}
+            </button>
+            {bodySuccess && <p className="text-center text-[10px] font-bold text-green-600 mt-2">✅ Saved successfully!</p>}
+          </div>
+        )}
+
         {bodyReady && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg text-[11px] font-medium pointer-events-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.75)', color: C.navy, marginLeft: '60px' }}>
+          <div className="absolute top-16 md:top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg text-[11px] font-medium pointer-events-none md:ml-[60px]"
+            style={{ backgroundColor: 'rgba(255,255,255,0.75)', color: C.navy }}>
             🖱 Drag to rotate
           </div>
         )}
 
         {selectedItem && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-xl shadow-lg"
+          <div className={`absolute left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-xl shadow-lg z-30 transition-all duration-300
+               md:bottom-3 md:top-auto
+               ${mobileTab === '3d' ? (isWardrobeExpanded ? 'bottom-[calc(72%+16px)]' : 'bottom-[216px]') : '-bottom-20'}`}
                style={{ backgroundColor: C.navy, color: 'white' }}>
             <span className="text-xs font-bold">👕 Trying on:</span>
-            <span className="text-xs font-black">{selectedItem.name}</span>
+            <span className="text-xs font-black truncate max-w-[120px]">{selectedItem.name}</span>
             <button onClick={() => setSelectedItem(null)}
               className="ml-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px]"
               style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>✕</button>
@@ -790,40 +1013,26 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* ══ RIGHT: Wardrobe sidebar ══ */}
-      <div className="w-96 flex-shrink-0 bg-white border-l flex flex-col overflow-hidden" style={{ borderColor: C.peach }}>
-
-        {/* Header: tabs + guide button */}
+      {/* ══ DESKTOP RIGHT: Wardrobe sidebar ══ */}
+      <div className="hidden md:flex w-96 flex-shrink-0 bg-white border-l flex-col overflow-hidden" style={{ borderColor: C.peach }}>
         <div className="px-3 pt-3 pb-2 border-b flex-shrink-0" style={{ borderColor: C.peach }}>
-          {/* Top row: ? guide button + Items/Outfits tabs */}
           <div className="flex items-center gap-2">
-            {/* User Guide button (Moved to the left and styled like Items page) */}
-            {/* Tabs (Now on the right) */}
             <div className="flex gap-1.5 flex-1">
               {(['items', 'outfits'] as const).map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className="flex-1 py-2 rounded-xl font-bold text-[11px] transition-all"
-                  style={{ 
-                    backgroundColor: activeTab === tab ? C.navy : C.cream, 
-                    color: activeTab === tab ? 'white' : C.navy 
-                  }}>
+                  style={{ backgroundColor: activeTab === tab ? C.navy : C.cream, color: activeTab === tab ? 'white' : C.navy }}>
                   {tab === 'items' ? `Items` : `Outfits`}
                 </button>
               ))}
             </div>
           </div>
-
-          {/* 2D / 3D toggle */}
           <div className="flex justify-end mt-2">
             <div className="flex gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: C.peach }}>
               {(['2d', '3d'] as const).map(v => (
                 <button key={v} onClick={() => setSidebarView(v)}
                   className="px-3 py-1 rounded-md font-black text-[9px] uppercase tracking-widest transition-all"
-                  style={{
-                    backgroundColor: sidebarView === v ? C.navy : 'transparent',
-                    color:           sidebarView === v ? 'white' : C.navy,
-                    letterSpacing:   '0.08em',
-                  }}>
+                  style={{ backgroundColor: sidebarView === v ? C.navy : 'transparent', color: sidebarView === v ? 'white' : C.navy, letterSpacing: '0.08em' }}>
                   {v === '2d' ? '🖼 2D' : '📦 3D'}
                 </button>
               ))}
@@ -831,8 +1040,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Category pills */}
-        {activeTab === 'items' && (
+        {activeTab === 'items' && !selectedItem && (
           <div className="px-2.5 py-2 flex flex-wrap gap-1 border-b flex-shrink-0" style={{ borderColor: C.peach }}>
             {categories.map(cat => (
               <button key={cat} onClick={() => setActiveCategory(cat)}
@@ -843,189 +1051,163 @@ export default function ProfilePage() {
             ))}
           </div>
         )}
-
-        {/* Scrollable grid */}
+        
         <div className="flex-1 overflow-y-auto p-2.5">
-          {loadingData ? (
-            <div className="flex justify-center pt-8">
-              <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
+          {renderWardrobeInner()}
+        </div>
+      </div>
+
+      {/* ══ MOBILE WARDROBE BOTTOM SHEET ══ */}
+      {mobileTab === '3d' && isWardrobeExpanded && (
+        <div className="md:hidden absolute inset-0 z-[35] bg-black/20 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsWardrobeExpanded(false)} />
+      )}
+      
+      <div
+        className="md:hidden absolute bottom-[60px] left-0 right-0 bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] transition-all duration-300 z-40 flex flex-col overflow-hidden border-t"
+        style={{
+           height: isWardrobeExpanded ? '58%' : '200px',
+           borderColor: C.peach,
+           transform: mobileTab === '3d' ? 'translateY(0)' : 'translateY(100%)',
+           visibility: mobileTab === '3d' ? 'visible' : 'hidden'
+        }}
+      >
+        <div className="px-4 pt-3 pb-3 flex-shrink-0 bg-white z-10 cursor-pointer" onTouchStart={onSheetTouchStart} onTouchEnd={onSheetTouchEnd} onClick={() => setIsWardrobeExpanded(!isWardrobeExpanded)}>
+          <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
+          <div className="flex items-center justify-between">
+            <h3 className="text-[14px] font-black uppercase tracking-widest" style={{ color: C.navy }}>
+              My Wardrobe <span className="text-gray-400">({items.length})</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{isWardrobeExpanded ? 'Collapse ▼' : 'Expand ▲'}</span>
             </div>
-          ) : activeTab === 'items' ? (
-          filteredItems.length === 0
-            ? (
-              <div className="flex flex-col items-center justify-center pt-12 px-4 gap-4">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
-                  style={{ backgroundColor: C.peach }}>👕</div>
-                <div className="text-center">
-                  <p className="text-xs font-black mb-1" style={{ color: C.navy }}>No items yet</p>
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Go to the Wardrobe page to upload clothing items, then come back here to try them on!
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowProfileGuide(true)}
-                  className="px-4 py-2 rounded-xl text-[10px] font-black"
-                  style={{ backgroundColor: C.pink, color: C.navy }}>
-                  📖 How does this work?
-                </button>
+          </div>
+        </div>
+
+        {activeTab === 'items' && !selectedItem && (
+          <div className="px-3 pb-3 flex overflow-x-auto gap-2 flex-shrink-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {categories.map(cat => (
+              <button key={cat} onClick={() => setActiveCategory(cat)}
+                className="px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all"
+                style={{ backgroundColor: activeCategory === cat ? C.pink : C.peach, color: C.navy }}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-3 pb-4">
+          {renderWardrobeInner()}
+        </div>
+      </div>
+
+      {/* ══ MOBILE PROFILE OVERLAY ══ */}
+      <div
+        className="md:hidden absolute top-0 left-0 w-full bg-[#F8F3EA] z-[50] transition-transform duration-300 overflow-y-auto"
+        style={{ height: 'calc(100% - 60px)', transform: mobileTab === 'profile' ? 'translateX(0)' : 'translateX(-100%)' }}
+      >
+        <div className="p-5 flex flex-col min-h-full">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-sm font-black uppercase tracking-widest" style={{ color: C.navy }}>My Profile</h2>
+            <button onClick={() => setEditingInfo(!editingInfo)}
+              className="text-[10px] font-bold px-3 py-1.5 rounded-full transition-all shadow-sm"
+              style={{ backgroundColor: editingInfo ? C.navy : 'white', color: editingInfo ? 'white' : C.navy }}>
+              {editingInfo ? 'Cancel' : '✏️ Edit Profile'}
+            </button>
+          </div>
+
+          <div className="flex items-start gap-4 mb-6">
+             <div className="relative w-24 h-24 rounded-2xl flex-shrink-0 border-2 shadow-sm overflow-hidden" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
+                {photoPreview
+                  ? <img src={photoPreview} alt="profile" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                  : <div className="w-full h-full flex flex-col items-center justify-center text-4xl">🧍</div>
+                }
+                <label className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer shadow-md text-sm bg-[#0B1957] text-white">
+                  📷<input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                </label>
+             </div>
+             
+             {editingInfo ? (
+               <div className="flex-1 space-y-2">
+                 <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Name" className="w-full px-3 py-2 rounded-xl text-xs font-bold border outline-none" style={{ borderColor: C.peach, color: C.navy }} />
+                 <div className="flex gap-2">
+                   <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="Age" className="w-1/3 px-3 py-2 rounded-xl text-xs font-bold border outline-none" style={{ borderColor: C.peach, color: C.navy }} />
+                   <select value={gender} onChange={e => setGender(e.target.value)} className="w-2/3 px-2 py-2 rounded-xl text-xs font-bold border outline-none" style={{ borderColor: C.peach, color: C.navy }}>
+                     <option value="">Gender...</option>
+                     <option value="male">Male</option>
+                     <option value="female">Female</option>
+                     <option value="other">Other</option>
+                   </select>
+                 </div>
+               </div>
+             ) : (
+               <div className="flex-1 flex flex-col justify-center h-24 gap-1.5 overflow-hidden">
+                 <p className="text-[22px] font-black leading-tight truncate" style={{ color: C.navy }}>{displayName || '—'}</p>
+                 <div className="flex items-center gap-2">
+                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white px-2 py-1 rounded border shadow-sm">{age || '—'} yrs</span>
+                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white px-2 py-1 rounded border shadow-sm">{gender || '—'}</span>
+                 </div>
+               </div>
+             )}
+          </div>
+
+          {photoPreview && !editingInfo && (
+             <div className="mb-6">
+               <button onClick={handleAutoDetect} disabled={detecting} className="w-full py-3.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50" style={{ backgroundColor: C.pink, color: C.navy }}>
+                 {detecting ? <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} /> : '🎯'}
+                 {detecting ? 'Scanning...' : 'Re-scan body measurements'}
+               </button>
+               {detectMsg && <p className="text-[10px] text-center font-bold mt-2" style={{ color: C.navy }}>{detectMsg}</p>}
+             </div>
+          )}
+
+          {!editingInfo && (
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-[#FFDBD1] mb-auto">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Saved Measurements</h3>
+              <div className="grid grid-cols-4 gap-2">
+                 {([['Height', saved.height], ['Chest', saved.chest], ['Waist', saved.waist], ['Shldr', saved.shoulder]] as const).map(([k,v]) => (
+                   <div key={k} className="rounded-xl p-2 text-center" style={{ backgroundColor: '#F8F3EA' }}>
+                      <p className="text-[9px] font-black text-gray-400 uppercase">{k}</p>
+                      <p className="text-[13px] font-black mt-1" style={{ color: C.navy }}>{v}<span className="text-[9px] font-medium opacity-60 ml-0.5">cm</span></p>
+                   </div>
+                 ))}
               </div>
-            )
-            : <div className="space-y-4">
-                {!selectedItem && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {filteredItems.map(item => {
-                      const isDrawerOpen = activePreviewId === item.id;
-                      return (
-                        <div key={item.id} className="flex flex-col">
-                          <button
-                            onClick={() => { setActivePreviewId(isDrawerOpen ? null : item.id); setShowSizeDetails(false); }}
-                            className="w-full rounded-2xl overflow-hidden border-2 transition-all text-left bg-white hover:shadow-md"
-                            style={{ borderColor: isDrawerOpen ? C.navy : C.peach, transform: isDrawerOpen ? 'scale(1.02)' : 'scale(1)' }}>
-                            <div className="aspect-square bg-white relative overflow-hidden flex items-center justify-center p-2">
-                              {sidebarView === '2d' ? (
-                                <img src={item.frontImageUrl || item.imageUrl} alt={item.name} className="w-[90%] h-[90%] object-contain" crossOrigin="anonymous" />
-                              ) : (
-                                <ShirtMiniCanvas itemId={item.id} imageUrl={item.frontImageUrl || item.imageUrl || null} />
-                              )}
-                              {isDrawerOpen && (
-                                <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm"
-                                     style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
-                              )}
-                            </div>
-                            <div className="px-3 py-2 border-t" style={{ backgroundColor: isDrawerOpen ? C.peach : C.cream, borderColor: C.peach }}>
-                              <p className="text-[11px] font-black truncate" style={{ color: C.navy }}>
-                                  {item.name} {item.userWearingSize ? `(${item.userWearingSize})` : ''}
-                              </p>
-                              <p className="text-[9px] opacity-60 truncate uppercase tracking-wider font-bold" style={{ color: C.navy }}>{item.brand}</p>
-                            </div>
-                          </button>
+            </div>
+          )}
 
-                          {isDrawerOpen && (
-                            <div className="mt-1 rounded-xl border-2 bg-white overflow-hidden animate-in slide-in-from-top-2 duration-200"
-                              style={{ borderColor: C.navy }}>
-                              <button
-                                onClick={() => { setSelectedItem(item); setActivePreviewId(null); }}
-                                className="w-full py-2.5 px-2 flex items-center justify-between group/btn hover:bg-gray-50 transition-colors">
-                                <span className="text-[9px] font-black uppercase tracking-tighter text-left leading-tight" style={{ color: C.navy }}>
-                                  Change size or<br/>see details?
-                                </span>
-                                <span className="text-sm font-bold" style={{ color: C.navy }}>→</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {selectedItem && (() => {
-                  const item = selectedItem;
-                  const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
-                  const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
-                  const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
-                  const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
-
-                  return (
-                    <div className="animate-in fade-in zoom-in-95 duration-200">
-                      <button onClick={() => setSelectedItem(null)} className="text-[10px] font-black hover:opacity-70 mb-3 flex items-center gap-1 px-2 uppercase tracking-widest" style={{ color: C.navy }}>
-                        ← Back to list
-                      </button>
-                      <div className="rounded-2xl overflow-hidden border-2 shadow-lg bg-white" style={{ borderColor: C.pink }}>
-                        <div className="px-4 py-3 flex items-center justify-between border-b" style={{ backgroundColor: C.peach + '40', borderColor: C.peach }}>
-                          <div>
-                            <p className="text-[9px] font-black opacity-60 uppercase tracking-widest mb-0.5" style={{ color: C.navy }}>{item.brand}</p>
-                            <h3 className="text-lg font-black leading-tight" style={{ color: C.navy }}>
-                              {item.name}
-                              {item.userWearingSize && <span className="text-sm opacity-50 font-bold ml-1.5">({item.userWearingSize})</span>}
-                            </h3>
-                          </div>
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-sm" style={{ backgroundColor: C.navy, color: 'white' }}>✓</div>
-                        </div>
-
-                        <div className="p-4 space-y-4">
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Select Size</p>
-                            <div className="flex flex-wrap gap-2">
-                              {item.sizeChart.map(sc => (
-                                <button key={sc.size}
-                                  onClick={() => setSelectedShirtSize(sc.size)}
-                                  className="px-4 py-1.5 rounded-lg font-black text-xs transition-all border-2"
-                                  style={{
-                                    backgroundColor: selectedShirtSize === sc.size ? C.navy : 'white',
-                                    color:           selectedShirtSize === sc.size ? 'white' : C.navy,
-                                    borderColor:     selectedShirtSize === sc.size ? C.navy : C.peach,
-                                  }}>
-                                  {sc.size}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-4 gap-2">
-                            {([
-                              { label: 'Chest',  val: sizeRow.chest    },
-                              { label: 'Length', val: sizeRow.length   },
-                              { label: 'Shldr',  val: sizeRow.shoulder },
-                              ...((sizeRow as any).sleeve ? [{ label: 'Sleeve', val: (sizeRow as any).sleeve }] : []),
-                            ]).map(({ label, val }) => (
-                              <div key={label} className="rounded-xl p-2 text-center border-2 bg-white" style={{ borderColor: C.peach }}>
-                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{label}</p>
-                                <p className="text-xs font-black" style={{ color: C.navy }}>{val}<span className="text-[9px] opacity-50 ml-0.5">cm</span></p>
-                              </div>
-                            ))}
-                          </div>
-
-                          {fitLabel && (
-                            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mt-2"
-                              style={{ backgroundColor: fitColor + '10', borderColor: fitColor + '30' }}>
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
-                              <p className="text-[11px] font-bold" style={{ color: fitColor }}>
-                                {fitLabel} — {((sizeRow!.chest - saved.chest)).toFixed(1)}cm ease
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
+          {!editingInfo ? (
+            <button onClick={() => setShowProfileGuide(true)} className="mt-8 w-full py-3.5 rounded-xl text-[11px] uppercase tracking-widest font-black shadow-sm bg-white border" style={{ borderColor: C.peach, color: C.navy }}>
+              📖 How does this work?
+            </button>
           ) : (
-            outfits.length === 0
-              ? <p className="text-[10px] text-center text-gray-400 pt-8">No outfits yet.</p>
-              : <div className="space-y-2">
-                  {outfits.map(outfit => {
-                    const oi = items.filter(i => outfit.itemIds.includes(i.id));
-                    return (
-                      <button key={outfit.id}
-                        onClick={() => oi[0] && setSelectedItem(prev => prev?.id === oi[0].id ? null : oi[0])}
-                        className="w-full rounded-xl overflow-hidden border-2 text-left hover:scale-[1.02] transition-all"
-                        style={{ borderColor: C.peach }}>
-                        <div className="grid grid-cols-4 gap-0.5 p-1.5" style={{ backgroundColor: C.cream }}>
-                          {oi.slice(0, 4).map((oi2, idx) => (
-                            <div key={idx} className="aspect-square rounded overflow-hidden bg-white flex items-center justify-center">
-                              {(oi2.frontImageUrl || oi2.imageUrl)
-                                ? <img src={oi2.frontImageUrl || oi2.imageUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                : <span className="text-xs">👕</span>}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="px-2 py-1.5" style={{ backgroundColor: C.cream }}>
-                          <p className="text-[9px] font-bold truncate" style={{ color: C.navy }}>{outfit.name}</p>
-                          <p className="text-[8px] opacity-50" style={{ color: C.navy }}>{oi.length} items</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+            <button onClick={handleSaveProfile} disabled={savingInfo} className="mt-auto w-full py-3.5 rounded-xl text-sm font-black text-white shadow-md active:scale-95 transition-transform" style={{ backgroundColor: C.navy }}>
+              {savingInfo ? 'Saving...' : '💾 Save Profile'}
+            </button>
           )}
         </div>
       </div>
 
+      {/* ══ MOBILE BOTTOM TAB BAR ══ */}
+      <div className="md:hidden absolute bottom-0 left-0 w-full h-[60px] bg-white border-t flex z-[60] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]" style={{ borderColor: C.peach }}>
+        <button
+          onClick={() => setMobileTab('profile')}
+          className="flex-1 flex flex-col items-center justify-center gap-1 transition-all"
+          style={{ borderTop: `2.5px solid ${mobileTab === 'profile' ? C.navy : 'transparent'}`, color: mobileTab === 'profile' ? C.navy : '#9CA3AF' }}
+        >
+          <span className="text-[22px] leading-none mb-0.5">👤</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Profile</span>
+        </button>
+        <button
+          onClick={() => { setMobileTab('3d'); setIsWardrobeExpanded(false); }}
+          className="flex-1 flex flex-col items-center justify-center gap-1 transition-all"
+          style={{ borderTop: `2.5px solid ${mobileTab === '3d' ? C.navy : 'transparent'}`, color: mobileTab === '3d' ? C.navy : '#9CA3AF' }}
+        >
+          <span className="text-[22px] leading-none mb-0.5">🧍</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">3D View</span>
+        </button>
+      </div>
+
       {/* ══ Profile User Guide Modal ══ */}
       {showProfileGuide && <ProfileUserGuideModal onClose={() => setShowProfileGuide(false)} />}
-
     </div>
   );
 }
@@ -1185,5 +1367,5 @@ function ShirtMiniCanvas({ itemId, imageUrl }: { itemId: string; imageUrl: strin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
-  return <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />;
 }

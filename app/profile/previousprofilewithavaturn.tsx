@@ -1,4 +1,4 @@
-// app/profile/page.tsx - FIXED
+// app/profile/page.tsx - Previous version with Avaturn integration and measurement auto-detection (Not use in latest development)
 'use client';
 
 import { useState, useEffect } from 'react';

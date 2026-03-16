@@ -8,7 +8,7 @@ import Navbar from "@/components/ui/Navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Fit-ah - AI-Powered Virtual Try-On",
+  title: "Fit-Ah - AI-Powered Virtual Try-On",
   description: "Never buy the wrong size again with AI-powered size recommendations and virtual try-on",
 };
 

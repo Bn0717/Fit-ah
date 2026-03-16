@@ -1,4 +1,4 @@
-// app/style/page.tsx  (or wherever you route it)
+// app/style/page.tsx
 // Weather-aware Gemini outfit suggestions for FitCheck
 'use client';
 
@@ -20,34 +20,31 @@ const C = {
 };
 
 // ─── Preset wardrobe items (bottom / shoes / accessories) ───────────────────
-// These are the ONLY options Gemini may pick from — prevents hallucination.
 const PRESET_BOTTOMS = [
-  { id: 'b1', label: 'Baggy Wide-Leg Jeans',  emoji: '🖤', tags: ['formal','rain','cold'] },
+  { id: 'b1', label: 'Baggy Wide-Leg Jeans',       emoji: '🖤', tags: ['formal','rain','cold'] },
   { id: 'b2', label: 'Casual Sweatpants',           emoji: '👖', tags: ['casual','cold'] },
-  { id: 'b3', label: 'Baggy Cargo Pants',          emoji: '🟤', tags: ['casual','warm','smart'] },
+  { id: 'b3', label: 'Baggy Cargo Pants',           emoji: '🟤', tags: ['casual','warm','smart'] },
   { id: 'b4', label: 'Casual Shorts',               emoji: '🩳', tags: ['hot','casual'] },
-  { id: 'b5', label: 'Pleated Wide Leg Trousers',             emoji: '🩶', tags: ['cold','casual','cosy'] },
-  { id: 'b6', label: 'Wide Leg Sweatpants',           emoji: '🫙', tags: ['casual','rain','outdoor'] },
-  { id: 'b7', label: 'Black Slacks',        emoji: '🔷', tags: ['smart','casual','warm'] },
+  { id: 'b5', label: 'Pleated Wide Leg Trousers',   emoji: '🩶', tags: ['cold','casual','cosy'] },
+  { id: 'b6', label: 'Wide Leg Sweatpants',         emoji: '🫙', tags: ['casual','rain','outdoor'] },
+  { id: 'b7', label: 'Black Slacks',                emoji: '🔷', tags: ['smart','casual','warm'] },
 ];
 
 const PRESET_SHOES = [
   { id: 's1', label: 'White & Light Grey Chunky Sneakers', emoji: '👟', tags: ['casual','warm','smart'] },
-  { id: 's2', label: 'Classic Low-Top Sneakers',          emoji: '👟', tags: ['casual','rain','dark'] },
-  { id: 's3', label: 'Casual Slip-on Loafers',   emoji: '👞', tags: ['smart','formal'] },
-  { id: 's4', label: 'Slip-on Clog',   emoji: '🥿', tags: ['casual','streetwear'] },
-  { id: 's5', label: 'Winter Boots',     emoji: '🥾', tags: ['rain','cold','smart'] },
+  { id: 's2', label: 'Classic Low-Top Sneakers',           emoji: '👟', tags: ['casual','rain','dark'] },
+  { id: 's3', label: 'Casual Slip-on Loafers',             emoji: '👞', tags: ['smart','formal'] },
+  { id: 's4', label: 'Slip-on Clog',                       emoji: '🥿', tags: ['casual','streetwear'] },
+  { id: 's5', label: 'Winter Boots',                       emoji: '🥾', tags: ['rain','cold','smart'] },
 ];
-
-
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface WeatherData {
   tempC:     number;
-  condition: string;  // e.g. 'Clear', 'Rain', 'Clouds', 'Drizzle', 'Thunderstorm'
+  condition: string;
   humidity:  number;
   city:      string;
-  icon:      string;  // OpenWeatherMap icon code
+  icon:      string;
 }
 
 interface FitSummary {
@@ -66,7 +63,7 @@ interface OutfitSuggestion {
   accessory: string;
   reason:    string;
   comfort:   string;
-  vibe:      string;  // e.g. "Smart Casual", "Streetwear", "Minimalist"
+  vibe:      string;
   fit_logic: string;
 }
 
@@ -86,15 +83,6 @@ function getConditionMeta(condition: string) {
   return CONDITION_META[condition] ?? { label: condition, emoji: '🌤️', bg: C.cream };
 }
 
-function getFitTechnicalExplanation(fit: FitSummary) {
-  const ease = fit.easeChestCm;
-  if (ease < 0) return "This shirt is currently smaller than your body measurements. Expect significant tension across the chest and restricted arm movement. Style this with high-waisted, structured bottoms to draw attention away from the pull-lines.";
-  if (ease < 4) return "This is a 'Skinny' or 'Muscle' fit. There is very little air gap (ease) between the fabric and your skin. This is ideal for sharp, modern looks but can be warm in high humidity.";
-  if (ease >= 4 && ease < 8) return "This is a 'Slim-Regular' fit. This is the gold standard for tailored casual wear, providing enough room for comfort while maintaining your body's natural silhouette.";
-  if (ease >= 8 && ease < 12) return "This is a 'Relaxed' fit. This provides significant airflow, making it perfect for the current humidity. It creates a casual, effortless drape.";
-  return "This is an 'Oversized' silhouette. The shirt will hang off the shoulders and chest. To avoid looking swamped, balance this with 'Baggy' bottoms for a full streetwear look or 'Black Slacks' for a high-fashion contrast.";
-}
-
 function getTempLabel(tempC: number): { label: string; color: string } {
   if (tempC >= 33) return { label: 'Very Hot',  color: '#ef4444' };
   if (tempC >= 28) return { label: 'Hot',        color: '#f97316' };
@@ -105,11 +93,7 @@ function getTempLabel(tempC: number): { label: string; color: string } {
 }
 
 // ─── Gemini prompt builder ───────────────────────────────────────────────────
-function buildGeminiPrompt(
-  weather:  WeatherData,
-  fit:      FitSummary | null,
-  shirtUrl: string | null,
-): string {
+function buildGeminiPrompt(weather: WeatherData, fit: FitSummary | null, shirtUrl: string | null): string {
   const fitBlock = fit
     ? `SHIRT MEASUREMENTS & FIT:
 - Shirt Name: "${fit.shirtName}" (${fit.shirtBrand})
@@ -273,7 +257,7 @@ export default function StyleSuggestionsPage() {
     const easeChest = sizeRow.chest - avatar.chest;
     const easeWaist = sizeRow.waist != null
       ? sizeRow.waist - avatar.waist
-      : easeChest * 0.6;  // rough estimate
+      : easeChest * 0.6;
 
     const ratio = sizeRow.chest / avatar.chest;
     const overall: FitSummary['overall'] =
@@ -306,7 +290,6 @@ export default function StyleSuggestionsPage() {
       const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
       if (!key) throw new Error('Missing NEXT_PUBLIC_GEMINI_API_KEY in .env.local');
 
-      // Build multimodal parts — include shirt image if available
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const parts: any[] = [{ text: prompt }];
 
@@ -340,7 +323,7 @@ export default function StyleSuggestionsPage() {
       const data = await res.json();
       
       if (!res.ok) {
-      throw new Error(data?.error?.message || `Gemini error ${res.status}`);
+        throw new Error(data?.error?.message || `Gemini error ${res.status}`);
       }
 
       const raw  = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -369,50 +352,50 @@ export default function StyleSuggestionsPage() {
     <div className="min-h-screen" style={{ backgroundColor: C.cream, fontFamily: "'Inter', sans-serif" }}>
 
       {/* ── TOP HEADER ─────────────────────────────────────────── */}
-      <div className="px-6 py-5 border-b" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      <div className="px-4 md:px-6 py-4 md:py-5 border-b" style={{ borderColor: C.peach, backgroundColor: 'white' }}>
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black" style={{ color: C.navy }}>
+            <h1 className="text-xl md:text-2xl font-black" style={{ color: C.navy }}>
               🌤️ Style Suggestions
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5">
               Weather-aware outfits built around your wardrobe & fit
             </p>
           </div>
           {weather && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl border"
+            <div className="flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border flex-shrink-0"
               style={{ backgroundColor: condMeta?.bg ?? C.cream, borderColor: C.peach }}>
-              <span className="text-xl">{condMeta?.emoji}</span>
+              <span className="text-lg md:text-xl">{condMeta?.emoji}</span>
               <div>
                 <p className="text-xs font-black" style={{ color: C.navy }}>{weather.city}</p>
-                <p className="text-xs text-gray-500">{weather.tempC}°C · {condMeta?.label}</p>
+                <p className="text-[10px] md:text-xs text-gray-500">{weather.tempC}°C · {condMeta?.label}</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
 
         {/* ══════════════════════════════════════════════════════
             STEP 1 — LOCATION + WEATHER
         ══════════════════════════════════════════════════════ */}
         <section className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: C.peach }}>
-          <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
+          <div className="px-4 md:px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
             <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: C.navy }}>1</span>
             <h2 className="text-sm font-black uppercase tracking-widest" style={{ color: C.navy }}>Weather</h2>
             {weather && <span className="ml-auto text-[10px] font-bold text-green-600">✅ Ready</span>}
           </div>
 
-          <div className="p-5">
+          <div className="p-4 md:p-5">
             {locationState === 'idle' && (
-              <div className="flex flex-col items-center gap-4 py-4 text-center">
-                <div className="text-5xl">📍</div>
+              <div className="flex flex-col items-center gap-3 md:gap-4 py-3 md:py-4 text-center">
+                <div className="text-4xl md:text-5xl">📍</div>
                 <div>
                   <p className="font-bold text-sm" style={{ color: C.navy }}>Enable location for local weather</p>
                   <p className="text-xs text-gray-400 mt-1">Your coordinates are only used to fetch weather — never stored.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <button onClick={requestLocation}
                     className="px-5 py-2.5 rounded-xl font-bold text-sm text-white hover:opacity-90 transition-all"
                     style={{ backgroundColor: C.navy }}>
@@ -473,34 +456,34 @@ export default function StyleSuggestionsPage() {
             )}
 
             {weather && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
                 {/* Temperature */}
-                <div className="rounded-xl p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Temperature</p>
-                  <p className="text-3xl font-black tabular-nums" style={{ color: tempLabel?.color }}>
+                <div className="rounded-xl p-2.5 md:p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Temp</p>
+                  <p className="text-2xl md:text-3xl font-black tabular-nums" style={{ color: tempLabel?.color }}>
                     {weather.tempC}°
                   </p>
                   <p className="text-[10px] font-bold mt-0.5" style={{ color: tempLabel?.color }}>{tempLabel?.label}</p>
                 </div>
 
                 {/* Condition */}
-                <div className="rounded-xl p-3 text-center border" style={{ backgroundColor: condMeta?.bg ?? C.cream, borderColor: C.peach }}>
+                <div className="rounded-xl p-2.5 md:p-3 text-center border" style={{ backgroundColor: condMeta?.bg ?? C.cream, borderColor: C.peach }}>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Condition</p>
-                  <p className="text-3xl">{condMeta?.emoji}</p>
+                  <p className="text-2xl md:text-3xl">{condMeta?.emoji}</p>
                   <p className="text-[10px] font-bold mt-0.5" style={{ color: C.navy }}>{condMeta?.label}</p>
                 </div>
 
                 {/* Humidity */}
-                <div className="rounded-xl p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
+                <div className="rounded-xl p-2.5 md:p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Humidity</p>
-                  <p className="text-3xl font-black tabular-nums" style={{ color: C.navy }}>{weather.humidity}%</p>
+                  <p className="text-2xl md:text-3xl font-black tabular-nums" style={{ color: C.navy }}>{weather.humidity}%</p>
                   <p className="text-[10px] font-bold mt-0.5 text-gray-400">
                     {weather.humidity > 80 ? 'Very Humid' : weather.humidity > 60 ? 'Humid' : 'Comfortable'}
                   </p>
                 </div>
 
                 {/* City */}
-                <div className="rounded-xl p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
+                <div className="rounded-xl p-2.5 md:p-3 text-center border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Location</p>
                   <p className="text-xl">📍</p>
                   <p className="text-[11px] font-black mt-0.5" style={{ color: C.navy }}>{weather.city}</p>
@@ -516,13 +499,13 @@ export default function StyleSuggestionsPage() {
             STEP 2 — SHIRT SELECTOR + SIZE + FIT
         ══════════════════════════════════════════════════════ */}
         <section className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: C.peach }}>
-          <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
+          <div className="px-4 md:px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
             <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: C.navy }}>2</span>
             <h2 className="text-sm font-black uppercase tracking-widest" style={{ color: C.navy }}>Shirt &amp; Fit</h2>
             {fit && <span className="ml-auto text-[10px] font-bold" style={{ color: fitColor }}>● {fit.overall}</span>}
           </div>
 
-          <div className="p-5">
+          <div className="p-4 md:p-5">
             {loadingData ? (
               <div className="flex justify-center py-6">
                 <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
@@ -534,11 +517,11 @@ export default function StyleSuggestionsPage() {
                 {/* Shirt scroll row */}
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Select Shirt</p>
-                  <div className="flex gap-2.5 overflow-x-auto pb-1">
+                  <div className="flex gap-2.5 overflow-x-auto pb-2">
                     {items.map(item => (
                       <button key={item.id}
                         onClick={() => { setSelectedShirt(item); setSuggestions([]); setGenerated(false); }}
-                        className="flex-shrink-0 w-20 rounded-xl overflow-hidden border-2 transition-all hover:scale-105"
+                        className="flex-shrink-0 w-16 md:w-20 rounded-xl overflow-hidden border-2 transition-all hover:scale-105"
                         style={{
                           borderColor: selectedShirt?.id === item.id ? C.navy : C.peach,
                           boxShadow:   selectedShirt?.id === item.id ? `0 0 0 2px ${C.pink}` : 'none',
@@ -560,7 +543,7 @@ export default function StyleSuggestionsPage() {
 
                 {/* Size + fit row */}
                 {selectedShirt && (
-                  <div className="flex flex-wrap gap-4 items-start">
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start">
                     {/* Size selector */}
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Size</p>
@@ -582,7 +565,7 @@ export default function StyleSuggestionsPage() {
 
                     {/* Fit analysis */}
                     {fit && avatar && (
-                      <div className="flex-1 rounded-xl p-3 border" style={{ backgroundColor: C.cream, borderColor: C.peach, minWidth: '220px' }}>
+                      <div className="flex-1 rounded-xl p-3 border" style={{ backgroundColor: C.cream, borderColor: C.peach, minWidth: '200px' }}>
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Fit Analysis</p>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
@@ -629,12 +612,12 @@ export default function StyleSuggestionsPage() {
             STEP 3 — PRESET WARDROBE REFERENCE
         ══════════════════════════════════════════════════════ */}
         <section className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: C.peach }}>
-          <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
+          <div className="px-4 md:px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: C.peach, backgroundColor: C.cream }}>
             <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: C.navy }}>3</span>
             <h2 className="text-sm font-black uppercase tracking-widest" style={{ color: C.navy }}>Preset Wardrobe</h2>
             <span className="ml-auto text-[9px] text-gray-400 font-medium">AI selects only from these items</span>
           </div>
-          <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 md:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Bottoms */}
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">👖 Bottoms</p>
@@ -665,11 +648,11 @@ export default function StyleSuggestionsPage() {
         {/* ══════════════════════════════════════════════════════
             GENERATE BUTTON
         ══════════════════════════════════════════════════════ */}
-        <div className="flex justify-center">
+        <div className="flex justify-center px-4 md:px-0">
           <button
             onClick={handleGenerate}
             disabled={!weather || aiLoading || loadingData}
-            className="flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-base text-white shadow-lg hover:shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02]"
+            className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 md:px-8 py-4 rounded-2xl font-black text-sm md:text-base text-white shadow-lg hover:shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02]"
             style={{ backgroundColor: C.navy }}>
             {aiLoading ? (
               <>
@@ -696,8 +679,8 @@ export default function StyleSuggestionsPage() {
         ══════════════════════════════════════════════════════ */}
         {generated && suggestions.length > 0 && (
           <section>
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-lg font-black" style={{ color: C.navy }}>
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-4">
+              <h2 className="text-base md:text-lg font-black" style={{ color: C.navy }}>
                 🎯 Your Outfit Suggestions
               </h2>
               {weather && (
@@ -758,27 +741,27 @@ export default function StyleSuggestionsPage() {
 
                   {/* Reason + comfort */}
                   <div className="px-4 pb-4 space-y-3">
-                  {/* Fit Logic Section */}
-                  <div className="rounded-xl p-3 border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">📐 Fit-Specific Styling</p>
-                    <p className="text-[11px] text-gray-700 leading-relaxed italic">
-                      {s.fit_logic}
-                    </p>
-                  </div>
+                    {/* Fit Logic Section */}
+                    <div className="rounded-xl p-3 border" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">📐 Fit-Specific Styling</p>
+                      <p className="text-[11px] text-gray-700 leading-relaxed italic">
+                        {s.fit_logic}
+                      </p>
+                    </div>
 
-                  {/* Detailed Reason Section */}
-                  <div className="rounded-xl p-4 border" style={{ backgroundColor: '#f0f9f4', borderColor: '#bbf7d0' }}>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1.5">Stylist's Breakdown</p>
-                    <p className="text-[12px] text-green-900 leading-relaxed font-medium">
-                      {s.reason}
-                    </p>
-                  </div>
+                    {/* Detailed Reason Section */}
+                    <div className="rounded-xl p-4 border" style={{ backgroundColor: '#f0f9f4', borderColor: '#bbf7d0' }}>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1.5">Stylist's Breakdown</p>
+                      <p className="text-[12px] text-green-900 leading-relaxed font-medium">
+                        {s.reason}
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-                    <span className="text-sm">☁️</span>
-                    <p className="text-[11px] text-amber-900 font-bold">{s.comfort}</p>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                      <span className="text-sm">☁️</span>
+                      <p className="text-[11px] text-amber-900 font-bold">{s.comfort}</p>
+                    </div>
                   </div>
-                </div>
                 </div>
               ))}
             </div>
@@ -796,7 +779,7 @@ export default function StyleSuggestionsPage() {
 
         {/* Empty state — no suggestions yet */}
         {!generated && !aiLoading && (
-          <div className="text-center py-10 space-y-2">
+          <div className="text-center py-8 md:py-10 space-y-2">
             <p className="text-4xl">👔</p>
             <p className="text-sm font-bold" style={{ color: C.navy }}>
               {!weather ? 'Set your location to get started' : 'Ready to generate — hit the button above!'}

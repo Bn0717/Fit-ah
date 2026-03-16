@@ -283,7 +283,7 @@ export default function OnboardingPage() {
       {/* Header + progress */}
       <div className="px-8 py-4 bg-white border-b" style={{ borderColor: C.peach }}>
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-black" style={{ color: C.navy }}>FitCheck — Setup</h1>
+          <h1 className="text-xl font-black" style={{ color: C.navy }}>Fit-Ah — Setup</h1>
           <div className="flex items-center gap-2">
             {STEPS.map((label, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -307,7 +307,7 @@ export default function OnboardingPage() {
         {step === 0 && (
           <div className="max-w-md mx-auto">
             <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: C.pink }}>Step 1 of 3</p>
-            <h2 className="text-3xl font-black mb-1" style={{ color: C.navy }}>Welcome to FitCheck 👋</h2>
+            <h2 className="text-3xl font-black mb-1" style={{ color: C.navy }}>Welcome to Fit-Ah 👋</h2>
             <p className="text-sm text-gray-500 mb-8">Tell us a bit about yourself to personalise your experience.</p>
 
             <div className="space-y-5">

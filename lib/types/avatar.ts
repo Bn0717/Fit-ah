@@ -1,4 +1,4 @@
-// lib/types/avatar.ts - UPDATED
+// lib/types/avatar.ts
 export interface ParametricAvatar {
   userId: string;
   height: number;
@@ -8,8 +8,8 @@ export interface ParametricAvatar {
   armLength?: number;
   legLength?: number;
   photoUrl?: string;
-  avatarUrl?: string;           // RPM/Avaturn model URL
-  selectedAnimation?: string | null; // ✨ NEW: Selected animation name
+  avatarUrl?: string;
+  selectedAnimation?: string | null;
   createdAt?: any;
   updatedAt?: any;
 }

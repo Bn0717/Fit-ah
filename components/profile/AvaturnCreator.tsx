@@ -1,3 +1,4 @@
+// components/profile/AvaturnCreator.tsx - Not use in latest development, but keep for reference
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
