@@ -166,7 +166,7 @@ export default function SignupPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none text-sm sm:text-base"
-                style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 required
                 disabled={isAnyLoading}
               />
@@ -180,7 +180,7 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
                 className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none text-sm sm:text-base"
-                style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 required
                 disabled={isAnyLoading}
               />
@@ -194,7 +194,7 @@ export default function SignupPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter your password"
                 className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none text-sm sm:text-base"
-                style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 required
                 disabled={isAnyLoading}
               />

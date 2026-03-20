@@ -146,9 +146,9 @@ export default function LoginPage() {
 
           <h2 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2" style={{ color: colors.navy }}>Welcome Back</h2>
           <p className="text-sm mb-6" style={{ color: colors.navy, opacity: 0.6 }}>Sign in to access your wardrobe</p>
-          <div className="mb-6 p-4 rounded-xl border-2 border-dashed text-center" style={{ borderColor: colors.peach, backgroundColor: colors.cream }}>
-            <p className="text-xs font-bold mb-1" style={{ color: colors.navy }}>
-              🚀 QUICK DEMO ACCESS
+          <div className="mb-6 p-4 rounded-xl border-2 border-dashed text-center" style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}>
+            <p className="text-xs font-bold mb-1" style={{ color: colors.navy }}> 
+              QUICK DEMO ACCESS
             </p>
             <p className="text-[10px] leading-relaxed mb-3" style={{ color: colors.navy, opacity: 0.7 }}>
               Google Login is in test mode. Please use the credentials below to explore our full sample wardrobe immediately:
@@ -182,7 +182,7 @@ export default function LoginPage() {
                 type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none text-sm sm:text-base"
-                style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 required disabled={isAnyLoading}
               />
             </div>
@@ -192,7 +192,7 @@ export default function LoginPage() {
                 type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none text-sm sm:text-base"
-                style={{ borderColor: colors.peach, backgroundColor: colors.cream }}
+                style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }}
                 required disabled={isAnyLoading}
               />
             </div>
@@ -277,7 +277,7 @@ export default function LoginPage() {
                     <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
                       placeholder="you@example.com"
                       className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
-                      style={{ borderColor: colors.peach, backgroundColor: colors.cream }} disabled={resetLoading} />
+                      style={{ borderColor: colors.peach, backgroundColor: colors.cream, color: colors.navy }} disabled={resetLoading} />
                   </div>
                   <div className="flex gap-3">
                     <button onClick={() => { setShowResetModal(false); setError(null); }} disabled={resetLoading}
