@@ -639,9 +639,67 @@ export default function ProfilePage() {
       if (selectedItem) {
         const item = selectedItem;
         const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
-        const ease = sizeRow && draft.chest > 0 ? sizeRow.chest - draft.chest : null;
-        const fitLabel = ease == null ? null : ease < 5 ? 'Tight' : ease > 25 ? 'Loose' : 'Just Right';
-        const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
+
+        const ceA    = sizeRow ? sizeRow.chest    - draft.chest            : null;
+        const seA    = sizeRow ? sizeRow.shoulder - draft.shoulder         : null;
+        const leA    = sizeRow ? sizeRow.length   - (draft.height * 0.32)  : null;
+        const weA    = sizeRow ? sizeRow.chest    - draft.waist             : null;
+
+        const fitDetails: { label: string; status: 'tight' | 'loose' | 'good'; message: string }[] | null = ceA === null ? null : [
+          {
+            label: 'Chest',
+            status: ceA < -2 ? 'tight' : ceA > 18 ? 'loose' : 'good',
+            message: ceA < -2
+              ? `Too narrow (${ceA.toFixed(1)}cm) — shirt cannot fit over chest`
+              : ceA > 18
+              ? `Too baggy (+${ceA.toFixed(1)}cm) — very oversized across chest`
+              : `+${ceA.toFixed(1)}cm — ${ceA < 7 ? 'slim fit' : ceA < 12 ? 'regular fit' : 'relaxed fit'}`,
+          },
+          {
+            label: 'Shoulder',
+            status: seA! < -3 ? 'tight' : seA! > 6 ? 'loose' : 'good',
+            message: seA! < -3
+              ? `Too narrow (${seA!.toFixed(1)}cm) — seam pulls painfully inward`
+              : seA! > 6
+              ? `Too wide (+${seA!.toFixed(1)}cm) — seam droops off shoulder point`
+              : `${seA! >= 0 ? '+' : ''}${seA!.toFixed(1)}cm — seam sits correctly on shoulder`,
+          },
+          {
+            label: 'Length',
+            status: leA! < -4 ? 'tight' : leA! > 20 ? 'loose' : 'good',
+            message: leA! < -4
+              ? `Too short (${leA!.toFixed(1)}cm) — will expose midriff when moving`
+              : leA! > 20
+              ? `Very long (+${leA!.toFixed(1)}cm) — reaches well past hips`
+              : `+${leA!.toFixed(1)}cm below torso — appropriate coverage`,
+          },
+          {
+            label: 'Waist',
+            status: weA! < -2 ? 'tight' : weA! > 20 ? 'loose' : 'good',
+            message: weA! < -2
+              ? `Too tight at waist (${weA!.toFixed(1)}cm) — restricts movement`
+              : weA! > 20
+              ? `Very boxy (+${weA!.toFixed(1)}cm) — excess fabric at waist`
+              : `+${weA!.toFixed(1)}cm — comfortable range of motion`,
+          },
+        ];
+
+        const tightCount = fitDetails?.filter(d => d.status === 'tight').length ?? 0;
+        const looseCount = fitDetails?.filter(d => d.status === 'loose').length ?? 0;
+        const hasTight   = tightCount > 0;
+        const hasLoose   = looseCount > 0;
+
+        const fitLabel = !fitDetails ? null
+          : hasTight && hasLoose ? 'Mixed Fit'
+          : hasTight ? (tightCount > 1 ? 'Too Tight' : `${fitDetails.find(d => d.status === 'tight')!.label} Too Tight`)
+          : hasLoose ? (looseCount > 1 ? 'Too Loose' : `${fitDetails.find(d => d.status === 'loose')!.label} Too Loose`)
+          : 'Good Fit';
+
+        const fitColor = !fitLabel ? '#10b981'
+          : fitLabel === 'Good Fit'  ? '#10b981'
+          : fitLabel === 'Mixed Fit' ? '#8b5cf6'
+          : hasTight                 ? '#ef4444'
+          :                            '#f59e0b';
 
         return (
           <div className="animate-in fade-in zoom-in-95 duration-200 pb-2">
@@ -678,13 +736,38 @@ export default function ProfilePage() {
                   ))}
                 </div>
 
-                {fitLabel && (
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mt-2"
-                    style={{ backgroundColor: fitColor + '10', borderColor: fitColor + '30' }}>
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
-                    <p className="text-[11px] font-bold" style={{ color: fitColor }}>
-                      {fitLabel} — {(sizeRow.chest - draft.chest).toFixed(1)}cm ease
-                    </p>
+                {fitLabel && fitDetails && (
+                  <div className="rounded-xl border mt-2 overflow-hidden"
+                    style={{ borderColor: fitColor + '50' }}>
+                    <div className="flex items-center gap-2 px-3 py-2"
+                      style={{ backgroundColor: fitColor + '18' }}>
+                      <div className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: fitColor }} />
+                      <p className="text-[11px] font-black" style={{ color: fitColor }}>{fitLabel}</p>
+                    </div>
+                    <div className="px-2 py-2 space-y-1.5">
+                      {fitDetails.map(d => (
+                        <div key={d.label} className="rounded-lg px-2 py-1.5 border"
+                          style={{
+                            backgroundColor: d.status === 'tight' ? '#fef2f2' : d.status === 'loose' ? '#fffbeb' : '#f0fdf4',
+                            borderColor:     d.status === 'tight' ? '#fecaca' : d.status === 'loose' ? '#fde68a' : '#bbf7d0',
+                          }}>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[9px]">
+                              {d.status === 'tight' ? '🔴' : d.status === 'loose' ? '🟡' : '🟢'}
+                            </span>
+                            <span className="text-[9px] font-black uppercase tracking-widest"
+                              style={{ color: d.status === 'tight' ? '#ef4444' : d.status === 'loose' ? '#f59e0b' : '#15803d' }}>
+                              {d.label}
+                            </span>
+                          </div>
+                          <p className="text-[9px] leading-snug pl-4"
+                            style={{ color: d.status === 'tight' ? '#7f1d1d' : d.status === 'loose' ? '#78350f' : '#14532d' }}>
+                            {d.message}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
