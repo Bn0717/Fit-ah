@@ -639,8 +639,8 @@ export default function ProfilePage() {
       if (selectedItem) {
         const item = selectedItem;
         const sizeRow = item.sizeChart.find(s => s.size === selectedShirtSize) ?? item.sizeChart[0];
-        const fitRatio = sizeRow && saved.chest > 0 ? sizeRow.chest / saved.chest : null;
-        const fitLabel = fitRatio == null ? null : fitRatio < 0.96 ? 'Tight' : fitRatio > 1.15 ? 'Loose' : 'Just Right';
+        const ease = sizeRow && draft.chest > 0 ? sizeRow.chest - draft.chest : null;
+        const fitLabel = ease == null ? null : ease < 5 ? 'Tight' : ease > 25 ? 'Loose' : 'Just Right';
         const fitColor = fitLabel === 'Tight' ? '#ef4444' : fitLabel === 'Loose' ? '#f59e0b' : '#10b981';
 
         return (
@@ -660,15 +660,6 @@ export default function ProfilePage() {
                       style={{ backgroundColor: selectedShirtSize === sc.size ? C.navy : 'white', color: selectedShirtSize === sc.size ? 'white' : C.navy, borderColor: selectedShirtSize === sc.size ? C.navy : C.peach }}>
                       {sc.size}
                     </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-3 gap-1">
-                  {[{l:'Chest',v:sizeRow.chest},{l:'Len',v:sizeRow.length},{l:'Sh',v:sizeRow.shoulder}].map(m => (
-                    <div key={m.l} className="rounded-lg p-1 text-center border bg-cream/30">
-                      <p className="text-[7px] font-bold text-gray-400 uppercase">{m.l}</p>
-                      <p className="text-[10px] font-black text-navy">{m.v}cm</p>
-                    </div>
                   ))}
                 </div>
                 
@@ -692,7 +683,7 @@ export default function ProfilePage() {
                     style={{ backgroundColor: fitColor + '10', borderColor: fitColor + '30' }}>
                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitColor }} />
                     <p className="text-[11px] font-bold" style={{ color: fitColor }}>
-                      {fitLabel} — {((sizeRow.chest - saved.chest)).toFixed(1)}cm ease
+                      {fitLabel} — {(sizeRow.chest - draft.chest).toFixed(1)}cm ease
                     </p>
                   </div>
                 )}

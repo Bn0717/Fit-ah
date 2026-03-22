@@ -17,8 +17,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
+   return (
     <html lang="en">
+      <head>
+        <link rel="preload" href="/models/humanlatestwithshirt2.glb?v=1.0" as="fetch" crossOrigin="anonymous" />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           <Navbar/>

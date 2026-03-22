@@ -89,14 +89,26 @@ function buildPrompt(
   let fitLine  = 'Body measurements unavailable.';
   let fitLabel = 'Unknown';
   if (row && profile) {
-    const eC = parseFloat((row.chest - profile.chest).toFixed(1));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const eW = (row as any).waist != null
-      ? parseFloat(((row as any).waist - profile.waist).toFixed(1))
-      : parseFloat((eC * 0.6).toFixed(1));
-    const r = row.chest / profile.chest;
-    fitLabel = r < 0.96 ? 'Tight' : r > 1.15 ? 'Loose' : 'Regular';
-    fitLine = `Fit: ${fitLabel} (size ${size}) — chest ease ${eC >= 0 ? '+' : ''}${eC}cm, waist ease ${eW >= 0 ? '+' : ''}${eW}cm.`;
+    const chestEase    = row.chest    - profile.chest;
+    const shoulderEase = row.shoulder - profile.shoulder;
+    const lengthEase   = row.length   - (profile.height * 0.26);
+    const waistEase    = row.chest    - ((profile as any).waist ?? 35);
+
+    const hasTight = chestEase < -2 || shoulderEase < -3 || lengthEase < -4 || waistEase < -2;
+    const hasLoose = chestEase > 18 || shoulderEase > 6  || lengthEase > 20 || waistEase > 20;
+
+    fitLabel = hasTight && hasLoose ? 'Mixed Fit'
+             : hasTight             ? 'Too Tight'
+             : hasLoose             ? 'Too Loose'
+             :                        'Good Fit';
+
+    const partSummary = [
+      `chest ${chestEase >= 0 ? '+' : ''}${chestEase.toFixed(1)}cm${chestEase < -2 ? ' (too tight)' : chestEase > 18 ? ' (too loose)' : ''}`,
+      `shoulder ${shoulderEase >= 0 ? '+' : ''}${shoulderEase.toFixed(1)}cm${shoulderEase < -3 ? ' (too narrow)' : shoulderEase > 6 ? ' (too wide)' : ''}`,
+      `length ${lengthEase >= 0 ? '+' : ''}${lengthEase.toFixed(1)}cm${lengthEase < -4 ? ' (too short)' : lengthEase > 20 ? ' (too long)' : ''}`,
+      `waist ${waistEase >= 0 ? '+' : ''}${waistEase.toFixed(1)}cm${waistEase < -2 ? ' (too tight)' : waistEase > 20 ? ' (too boxy)' : ''}`,
+    ].join(' · ');
+    fitLine = `Fit: ${fitLabel} (size ${size}) — ${partSummary}.`;
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const color = (item as any).color ?? 'unknown color';
@@ -110,7 +122,7 @@ ${fitLine}
 STYLING RULES:
 1. Return exactly 3 outfit suggestions with distinct vibes.
 2. "reason": Write 40-60 words. Explain the visual balance between the top and bottom. Discuss how the ${fitLabel} fit of the shirt pairs with the silhouette of the bottoms and how the colors harmonize.
-3. "comfort": Write 30-50 words. Explain how the fabric and the ease (${row.chest - (profile?.chest ?? 0)}cm) will feel against the skin in ${weather.tempC}°C heat and ${weather.humidity}% humidity.
+3. "comfort": Write 30-50 words. Explain how the fabric and the chest ease (+${(row.chest - (profile?.chest ?? 0)).toFixed(1)}cm) will feel against the skin in ${weather.tempC}°C heat and ${weather.humidity}% humidity.
 4. Output ONLY a valid JSON array. No conversational text.
 
 ALLOWED LISTS:
@@ -267,9 +279,35 @@ function StyleOverlay({
     const row = item.sizeChart.find(s => s.size === selectedSize) ?? item.sizeChart[0];
     if (!row || !userProfile) return null;
     const eC   = parseFloat((row.chest - userProfile.chest).toFixed(1));
-    const r    = row.chest / userProfile.chest;
-    const label = r < 0.96 ? 'Tight' : r > 1.15 ? 'Loose' : 'Regular';
-    const col   = label === 'Tight' ? C.red : label === 'Loose' ? C.orange : C.green;
+    const chestEase    = row.chest    - userProfile.chest;
+    const shoulderEase = row.shoulder - userProfile.shoulder;
+    const lengthEase   = row.length   - (userProfile.height * 0.26);
+    const waistEase    = row.chest    - ((userProfile as any).waist ?? 35);
+
+    const hasTight = chestEase < -2 || shoulderEase < -3 || lengthEase < -4 || waistEase < -2;
+    const hasLoose = chestEase > 18 || shoulderEase > 6  || lengthEase > 20 || waistEase > 20;
+    const tightParts = [
+      chestEase    < -2 ? 'Chest'    : null,
+      shoulderEase < -3 ? 'Shoulder' : null,
+      lengthEase   < -4 ? 'Length'   : null,
+      waistEase    < -2 ? 'Waist'    : null,
+    ].filter(Boolean);
+    const looseParts = [
+      chestEase    > 18 ? 'Chest'    : null,
+      shoulderEase > 6  ? 'Shoulder' : null,
+      lengthEase   > 20 ? 'Length'   : null,
+      waistEase    > 20 ? 'Waist'    : null,
+    ].filter(Boolean);
+
+    const label = hasTight && hasLoose
+      ? 'Mixed Fit'
+      : hasTight
+      ? (tightParts.length > 1 ? 'Too Tight' : `${tightParts[0]} Too Tight`)
+      : hasLoose
+      ? (looseParts.length > 1 ? 'Too Loose' : `${looseParts[0]} Too Loose`)
+      : 'Good Fit';
+
+    const col = (hasTight && hasLoose) ? '#8b5cf6' : hasTight ? C.red : hasLoose ? C.orange : C.green;
     return { label, col, eC };
   })();
 
@@ -799,7 +837,11 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     clearHeatmap: () => void;
   } | null>(null);
 
-  const [fitStatus,          setFitStatus]          = useState<{ text: string; color: string } | null>(null);
+  const [fitStatus, setFitStatus] = useState<{
+    text: string;
+    color: string;
+    details: { label: string; status: 'tight' | 'loose' | 'good'; message: string }[];
+  } | null>(null);
   const [modelLoading,       setModelLoading]        = useState(true);
   const [sceneReady,         setSceneReady]          = useState(false);
   const [showStyleOverlay,   setShowStyleOverlay]    = useState(false);
@@ -839,12 +881,85 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
   useEffect(() => { sceneRef.current?.updateBody(bodyDraft); }, [bodyDraft]);
 
   useEffect(() => {
-    if (!userProfile || !selectedSize) return;
+    if (!selectedSize) return;
     const sd = item.sizeChart.find(s => s.size === selectedSize);
     if (!sd) return;
-    const r = sd.chest / userProfile.chest;
-    setFitStatus(r < 0.96 ? { text: 'Tight', color: C.red } : r > 1.15 ? { text: 'Loose', color: C.orange } : { text: 'Just Right', color: C.green });
-  }, [selectedSize, userProfile, item]);
+    const chestToUse = bodyDraft.chest || userProfile?.chest;
+    if (!chestToUse) return;
+    const shoulderToUse = bodyDraft.shoulder || userProfile?.shoulder || 43;
+    const heightToUse   = bodyDraft.height   || userProfile?.height   || 170;
+    const waistToUse    = bodyDraft.waist    || (userProfile as any)?.waist || 35;
+
+    const chestEase    = sd.chest    - chestToUse;
+    const shoulderEase = sd.shoulder - shoulderToUse;
+    const lengthEase   = sd.length   - (heightToUse * 0.32);
+    const waistEase    = sd.chest    - waistToUse;
+
+    const details: { label: string; status: 'tight' | 'loose' | 'good'; message: string }[] = [
+      {
+        label: 'Chest',
+        status: chestEase < -2 ? 'tight' : chestEase > 18 ? 'loose' : 'good',
+        message: chestEase < -2
+          ? `Too narrow (${chestEase.toFixed(1)}cm) — shirt cannot fit over chest`
+          : chestEase > 18
+          ? `Too baggy (+${chestEase.toFixed(1)}cm) — very oversized across chest`
+          : `+${chestEase.toFixed(1)}cm — ${chestEase < 7 ? 'slim fit' : chestEase < 12 ? 'regular fit' : 'relaxed fit'}`,
+      },
+      {
+        label: 'Shoulder',
+        status: shoulderEase < -3 ? 'tight' : shoulderEase > 6 ? 'loose' : 'good',
+        message: shoulderEase < -3
+          ? `Too narrow (${shoulderEase.toFixed(1)}cm) — seam pulls painfully inward`
+          : shoulderEase > 6
+          ? `Too wide (+${shoulderEase.toFixed(1)}cm) — seam droops off shoulder point`
+          : `${shoulderEase >= 0 ? '+' : ''}${shoulderEase.toFixed(1)}cm — seam sits correctly on shoulder`,
+      },
+      {
+        label: 'Length',
+        status: lengthEase < -4 ? 'tight' : lengthEase > 20 ? 'loose' : 'good',
+        message: lengthEase < -4
+          ? `Too short (${lengthEase.toFixed(1)}cm) — will expose midriff when moving`
+          : lengthEase > 20
+          ? `Very long (+${lengthEase.toFixed(1)}cm) — reaches well past hips`
+          : `+${lengthEase.toFixed(1)}cm below torso — appropriate coverage`,
+      },
+      {
+        label: 'Waist',
+        status: waistEase < -2 ? 'tight' : waistEase > 20 ? 'loose' : 'good',
+        message: waistEase < -2
+          ? `Too tight at waist (${waistEase.toFixed(1)}cm) — restricts movement`
+          : waistEase > 20
+          ? `Very boxy (+${waistEase.toFixed(1)}cm) — excess fabric at waist`
+          : `+${waistEase.toFixed(1)}cm — comfortable range of motion`,
+      },
+    ];
+
+    const tightCount = details.filter(d => d.status === 'tight').length;
+    const looseCount = details.filter(d => d.status === 'loose').length;
+    const hasTight   = tightCount > 0;
+    const hasLoose   = looseCount > 0;
+
+    let text: string;
+    let color: string;
+
+    if (hasTight && hasLoose) {
+      text = 'Mixed Fit'; color = '#8b5cf6';
+    } else if (hasTight) {
+      text  = tightCount > 1
+        ? 'Too Tight'
+        : `${details.find(d => d.status === 'tight')!.label} Too Tight`;
+      color = C.red;
+    } else if (hasLoose) {
+      text  = looseCount > 1
+        ? 'Too Loose'
+        : `${details.find(d => d.status === 'loose')!.label} Too Loose`;
+      color = C.orange;
+    } else {
+      text = 'Good Fit'; color = C.green;
+    }
+
+    setFitStatus({ text, color, details });
+  }, [selectedSize, bodyDraft, userProfile, item]);
 
   useEffect(() => {
   if (sceneRef.current?.controls) {
@@ -1315,17 +1430,37 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {fitStatus && userProfile && (
+            {fitStatus && (
               <div className="rounded-xl p-3 border-2" style={{ backgroundColor: C.cream, borderColor: C.peach }}>
-                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Fit Analysis</p>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: fitStatus.color }} />
-                  <span className="text-lg font-black" style={{ color: C.navy }}>{fitStatus.text}</span>
+                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2">Fit Analysis</p>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fitStatus.color }} />
+                  <span className="text-base font-black" style={{ color: fitStatus.color }}>{fitStatus.text}</span>
                   <span className="text-xs font-bold text-gray-400">— {selectedSize}</span>
                 </div>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  {fitStatus.text === 'Tight' ? 'Restrictive around chest. Consider sizing up.' : fitStatus.text === 'Loose' ? 'Oversized look. Size down for regular fit.' : 'Perfect alignment with your body profile.'}
-                </p>
+                <div className="space-y-2">
+                  {fitStatus.details.map(d => (
+                    <div key={d.label} className="rounded-lg px-2.5 py-2 border"
+                      style={{
+                        backgroundColor: d.status === 'tight' ? '#fef2f2' : d.status === 'loose' ? '#fffbeb' : '#f0fdf4',
+                        borderColor:     d.status === 'tight' ? '#fecaca' : d.status === 'loose' ? '#fde68a' : '#bbf7d0',
+                      }}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[9px]">
+                          {d.status === 'tight' ? '🔴' : d.status === 'loose' ? '🟡' : '🟢'}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: d.status === 'tight' ? C.red : d.status === 'loose' ? C.orange : '#15803d' }}>
+                          {d.label}
+                        </span>
+                      </div>
+                      <p className="text-[10px] leading-snug pl-4"
+                        style={{ color: d.status === 'tight' ? '#7f1d1d' : d.status === 'loose' ? '#78350f' : '#14532d' }}>
+                        {d.message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
