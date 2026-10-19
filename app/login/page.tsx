@@ -336,10 +336,12 @@ function Feature({ n, title, text, chips, media, flip }: {
   return (
     <article className="grid md:grid-cols-12 gap-6 sm:gap-10 items-center">
       <div className={`min-w-0 order-2 md:col-span-7 ${flip ? 'md:order-2' : 'md:order-1'}`}>{media}</div>
-      <div className={`min-w-0 order-1 md:col-span-5 ${flip ? 'md:order-1 md:pr-6' : 'md:order-2 md:pl-6'}`}>
+      <div className={`min-w-0 order-1 md:col-span-5 [container-type:inline-size] ${flip ? 'md:order-1 md:pr-6' : 'md:order-2 md:pl-6'}`}>
         <p className="text-[12px] tracking-[0.18em] uppercase mb-3 opacity-60">{n}</p>
-        <h3 className="text-[32px] sm:text-[44px] font-medium leading-[1.02] tracking-[-0.035em] mb-4">{title}</h3>
-        <p className="text-[16px] sm:text-[17px] leading-relaxed opacity-80 max-w-[460px]">{text}</p>
+        {/* one line: every title gets the size that fits the longest one ("Your wardrobe, cut out automatically" is
+            about 14.8 x its font size wide) into its column */}
+        <h3 className="whitespace-nowrap text-[32px] sm:text-[44px] font-medium leading-[1.05] tracking-[-0.035em] mb-3" style={{ fontSize: 'min(44px, 6.5cqw)' }}>{title}</h3>
+        <p className="text-[15px] sm:text-[17px] leading-relaxed opacity-80 max-w-[460px]">{text}</p>
         <div className={`flex flex-nowrap gap-1 min-[360px]:gap-1.5 xl:gap-2 mt-6 overflow-x-auto ${css.noBar}`}>
           {chips.map(c => (
             <span key={c} className="shrink-0 whitespace-nowrap px-[7px] min-[360px]:px-2.5 xl:px-3 py-1.5 rounded-full text-[9.5px] min-[360px]:text-[11px] xl:text-[12px] font-medium border" style={{ borderColor: peach, backgroundColor: 'white' }}>{c}</span>
