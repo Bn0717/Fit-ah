@@ -1,0 +1,70 @@
+/* Small looping animations for the feature cards on the login page */
+
+/* 01 body scan: a line sweeps down, body points pop in */
+.scanLine {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #FA9EBC 20%, #FA9EBC 80%, transparent);
+  box-shadow: 0 0 18px 4px rgba(250, 158, 188, 0.55);
+  animation: sweep 4.5s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+@keyframes sweep {
+  0% { top: 8%; opacity: 0; }
+  8% { opacity: 1; }
+  55% { top: 88%; opacity: 1; }
+  62%, 100% { top: 88%; opacity: 0; }
+}
+.dot { transform-box: fill-box; transform-origin: center; animation: pop 4.5s ease-out infinite; }
+@keyframes pop {
+  0%, 10% { transform: scale(0); opacity: 0; }
+  20% { transform: scale(1.5); opacity: 1; }
+  28%, 88% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.bone { stroke-dasharray: 220; stroke-dashoffset: 220; animation: draw 4.5s ease-out infinite; }
+@keyframes draw {
+  0%, 30% { stroke-dashoffset: 220; opacity: 0; }
+  50%, 88% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.chip { animation: chipIn 4.5s ease-out infinite; opacity: 0; }
+@keyframes chipIn {
+  0%, 52% { opacity: 0; transform: translateY(6px); }
+  60%, 88% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
+/* 05 wardrobe: the photo background is wiped away, leaving the cut-out */
+.photoBg { animation: wipe 5s cubic-bezier(.65, 0, .35, 1) infinite; }
+@keyframes wipe {
+  0%, 25% { clip-path: inset(0 0 0 0); }
+  60%, 88% { clip-path: inset(0 0 0 100%); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+.wipeEdge { animation: edge 5s cubic-bezier(.65, 0, .35, 1) infinite; }
+@keyframes edge {
+  0%, 25% { left: 0%; opacity: 0; }
+  28% { opacity: 1; }
+  60% { left: 100%; opacity: 1; }
+  62%, 100% { left: 100%; opacity: 0; }
+}
+.tagBefore { animation: before 5s infinite; }
+.tagAfter { animation: after 5s infinite; }
+@keyframes before { 0%, 40% { opacity: 1; } 45%, 95% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes after { 0%, 40% { opacity: 0; } 45%, 95% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 06 stylist: typing dots, then the suggestion */
+.typing span { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 9999px; background: #0B1957; opacity: .3;
+  animation: blink 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: .2s; }
+.typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: .8; } }
+
+/* the loading bar on the first screen */
+.loadBar { transition: width .3s ease, opacity .6s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scanLine, .dot, .bone, .chip, .photoBg, .wipeEdge, .tagBefore, .tagAfter, .typing span { animation: none; }
+  .dot, .bone, .chip { opacity: 1; stroke-dashoffset: 0; transform: none; }
+  .photoBg { clip-path: inset(0 0 0 100%); }
+  .tagBefore { opacity: 0; }
+}

@@ -1,0 +1,114 @@
+{
+ "generated": "2026-10-19T08:51:01.523Z",
+ "source": "Fit-Ah AI stylist (/api/gemini), prompt from FitRecommendationModal.buildPrompt",
+ "samples": [
+  {
+   "city": "Kuala Lumpur",
+   "weather": {
+    "tempC": 33,
+    "condition": "Rain",
+    "humidity": 52,
+    "city": "Kuala Lumpur"
+   },
+   "item": "Gon Tee (Green)",
+   "size": "M",
+   "fitLabel": "Too Loose",
+   "outfits": [
+    {
+     "bottom": "Baggy Wide-Leg Jeans",
+     "shoes": "White & Light Grey Chunky Sneakers",
+     "reason": "The oversized green Gon tee creates a heavily draped, streetwear-inspired silhouette. Pairing it with baggy wide-leg jeans balances the top's +19.5cm waist excess through uniform volume, while the classic blue denim tone contrasts nicely against the deep forest green, grounding the anime graphic design.",
+     "comfort": "With +8.5cm of chest ease, air circulates freely around your torso to mitigate the sticky 52% humidity. However, heavy denim combined with rain might trap moisture against your legs during the 33°C heat, so quick-drying lightweight denim is ideal.",
+     "vibe": "Urban Streetwear"
+    },
+    {
+     "bottom": "Casual Shorts",
+     "shoes": "Classic Low-Top Sneakers",
+     "reason": "This setup embraces the extreme +27.5cm length of the tee for an intentional dress-like or tunic streetwear look. The exposed legs visually break up the oversized green expanse, maintaining proportions while keeping the focus on the striking front graphic.",
+     "comfort": "Shorts maximize airflow around your lower body, perfectly countering the 33°C tropical heat and 52% humidity. The generous +8.5cm chest ease ensures the fabric never clings to your skin, providing unmatched ventilation during rainy spells.",
+     "vibe": "Casual Summer"
+    },
+    {
+     "bottom": "Pleated Wide-Leg Trousers",
+     "shoes": "Casual Slip-on Loafers",
+     "reason": "Elevating the oversized green tee with pleated trousers offers a sophisticated smart-casual contrast. The structured draping of the trousers balances the relaxed +19.5cm waist looseness, while neutral trouser tones harmonize with the rich forest green palette.",
+     "comfort": "The breezy wide-leg cut of the trousers prevents heat buildup in 33°C weather, and the loose chest fit allows excellent ventilation in high humidity. Lightweight trouser fabrics dry quickly if caught in sudden rain.",
+     "vibe": "Smart Casual"
+    }
+   ],
+   "model": "gemini-3.5-flash-lite"
+  },
+  {
+   "city": "Tokyo",
+   "weather": {
+    "tempC": 24,
+    "condition": "Clouds",
+    "humidity": 70,
+    "city": "Tokyo"
+   },
+   "item": "Gon Tee (Green)",
+   "size": "L",
+   "fitLabel": "Too Loose",
+   "outfits": [
+    {
+     "bottom": "Baggy Wide-Leg Jeans",
+     "shoes": "White & Light Grey Chunky Sneakers",
+     "reason": "Pairing the excessively loose, boxy green tee with baggy denim creates a deliberate, skater-inspired oversized silhouette. The +11cm chest ease and extended length are balanced by the voluminous bottoms, while the earthy green tone harmonizes naturally with classic blue denim hues for a cohesive street aesthetic.",
+     "comfort": "At 24°C with 70% humidity, the generous +11.0cm chest ease and oversized cut allow maximum airflow around your torso, preventing sticky skin contact. While the heavy volume keeps you cool, high humidity means the thick cotton fabric may retain some moisture over time.",
+     "vibe": "Streetwear Skater"
+    },
+    {
+     "bottom": "Baggy Cargo Pants",
+     "shoes": "Slip-on Clog",
+     "reason": "This look leans into tactical utility by matching the boxy, oversized green graphic tee with utilitarian cargo pants. The top's dramatic length and +22cm waist excess visually anchor the outfit, contrasting seamlessly against the structured, pocket-heavy bottoms while olive and neutral tones reinforce a rugged outdoor harmony.",
+     "comfort": "The breezy, loose-fitting structure ensures exceptional ventilation, letting cool air circulate freely beneath the fabric. This mitigates the muggy discomfort of 70% humidity, though the layered cargo pockets and relaxed silhouette might feel slightly heavy if physical activity increases in the warmth.",
+     "vibe": "Urban Utility"
+    },
+    {
+     "bottom": "Pleated Wide-Leg Trousers",
+     "shoes": "Classic Low-Top Sneakers",
+     "reason": "Elevate the overly loose green tee by pairing it with tailored pleated trousers, achieving a high-low smart-casual balance. The extreme boxiness and dropped shoulders are refined by the clean lines of the trousers, creating a sophisticated silhouette where earthy green contrasts stylishly with neutral trouser shades.",
+     "comfort": "Generous garment ease across the chest and waist promotes continuous air circulation, keeping you comfortable in 24°C overcast weather. The lightweight drape of pleated trousers combined with the airy tee prevents overheating, effectively managing moderate humidity without clinging uncomfortably to your skin.",
+     "vibe": "Smart Casual"
+    }
+   ],
+   "model": "gemini-3.5-flash-lite"
+  },
+  {
+   "city": "London",
+   "weather": {
+    "tempC": 10,
+    "condition": "Clear",
+    "humidity": 92,
+    "city": "London"
+   },
+   "item": "Gon Tee (Green)",
+   "size": "S",
+   "fitLabel": "Too Loose",
+   "outfits": [
+    {
+     "bottom": "Baggy Wide-Leg Jeans",
+     "shoes": "White & Light Grey Chunky Sneakers",
+     "reason": "Pairing the excessively long, oversized green tee with baggy wide-leg jeans creates an intentionally exaggerated streetwear silhouette. The expansive +6cm chest and generous waist ease are balanced by the voluminous lower half. The earthy green tones harmonize effortlessly with classic denim blue for a grounded aesthetic.",
+     "comfort": "At 10°C with high 92% humidity, the +6.0cm chest ease traps chilly air, making it feel cold without layering. However, the loose fit prevents the damp cotton from sticking heavily to your skin, offering decent breathability despite the moisture.",
+     "vibe": "Streetwear"
+    },
+    {
+     "bottom": "Pleated Wide-Leg Trousers",
+     "shoes": "Classic Low-Top Sneakers",
+     "reason": "This look balances the ultra-loose, extended length of the green graphic tee with sophisticated pleated trousers. The dramatic top volume flows naturally into structured, wide-leg lines. Neutral trousers tone down the vibrant green, creating a smart-casual contrast that feels intentional and visually striking.",
+     "comfort": "The generous +6.0cm chest ease allows airflow to circulate freely around your upper body. In 10°C weather, this lack of insulation feels brisk, requiring an outer layer, but the loose sizing prevents sweat accumulation in the heavy humidity.",
+     "vibe": "Smart Casual"
+    },
+    {
+     "bottom": "Casual Sweatpants",
+     "shoes": "Slip-on Clog",
+     "reason": "Embracing the overly relaxed measurements, pairing the long green tee with casual sweatpants achieves an effortless lounge aesthetic. The generous +17cm waist ease and extended length drape heavily, which is balanced by the tapered silhouette of the sweatpants. Monochromatic green styling enhances the laid-back vibe.",
+     "comfort": "The +6.0cm chest ease provides a roomy, unrestrictive feel against the torso. While 10°C requires warmth, the high 92% humidity makes the breezy, oversized fit a comfortable choice that avoids clinging tightly to the skin.",
+     "vibe": "Athleisure"
+    }
+   ],
+   "model": "gemini-3.5-flash-lite"
+  }
+ ]
+}
