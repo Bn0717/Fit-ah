@@ -59,6 +59,10 @@
 .typing span:nth-child(3) { animation-delay: .4s; }
 @keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: .8; } }
 
+/* a row that can be swiped sideways without showing a scrollbar */
+.noBar { scrollbar-width: none; }
+.noBar::-webkit-scrollbar { display: none; }
+
 /* the loading bar on the first screen */
 .loadBar { transition: width .3s ease, opacity .6s ease; }
 

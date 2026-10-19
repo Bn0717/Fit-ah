@@ -63,6 +63,15 @@ export default function LoginPage() {
   // signed-in visitors can still read the page; the top-right button takes them to their profile
   // /login?signin=1 opens the sign-in panel straight away (for links from other pages)
   useEffect(() => { if (new URLSearchParams(window.location.search).get('signin')) setDrawer(true); }, []);
+  // the real visible height: phone browsers grow the screen when their toolbar hides while scrolling, and CSS
+  // units do not always follow (iPhone Safari), which left an empty band under the 3D stage
+  useEffect(() => {
+    const set = () => document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`);
+    set();
+    window.addEventListener('resize', set);
+    window.visualViewport?.addEventListener('resize', set);
+    return () => { window.removeEventListener('resize', set); window.visualViewport?.removeEventListener('resize', set); };
+  }, []);
 
   // scroll -> progress (0..1 across the story) -> styles, every frame, without re-rendering React
   useEffect(() => {
@@ -128,7 +137,7 @@ export default function LoginPage() {
 
       {/* ── the scroll story (pinned 3D stage) ───────────────── */}
       <section ref={storyRef} id="story" className="relative" style={{ height: '600vh' }}>
-        <div className="sticky top-0 h-[100svh] supports-[height:100dvh]:h-[100dvh] overflow-hidden">
+        <div className="sticky top-0 h-[100svh] overflow-hidden" style={{ height: 'var(--app-h, 100svh)' }}>
           <div className="absolute inset-0" data-keep="1" ref={bind(p => {
             const b = ease(seg(p, 0.8, 0.95));
             return { filter: b > 0.001 ? `blur(${b * 18}px)` : 'none', opacity: String(1 - b * 0.55) };
@@ -203,7 +212,7 @@ export default function LoginPage() {
       <section id="features" className="relative z-10 -mt-[100svh]"
         style={{ background: `linear-gradient(to bottom, transparent 0, transparent 30svh, ${cream} 70svh)` }}>
         <div className="px-5 sm:px-8 pt-[30svh] pb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.85]`} style={{ fontSize: 'clamp(44px, 9.5vw, 170px)', ...wide }}>Features</h2>
+          <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.85]`} style={{ fontSize: 'min(clamp(44px, 9.5vw, 170px), 11.4vw)', ...wide }}>Features</h2>
           <p className="max-w-[330px] text-[16px] sm:text-[18px] leading-snug md:mb-4">
             Everything a fitting room tells you, on your phone. Here is what Fit-Ah does.
           </p>
@@ -212,7 +221,7 @@ export default function LoginPage() {
         <div className="px-5 sm:px-8 pb-24 space-y-20 sm:space-y-32">
           <Feature n="01" title="Scan your body from one photo"
             text="Upload one front photo and type your height. Fit-Ah finds 33 body points right in your browser and works out your chest, waist and shoulders."
-            chips={['One photo + height', '33 body points', 'Saved to your profile']}
+            chips={['One photo + height', '33 body points', 'Saved to profile']}
             media={<ScanCard />} />
           <Feature n="02" flip title="Try every size before you buy"
             text="The same shirt in S, M, L and XL on the same body, side by side. Pick the one you actually like, not the one you guess."
@@ -242,7 +251,7 @@ export default function LoginPage() {
       {/* ── wardrobe (the "Shop" screen) ─────────────────────── */}
       <section id="wardrobe" className="relative z-10 px-5 sm:px-8 pt-10 pb-28" style={{ backgroundColor: cream }}>
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-10 sm:mb-14">
-          <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.85]`} style={{ fontSize: 'clamp(44px, 9.5vw, 170px)', ...wide }}>Wardrobe</h2>
+          <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.85]`} style={{ fontSize: 'min(clamp(44px, 9.5vw, 170px), 11.4vw)', ...wide }}>Wardrobe</h2>
           <p className="max-w-[330px] text-[16px] sm:text-[18px] leading-snug md:mt-6">
             Real pieces from TNT CO, already simulated on our bodies in every size. Hover to see the back.
           </p>
@@ -264,7 +273,7 @@ export default function LoginPage() {
       <section id="signin" className="relative z-10 px-5 sm:px-8 py-20 sm:py-28 border-t" style={{ backgroundColor: cream, borderColor: `${navy}1a` }}>
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div>
-            <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.92] mb-6`} style={{ fontSize: 'clamp(40px, 5.6vw, 88px)', ...wide }}>
+            <h2 className={`${brand.className} font-extrabold uppercase tracking-[-0.02em] leading-[0.92] mb-6`} style={{ fontSize: 'min(clamp(40px, 5.6vw, 88px), 12vw)', ...wide }}>
               Find your<br />size<span style={{ color: pink }}></span>
             </h2>
             <p className="text-[17px] sm:text-[19px] leading-snug max-w-[420px] opacity-80">
@@ -326,14 +335,14 @@ function Feature({ n, title, text, chips, media, flip }: {
 }) {
   return (
     <article className="grid md:grid-cols-12 gap-6 sm:gap-10 items-center">
-      <div className={`order-2 md:col-span-7 ${flip ? 'md:order-2' : 'md:order-1'}`}>{media}</div>
-      <div className={`order-1 md:col-span-5 ${flip ? 'md:order-1 md:pr-6' : 'md:order-2 md:pl-6'}`}>
+      <div className={`min-w-0 order-2 md:col-span-7 ${flip ? 'md:order-2' : 'md:order-1'}`}>{media}</div>
+      <div className={`min-w-0 order-1 md:col-span-5 ${flip ? 'md:order-1 md:pr-6' : 'md:order-2 md:pl-6'}`}>
         <p className="text-[12px] tracking-[0.18em] uppercase mb-3 opacity-60">{n}</p>
         <h3 className="text-[32px] sm:text-[44px] font-medium leading-[1.02] tracking-[-0.035em] mb-4">{title}</h3>
         <p className="text-[16px] sm:text-[17px] leading-relaxed opacity-80 max-w-[460px]">{text}</p>
-        <div className="flex flex-wrap gap-2 mt-6">
+        <div className={`flex flex-nowrap gap-1 min-[360px]:gap-1.5 xl:gap-2 mt-6 overflow-x-auto ${css.noBar}`}>
           {chips.map(c => (
-            <span key={c} className="px-3 py-1.5 rounded-full text-[12px] font-medium border" style={{ borderColor: peach, backgroundColor: 'white' }}>{c}</span>
+            <span key={c} className="shrink-0 whitespace-nowrap px-[7px] min-[360px]:px-2.5 xl:px-3 py-1.5 rounded-full text-[9.5px] min-[360px]:text-[11px] xl:text-[12px] font-medium border" style={{ borderColor: peach, backgroundColor: 'white' }}>{c}</span>
           ))}
         </div>
       </div>
@@ -384,9 +393,9 @@ function VideoCard({ src, poster, ratio, labels, legend, narrow }: {
         </p>
       )}
       {legend && (
-        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-[12px]">
+        <div className="flex flex-nowrap justify-between sm:justify-center sm:gap-x-4 mt-4 text-[10px] sm:text-[12px]">
           {legend.map(([c, l]) => (
-            <span key={l} className="flex items-center gap-1.5">
+            <span key={l} className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1.5 whitespace-nowrap">
               <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c, borderColor: `${navy}33` }} />{l}
             </span>
           ))}
