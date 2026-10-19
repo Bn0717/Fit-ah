@@ -128,7 +128,7 @@ export default function LoginPage() {
 
       {/* ── the scroll story (pinned 3D stage) ───────────────── */}
       <section ref={storyRef} id="story" className="relative" style={{ height: '600vh' }}>
-        <div className="sticky top-0 h-[100svh] overflow-hidden">
+        <div className="sticky top-0 h-[100svh] supports-[height:100dvh]:h-[100dvh] overflow-hidden">
           <div className="absolute inset-0" data-keep="1" ref={bind(p => {
             const b = ease(seg(p, 0.8, 0.95));
             return { filter: b > 0.001 ? `blur(${b * 18}px)` : 'none', opacity: String(1 - b * 0.55) };
@@ -144,10 +144,11 @@ export default function LoginPage() {
           {/* 1 · hero */}
           <h1 ref={bind(p => {
             const e = ease(seg(p, 0, 0.12));
-            return { transform: `translateY(${-e * 30}px) scale(${1 - e * 0.55})`, opacity: String(1 - ease(seg(p, 0.07, 0.12))) };
+            const phone = window.innerWidth < 640;      // phones: already small and top-left, so it only fades into the header logo
+            return { transform: phone ? 'none' : `translateY(${-e * 30}px) scale(${1 - e * 0.55})`, opacity: String(1 - ease(seg(p, 0.07, 0.12))) };
           })}
-            className={`${brand.className} absolute left-5 sm:left-8 top-16 sm:top-14 origin-top-left font-extrabold leading-[0.85] tracking-[-0.02em] select-none whitespace-nowrap`}
-            style={{ fontSize: 'clamp(44px, 8.5vw, 140px)', ...wide }}>
+            className={`${brand.className} absolute left-5 sm:left-8 top-[27px] sm:top-14 origin-top-left font-extrabold leading-[0.85] tracking-[-0.02em] select-none whitespace-nowrap text-[26px] sm:text-[clamp(44px,8.5vw,140px)]`}
+            style={wide}>
             FIT-AH
           </h1>
           <div ref={bind(fade(-1, 0, 0.05, 0.1))} className="absolute left-5 sm:left-8 bottom-24 sm:bottom-auto sm:top-[50%] max-w-[330px]">
@@ -175,13 +176,13 @@ export default function LoginPage() {
 
           {/* 3 · the turn, floating garments, fit table */}
           <div ref={bind(fade(0.38, 0.44, 0.75, 0.8))} style={{ opacity: 0 }}
-            className="absolute left-5 sm:left-8 top-24 sm:top-[22%] max-w-[300px] sm:max-w-[400px]">
-            <p className="text-[24px] sm:text-[clamp(26px,2.6vw,38px)] leading-[1.12] tracking-[-0.02em]">
+            className="absolute left-3 right-3 sm:right-auto sm:left-8 top-20 sm:top-[22%] sm:max-w-[400px] p-3 sm:p-0 rounded-2xl backdrop-blur-md sm:backdrop-blur-none bg-[rgba(248,243,234,0.85)] sm:bg-transparent">
+            <p className="text-[20px] sm:text-[clamp(26px,2.6vw,38px)] leading-[1.15] tracking-[-0.02em]">
               Every size is fitted on a real body: chest, shoulders and length, measured in centimetres.
             </p>
           </div>
           <div ref={bind(fade(0.43, 0.49, 0.75, 0.8))} style={{ opacity: 0 }}
-            className="absolute right-5 sm:right-8 left-5 sm:left-auto bottom-8 sm:bottom-10 sm:w-[min(380px,34vw)] text-[12px] sm:text-[13px]">
+            className="absolute right-3 sm:right-8 left-3 sm:left-auto bottom-6 sm:bottom-10 sm:w-[min(380px,34vw)] text-[12px] sm:text-[13px] p-3 sm:p-0 rounded-2xl backdrop-blur-md sm:backdrop-blur-none bg-[rgba(248,243,234,0.85)] sm:bg-transparent">
             <p className="text-[10px] tracking-[0.18em] uppercase mb-2 opacity-60">Fit check · size M</p>
             {[
               ['Your body', '175 cm · chest 101 cm'],
@@ -325,8 +326,8 @@ function Feature({ n, title, text, chips, media, flip }: {
 }) {
   return (
     <article className="grid md:grid-cols-12 gap-6 sm:gap-10 items-center">
-      <div className={`md:col-span-7 ${flip ? 'md:order-2' : ''}`}>{media}</div>
-      <div className={`md:col-span-5 ${flip ? 'md:order-1 md:pr-6' : 'md:pl-6'}`}>
+      <div className={`order-2 md:col-span-7 ${flip ? 'md:order-2' : 'md:order-1'}`}>{media}</div>
+      <div className={`order-1 md:col-span-5 ${flip ? 'md:order-1 md:pr-6' : 'md:order-2 md:pl-6'}`}>
         <p className="text-[12px] tracking-[0.18em] uppercase mb-3 opacity-60">{n}</p>
         <h3 className="text-[32px] sm:text-[44px] font-medium leading-[1.02] tracking-[-0.035em] mb-4">{title}</h3>
         <p className="text-[16px] sm:text-[17px] leading-relaxed opacity-80 max-w-[460px]">{text}</p>
@@ -344,10 +345,10 @@ function Feature({ n, title, text, chips, media, flip }: {
 // the 2 size videos are the same Fit Lab grid (normal and fit map). Sizes match the labels in Fit Lab's own
 // video (blender/compose_walk_video.sh): the S shirt is worn with M jeans, the smallest jeans simulated.
 // body: the 175 x 101 grid body (public/models/fitlab/grid/meta.json, waist 77.7)
-const SIZE_LABELS = ['Shirt S · Jeans M', 'Shirt M · Jeans M', 'Shirt L · Jeans L', 'Shirt XL · Jeans XL'];
+const SIZE_LABELS: [string, string][] = [['S', 'M'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];   // [shirt, jeans]
 
 function VideoCard({ src, poster, ratio, labels, legend, narrow }: {
-  src: string; poster: string; ratio: string; labels?: string[]; legend?: [string, string][]; narrow?: boolean;
+  src: string; poster: string; ratio: string; labels?: [string, string][]; legend?: [string, string][]; narrow?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -364,13 +365,22 @@ function VideoCard({ src, poster, ratio, labels, legend, narrow }: {
           className="w-full h-auto block rounded-xl" style={{ aspectRatio: ratio }} />
       </div>
       {labels && (
-        <div className="grid grid-cols-4 mt-3 text-center text-[11px] sm:text-[13px] font-medium">
-          {labels.map(l => <span key={l} className="leading-tight">{l}</span>)}
+        <p className="sm:hidden mt-3 text-center text-[10px] tracking-[0.14em] uppercase opacity-60">Shirt · Jeans</p>
+      )}
+      {labels && (
+        <div className="grid grid-cols-4 mt-1 sm:mt-3 text-center text-[12px] sm:text-[13px] font-medium">
+          {labels.map(([t, j]) => (
+            <span key={t} className="whitespace-nowrap">
+              <span className="sm:hidden">{t} · {j}</span>
+              <span className="hidden sm:inline">Shirt {t} · Jeans {j}</span>
+            </span>
+          ))}
         </div>
       )}
       {labels && (
-        <p className="mt-2 text-center text-[11px] sm:text-[12px] opacity-60">
-          Same body in every size: 175 cm · chest 101 cm · waist 78 cm · shoulders 45 cm
+        <p className="mt-2 text-center text-[10.5px] sm:text-[12px] opacity-60 whitespace-nowrap">
+          <span className="sm:hidden">Same body (cm): 175 tall · chest 101 · waist 78 · shoulders 45</span>
+          <span className="hidden sm:inline">Same body in every size: 175 cm · chest 101 cm · waist 78 cm · shoulders 45 cm</span>
         </p>
       )}
       {legend && (
