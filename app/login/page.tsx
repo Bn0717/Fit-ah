@@ -63,16 +63,6 @@ export default function LoginPage() {
   // signed-in visitors can still read the page; the top-right button takes them to their profile
   // /login?signin=1 opens the sign-in panel straight away (for links from other pages)
   useEffect(() => { if (new URLSearchParams(window.location.search).get('signin')) setDrawer(true); }, []);
-  // the real visible height: phone browsers grow the screen when their toolbar hides while scrolling, and CSS
-  // units do not always follow (iPhone Safari), which left an empty band under the 3D stage
-  useEffect(() => {
-    const set = () => document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`);
-    set();
-    window.addEventListener('resize', set);
-    window.visualViewport?.addEventListener('resize', set);
-    return () => { window.removeEventListener('resize', set); window.visualViewport?.removeEventListener('resize', set); };
-  }, []);
-
   // scroll -> progress (0..1 across the story) -> styles, every frame, without re-rendering React
   useEffect(() => {
     let raf = 0;
@@ -137,7 +127,13 @@ export default function LoginPage() {
 
       {/* ── the scroll story (pinned 3D stage) ───────────────── */}
       <section ref={storyRef} id="story" className="relative" style={{ height: '600vh' }}>
-        <div className="sticky top-0 h-[100svh] overflow-hidden" style={{ height: 'var(--app-h, 100svh)' }}>
+        {/* The stage is fixed to the screen (top and bottom edge) while the story plays, then scrolls away with
+            the section. Phone browsers move fixed edges with their toolbars (Chrome on iPhone does not report the
+            new height to CSS units or innerHeight), so the stage always fills exactly what is visible. */}
+        <div data-keep="1" ref={bind(p => (p < 1
+          ? { position: 'fixed', top: '0', bottom: '0', height: 'auto' }
+          : { position: 'absolute', top: 'auto', bottom: '0', height: `${window.innerHeight}px` }))}
+          className="fixed inset-x-0 top-0 bottom-0 overflow-hidden">
           <div className="absolute inset-0" data-keep="1" ref={bind(p => {
             const b = ease(seg(p, 0.8, 0.95));
             return { filter: b > 0.001 ? `blur(${b * 18}px)` : 'none', opacity: String(1 - b * 0.55) };
@@ -186,8 +182,11 @@ export default function LoginPage() {
           {/* 3 · the turn, floating garments, fit table */}
           <div ref={bind(fade(0.38, 0.44, 0.75, 0.8))} style={{ opacity: 0 }}
             className="absolute left-3 right-3 sm:right-auto sm:left-8 top-20 sm:top-[22%] sm:max-w-[400px] p-3 sm:p-0 rounded-2xl backdrop-blur-md sm:backdrop-blur-none bg-[rgba(248,243,234,0.85)] sm:bg-transparent">
-            <p className="text-[20px] sm:text-[clamp(26px,2.6vw,38px)] leading-[1.15] tracking-[-0.02em]">
-              Every size is fitted on a real body: chest, shoulders and length, measured in centimetres.
+            <p className="font-bold whitespace-nowrap leading-[1.1] tracking-[-0.03em] text-[26px] sm:text-[clamp(30px,3vw,44px)]">
+              Fitted on a real body.
+            </p>
+            <p className="mt-1.5 text-[14px] sm:text-[17px] leading-snug opacity-75">
+              Every size: chest, shoulders and length, measured in centimetres.
             </p>
           </div>
           <div ref={bind(fade(0.43, 0.49, 0.75, 0.8))} style={{ opacity: 0 }}
@@ -340,7 +339,7 @@ function Feature({ n, title, text, chips, media, flip }: {
         <p className="text-[12px] tracking-[0.18em] uppercase mb-3 opacity-60">{n}</p>
         {/* one line: every title gets the size that fits the longest one ("Your wardrobe, cut out automatically" is
             about 14.8 x its font size wide) into its column */}
-        <h3 className="whitespace-nowrap text-[32px] sm:text-[44px] font-medium leading-[1.05] tracking-[-0.035em] mb-3" style={{ fontSize: 'min(44px, 6.5cqw)' }}>{title}</h3>
+        <h3 className="whitespace-nowrap text-[32px] sm:text-[44px] font-bold leading-[1.05] tracking-[-0.035em] mb-3" style={{ fontSize: 'min(44px, 6.5cqw)' }}>{title}</h3>
         <p className="text-[15px] sm:text-[17px] leading-relaxed opacity-80 max-w-[460px]">{text}</p>
         <div className={`flex flex-nowrap gap-1 min-[360px]:gap-1.5 xl:gap-2 mt-6 overflow-x-auto ${css.noBar}`}>
           {chips.map(c => (
