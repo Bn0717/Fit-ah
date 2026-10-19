@@ -481,7 +481,7 @@ function StylistCard() {
   const s = samples[ci], o = s.outfits[Math.min(oi, s.outfits.length - 1)];
   const day = new Date(stylist.generated).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   return (
-    <div className="max-w-[600px] mx-auto rounded-2xl p-5 sm:p-6 border-2" style={{ borderColor: peach, backgroundColor: 'white' }}>
+    <div className="max-w-[600px] mx-auto rounded-2xl p-3.5 sm:p-6 border-2 [container-type:inline-size]" style={{ borderColor: peach, backgroundColor: 'white' }}>
       {/* city = a different live-weather sample */}
       <div className="flex flex-wrap gap-2 mb-5" role="tablist" aria-label="Weather samples">
         {samples.map((x, i) => (
@@ -493,20 +493,22 @@ function StylistCard() {
         ))}
       </div>
       <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
-          <span className="w-11 h-11 rounded-full flex items-center justify-center text-[22px]" style={{ backgroundColor: peach }}>{WX_ICON[s.weather.condition] ?? '🌤️'}</span>
-          <div>
-            <p className="text-[13px] opacity-60">{s.city} · humidity {s.weather.humidity}%</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[22px]" style={{ backgroundColor: peach }}>{WX_ICON[s.weather.condition] ?? '🌤️'}</span>
+          <div className="min-w-0">
+            <p className="text-[12px] sm:text-[13px] opacity-60">{s.city} · humidity {s.weather.humidity}%</p>
             <p className="text-[20px] font-semibold tracking-[-0.02em]">{s.weather.tempC}°C · {s.weather.condition}</p>
           </div>
         </div>
-        <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider text-white" style={{ backgroundColor: navy }}>AI stylist</span>
+        <span className="shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-white" style={{ backgroundColor: navy }}>AI stylist</span>
       </div>
       {/* the 3 outfits the AI returned for this weather */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* one row: three equal buttons, text sized so the longest style name ("Streetwear Skater") fits */}
+      <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-4">
         {s.outfits.map((x, i) => (
-          <button key={i} onClick={() => setOi(i)} className="px-3 py-1 rounded-lg text-[12px] font-medium border"
-            style={i === oi ? { borderColor: navy, color: navy, backgroundColor: `${peach}66` } : { borderColor: `${navy}22`, opacity: 0.7 }}>
+          <button key={i} onClick={() => setOi(i)} className="min-w-0 whitespace-nowrap px-1 sm:px-3 py-1.5 rounded-lg text-[12px] font-medium border"
+            title={x.vibe}
+            style={{ fontSize: 'min(13px, 3.6cqw)', ...(i === oi ? { borderColor: navy, color: navy, backgroundColor: `${peach}66` } : { borderColor: `${navy}22`, opacity: 0.7 }) }}>
             {x.vibe}
           </button>
         ))}
