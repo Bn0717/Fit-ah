@@ -35,22 +35,12 @@ export function tapeAt(meta: GridMeta, m: keyof Tape, w: Record<string, number>,
     + VARIANTS.reduce((a, v) => a + (vw[v] ? vw[v] * blend(w, k => meta.shape?.[k]?.[v]?.[m] ?? 0) : 0), 0);
 }
 
-// The body the 3D, the shirt and the pants all use while these pants are worn (same rule on /fit-lab and
-// /fit-lab-profile, so both show the same thing):
-//  - pants simulated at the natural waist and belly only (no waist / belly versions: products, shorts): natural
-//    waist and belly (lock), as that is the only body they were simulated on
-//  - pants with waist / belly versions (centre body only): away from the centre body, a waist within 2 cm of this
-//    body's natural waist (about a tape measure's own error) with a natural belly is shown at the natural waist
-//    (snap), so the pants can be drawn; bigger changes stay (and the pants then say they were not simulated)
+// Keep pants on their natural waist/belly body. The requested waist is retained by the caller,
+// so removing the pants restores shirt-only adjustments without changing saved measurements.
 export function wornBody(meta: GridMeta, pants: PantsData | null, size: string | null,
   height: number, chest: number, shoulder: number | null, waist: number | null, belly: number) {
   if (!pants || !size || !pants.sizes[size]) return { waist, belly, lock: false, snap: false };
-  const lock = !(pants.belt?.[size]?.variants && pants.drop?.[size]?.variants);
-  if (lock) return { waist: null, belly: 0, lock, snap: false };
-  const sb0 = solveBody(meta, height, chest, shoulder, null, 0);
-  const snap = sb0.ok && (sb0.w[meta.centre] ?? 0) < 0.5 && Math.abs(belly) <= 0.15
-    && (waist === null || Math.abs(waist - sb0.natural.waist) <= 2);
-  return snap ? { waist: null, belly: 0, lock, snap } : { waist, belly, lock, snap };
+  return { waist: null, belly: 0, lock: true, snap: false };
 }
 
 export function jeansState(meta: GridMeta, pants: PantsData | null, size: string | null, belt: boolean,
