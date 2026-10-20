@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,31 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Fit Lab: simulation workshop, notes and tools (not part of the website)
+/blender/
+/blender_codex/
+/docs/
+/reports/
+/research_notes/
+/.archify/
+/app/api/fitlab/
+*.pdf
+/err.txt
+/repo.txt
+/.shot.png
+/*.png.webp
+/Adobe Express*
+
+# Fit Lab 3D files the website does not load (it loads the packed .glb.gz: blender/pack_web.sh)
+/public/models/fitlab/exact/
+/public/models/fitlab/body_M_shirt_M.*
+/public/models/fitlab/walk_sizes*.mp4
+/public/models/fitlab/grid/**/*.glb
+!/public/models/fitlab/grid/body.glb
+/public/models/fitlab/grid/jeans_*.glb.gz
+/public/models/fitlab/products/*/belt/*.glb
+/public/models/fitlab/products/*/drop/*.glb
+# hidden products (not shown on the site yet)
+/public/models/fitlab/products/xin_check/
+/public/models/fitlab/products/stallion_brown/

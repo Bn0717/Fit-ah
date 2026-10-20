@@ -1,0 +1,22 @@
+[
+ {
+  "id": "xin_check",
+  "name": "Xin Denim Biker Pants (tool check)",
+  "brand": "TNT CO",
+  "dir": "/models/fitlab/products/xin_check",
+  "hidden": true
+ },
+ {
+  "id": "stallion_brown",
+  "name": "Stallion Pants (Brown)",
+  "brand": "TNT CO",
+  "dir": "/models/fitlab/products/stallion_brown",
+  "hidden": true
+ },
+ {
+  "id": "ns_matrix_white",
+  "name": "NS Matrix Shorts (White, BCL ver.)",
+  "brand": "TNT CO",
+  "dir": "/models/fitlab/products/ns_matrix_white"
+ }
+]

@@ -56,7 +56,7 @@ export default function Navbar() {
 
   return (
     <nav className="border-b sticky top-0 z-40" style={{ backgroundColor: colors.cream, borderColor: colors.peach }}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
+      <div className={`${pathname === '/profile' || pathname === '/fit-lab-profile' ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 py-2.5`}>
         <div className="flex items-center justify-between">
 
           {/* Logo */}
@@ -99,7 +99,7 @@ export default function Navbar() {
                         className="w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-70 disabled:opacity-50"
                         style={{ color: colors.navy }}
                       >
-                        {loading ? '🔄 Logging out...' : '👋 Logout'}
+                        {loading ? '🔄 Logging out...' : 'Logout'}
                       </button>
                     </div>
                   </div>
@@ -155,7 +155,7 @@ export default function Navbar() {
                   className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-colors hover:opacity-70 disabled:opacity-50"
                   style={{ color: colors.navy, backgroundColor: colors.peach }}
                 >
-                  {loading ? '🔄 Logging out...' : '👋 Logout'}
+                  {loading ? '🔄 Logging out...' : 'Logout'}
                 </button>
               </>
             )}

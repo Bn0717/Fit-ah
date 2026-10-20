@@ -1,0 +1,236 @@
+{
+ "size": "M",
+ "chart": {
+  "waist": 39,
+  "hip": 51,
+  "length": 108,
+  "opening": 30,
+  "rise": 31.0,
+  "thigh": 29.5,
+  "knee": 32.0,
+  "back_rise_extra": 8.0,
+  "inseam": 77.0
+ },
+ "bodies": {
+  "h160_c92": {
+   "waistband_height_cm": 93.5,
+   "natural_waist_height_cm": 96.8,
+   "body_girth_at_waistband_cm": 72.8,
+   "waistband_girth_fabric_cm": 81.6,
+   "crotch_drop_cm": 8.3,
+   "hem_lowest_cm": -1.4,
+   "seam_gap_mean_cm": 0.013,
+   "stretch_p50": 1.65,
+   "stretch_p95": 4.14
+  },
+  "h160_c101": {
+   "waistband_height_cm": 93.9,
+   "natural_waist_height_cm": 97.2,
+   "body_girth_at_waistband_cm": 76.0,
+   "waistband_girth_fabric_cm": 80.1,
+   "crotch_drop_cm": 5.6,
+   "hem_lowest_cm": -1.4,
+   "seam_gap_mean_cm": 0.016,
+   "stretch_p50": 1.69,
+   "stretch_p95": 4.29
+  },
+  "h160_c110": {
+   "waistband_height_cm": 90.1,
+   "natural_waist_height_cm": 93.2,
+   "body_girth_at_waistband_cm": 82.6,
+   "waistband_girth_fabric_cm": 84.2,
+   "crotch_drop_cm": 6.6,
+   "hem_lowest_cm": -1.4,
+   "seam_gap_mean_cm": 0.019,
+   "stretch_p50": 1.74,
+   "stretch_p95": 6.16
+  },
+  "h160_c116": {
+   "waistband_height_cm": 89.6,
+   "natural_waist_height_cm": 93.2,
+   "body_girth_at_waistband_cm": 83.7,
+   "waistband_girth_fabric_cm": 89.2,
+   "crotch_drop_cm": 0.7,
+   "hem_lowest_cm": -1.4,
+   "seam_gap_mean_cm": 0.021,
+   "stretch_p50": 1.79,
+   "stretch_p95": 5.76
+  },
+  "h165_c92": {
+   "waistband_height_cm": 97.4,
+   "natural_waist_height_cm": 100.7,
+   "body_girth_at_waistband_cm": 73.8,
+   "waistband_girth_fabric_cm": 81.1,
+   "crotch_drop_cm": 8.5,
+   "hem_lowest_cm": -1.5,
+   "seam_gap_mean_cm": 0.017,
+   "stretch_p50": 1.72,
+   "stretch_p95": 4.14
+  },
+  "h165_c101": {
+   "waistband_height_cm": 97.9,
+   "natural_waist_height_cm": 101.1,
+   "body_girth_at_waistband_cm": 77.0,
+   "waistband_girth_fabric_cm": 81.0,
+   "crotch_drop_cm": 6.4,
+   "hem_lowest_cm": -1.5,
+   "seam_gap_mean_cm": 0.009,
+   "stretch_p50": 1.72,
+   "stretch_p95": 4.2
+  },
+  "h165_c110": {
+   "waistband_height_cm": 94.0,
+   "natural_waist_height_cm": 97.1,
+   "body_girth_at_waistband_cm": 83.6,
+   "waistband_girth_fabric_cm": 87.7,
+   "crotch_drop_cm": 11.1,
+   "hem_lowest_cm": -1.5,
+   "seam_gap_mean_cm": 0.04,
+   "stretch_p50": 1.74,
+   "stretch_p95": 9.62
+  },
+  "h165_c116": {
+   "waistband_height_cm": 93.4,
+   "natural_waist_height_cm": 96.7,
+   "body_girth_at_waistband_cm": 84.8,
+   "waistband_girth_fabric_cm": 87.5,
+   "crotch_drop_cm": -1.0,
+   "hem_lowest_cm": 13.6,
+   "seam_gap_mean_cm": 0.164,
+   "stretch_p50": 1.83,
+   "stretch_p95": 24.21
+  },
+  "h175_c92": {
+   "waistband_height_cm": 105.4,
+   "natural_waist_height_cm": 108.7,
+   "body_girth_at_waistband_cm": 75.8,
+   "waistband_girth_fabric_cm": 81.0,
+   "crotch_drop_cm": 5.9,
+   "hem_lowest_cm": -0.5,
+   "seam_gap_mean_cm": 0.014,
+   "stretch_p50": 1.7,
+   "stretch_p95": 4.13
+  },
+  "h175_c101": {
+   "waistband_height_cm": 105.8,
+   "natural_waist_height_cm": 109.1,
+   "body_girth_at_waistband_cm": 79.2,
+   "waistband_girth_fabric_cm": 83.1,
+   "crotch_drop_cm": 1.7,
+   "hem_lowest_cm": 3.9,
+   "seam_gap_mean_cm": 0.016,
+   "stretch_p50": 1.77,
+   "stretch_p95": 5.0
+  },
+  "h175_c110": {
+   "waistband_height_cm": 101.5,
+   "natural_waist_height_cm": 104.6,
+   "body_girth_at_waistband_cm": 86.1,
+   "waistband_girth_fabric_cm": 90.4,
+   "crotch_drop_cm": 7.4,
+   "hem_lowest_cm": 28.8,
+   "seam_gap_mean_cm": 0.108,
+   "stretch_p50": 2.08,
+   "stretch_p95": 18.42
+  },
+  "h175_c116": {
+   "waistband_height_cm": 101.0,
+   "natural_waist_height_cm": 104.2,
+   "body_girth_at_waistband_cm": 87.1,
+   "waistband_girth_fabric_cm": 90.6,
+   "crotch_drop_cm": -1.8,
+   "hem_lowest_cm": 9.6,
+   "seam_gap_mean_cm": 0.099,
+   "stretch_p50": 1.86,
+   "stretch_p95": 15.38
+  },
+  "h185_c92": {
+   "waistband_height_cm": 113.3,
+   "natural_waist_height_cm": 116.5,
+   "body_girth_at_waistband_cm": 77.4,
+   "waistband_girth_fabric_cm": 81.4,
+   "crotch_drop_cm": 2.5,
+   "hem_lowest_cm": 9.4,
+   "seam_gap_mean_cm": 0.02,
+   "stretch_p50": 1.7,
+   "stretch_p95": 4.44
+  },
+  "h185_c101": {
+   "waistband_height_cm": 113.7,
+   "natural_waist_height_cm": 116.9,
+   "body_girth_at_waistband_cm": 80.7,
+   "waistband_girth_fabric_cm": 86.1,
+   "crotch_drop_cm": -0.3,
+   "hem_lowest_cm": 12.4,
+   "seam_gap_mean_cm": 0.024,
+   "stretch_p50": 1.76,
+   "stretch_p95": 5.48
+  },
+  "h185_c110": {
+   "waistband_height_cm": 113.4,
+   "natural_waist_height_cm": 116.6,
+   "body_girth_at_waistband_cm": 85.8,
+   "waistband_girth_fabric_cm": 92.9,
+   "crotch_drop_cm": 4.8,
+   "hem_lowest_cm": 42.7,
+   "seam_gap_mean_cm": 0.147,
+   "stretch_p50": 2.22,
+   "stretch_p95": 23.93
+  },
+  "h185_c116": {
+   "waistband_height_cm": 113.4,
+   "natural_waist_height_cm": 116.6,
+   "body_girth_at_waistband_cm": 86.4,
+   "waistband_girth_fabric_cm": 89.8,
+   "crotch_drop_cm": -24.0,
+   "hem_lowest_cm": 60.4,
+   "seam_gap_mean_cm": 0.04,
+   "stretch_p50": 1.7,
+   "stretch_p95": 10.59
+  },
+  "h190_c92": {
+   "waistband_height_cm": 117.2,
+   "natural_waist_height_cm": 120.5,
+   "body_girth_at_waistband_cm": 78.2,
+   "waistband_girth_fabric_cm": 81.8,
+   "crotch_drop_cm": -0.0,
+   "hem_lowest_cm": 14.9,
+   "seam_gap_mean_cm": 0.028,
+   "stretch_p50": 1.78,
+   "stretch_p95": 5.02
+  },
+  "h190_c101": {
+   "waistband_height_cm": 117.7,
+   "natural_waist_height_cm": 120.9,
+   "body_girth_at_waistband_cm": 81.5,
+   "waistband_girth_fabric_cm": 86.3,
+   "crotch_drop_cm": 1.7,
+   "hem_lowest_cm": 15.6,
+   "seam_gap_mean_cm": 0.077,
+   "stretch_p50": 1.77,
+   "stretch_p95": 15.07
+  },
+  "h190_c110": {
+   "waistband_height_cm": 117.7,
+   "natural_waist_height_cm": 120.9,
+   "body_girth_at_waistband_cm": 86.6,
+   "waistband_girth_fabric_cm": 89.9,
+   "crotch_drop_cm": 3.2,
+   "hem_lowest_cm": 49.4,
+   "seam_gap_mean_cm": 0.182,
+   "stretch_p50": 2.29,
+   "stretch_p95": 23.5
+  },
+  "h190_c116": {
+   "waistband_height_cm": 117.8,
+   "natural_waist_height_cm": 120.9,
+   "body_girth_at_waistband_cm": 87.2,
+   "waistband_girth_fabric_cm": 90.5,
+   "crotch_drop_cm": -24.4,
+   "hem_lowest_cm": 67.9,
+   "seam_gap_mean_cm": 0.056,
+   "stretch_p50": 1.74,
+   "stretch_p95": 12.44
+  }
+ }
+}

@@ -259,7 +259,7 @@ function PhotoLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
 // ══════════════════════════════════════════════════════════════════════════════
 // STYLE SUGGESTIONS OVERLAY
 // ══════════════════════════════════════════════════════════════════════════════
-function StyleOverlay({
+export function StyleOverlay({
   item, userProfile, selectedSize, onBack,
 }: { item: ClothingItem; userProfile: ParametricAvatar | null; selectedSize: string; onBack: () => void }) {
 
@@ -374,11 +374,12 @@ function StyleOverlay({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Gemini error ${res.status}`);
+      if (!res.ok) throw new Error(data?.error?.message || (typeof data?.error === 'string' ? data.error : `Gemini error ${res.status}`));
       const raw  = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (!raw) throw new Error('Gemini returned no suggestions. Please try again.');
       setOutfits(JSON.parse(raw.replace(/```json|```/g, '').trim()));
       setGenerated(true); setActiveIdx(0);
-    } catch (e: any) { setAiError('Could not generate. Check GEMINI_API_KEY in server .env.local'); }
+    } catch { setAiError('Something went wrong. Please try again later.'); }
     finally { setAiLoading(false); }
   }, [weather, item, selectedSize, userProfile]);
 
