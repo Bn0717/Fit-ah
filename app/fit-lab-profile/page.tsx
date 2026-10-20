@@ -169,7 +169,7 @@ export default function MyFittingRoom() {
   useEffect(() => {
     const it = bottomItem;
     if (!it || it.kind !== 'product' || !it.dir || productData[it.id]) return;
-    fetch(`${it.dir}/product.json`).then(r => r.json()).then(p => setProductData(x => ({ ...x, [it.id]: { name: `${p.brand} ${p.name}`, sizes: p.belt, drop: p.drop, belt: p.belt, dir: p.dir, elasticStretch: p.elastic_stretch } })));
+    fetch(`${it.dir}/product.json`).then(r => r.json()).then(p => setProductData(x => ({ ...x, [it.id]: { name: `${p.brand} ${p.name}`, sizes: p.belt, drop: p.drop, belt: p.belt, dir: p.dir, elasticStretch: p.elastic_stretch, walk: p.walk } })));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bottomItem?.id]);
   const pantsOf = (it: WItem | null): (PantsData & { dir: string }) | null =>
@@ -440,7 +440,7 @@ export default function MyFittingRoom() {
       {meta ? (
         <FitViewer meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top}
-          jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
+          jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, productWalk: P?.walk, walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
           onWalking={setWalking} onWalkStatus={setWalkStatus} className="h-full w-full" />
       ) : <div className="absolute inset-0 flex items-center justify-center"><Spinner label="Loading your 3D body…" /></div>}
@@ -477,7 +477,9 @@ export default function MyFittingRoom() {
           <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium shadow" style={{ color: C.navy }}>{wide ? 'Pick something from your wardrobe →' : 'Tap Tops or Bottoms (or pull up) to try something on'}</span>
         </div>
       )}
-      {walking && <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] shadow" style={{ color: C.mute }}>{walkStatus || (bottom && bottomItem && bottomItem.kind !== 'xin' && bottomItem.kind !== 'swap'
+      {walking && <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] shadow" style={{ color: C.mute }}>{walkStatus || (bottom && P?.walk?.sizes.includes(bottom.size)
+        ? `Walking in shorts ${bottom.size} on the 175 cm / chest 101 cm body${top && P.walk.layered[top.size as Size] === bottom.size ? ' · shirt simulated over the shorts' : ' · shirt uses its separate walk'}`
+        : bottom && bottomItem && bottomItem.kind !== 'xin' && bottomItem.kind !== 'swap'
         ? `Catwalk replayed on the 175 cm body · ${bottomItem.name} not walked yet: basic pants shown`   // only the Xin jeans were walked
         : 'Catwalk replayed on the 175 cm body')}</p>}
       {toast && <div className="absolute left-1/2 top-14 -translate-x-1/2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-lg" style={{ background: C.green }}>{toast}</div>}

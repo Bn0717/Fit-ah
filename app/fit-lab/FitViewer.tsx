@@ -5,8 +5,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, rootPath, solveBody, jeansVarWeights,
-  pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type WalkTrack } from './engine';
+import { selectWalk, fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody, jeansVarWeights,
+  pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type ProductWalk, type WalkTrack } from './engine';
 import type { Result } from './colourway';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
@@ -23,7 +23,7 @@ export interface FitViewerProps {
   // jeans being worn: glb of the chosen simulation (drop / belt), size for the catwalk, hidden = cannot be worn or
   // not simulated for this body (the basic pants are shown instead), skin = pants photo swap textures
   // walk: false = no walking simulation of these pants (the catwalk then shows the basic pants)
-  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; belt?: boolean; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
+  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; belt?: boolean; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
   onWalking: (on: boolean) => void; onWalkStatus: (msg: string | null) => void;
   background?: string; className?: string; style?: React.CSSProperties;
 }
@@ -119,7 +119,15 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
             if (J) for (const t of J.tracks) applyFrame(t, f, W.mode === 'fit', 'denim');
             const jp = J ? joinParts(J.tracks.map((t: WalkTrack) => t.mesh.geometry.attributes.position.array as Float32Array)) : null;   // all panels: one garment
             const layered = W.size.includes('_j');      // shirt walked over these jeans in the simulation
-            for (const t of W.shirts[W.size].tracks) applyFrame(t, f, W.mode === 'fit', 'jersey', jp && !layered ? (a => { pushOutside(a, jp); }) : undefined);
+            for (const t of W.shirts[W.size].tracks) applyFrame(t, f, W.mode === 'fit', 'jersey', jp && !layered && !W.productPants ? (a => { pushOutside(a, jp); }) : undefined);
+            // Unpaired product walks need both steps: move the shirt out, then press residual
+            // shorts folds underneath it. pushOutside alone deliberately caps its correction.
+            if (J && W.productPants && !layered && W.shirts[W.size].root.visible) {
+              const shirts: WalkTrack[] = W.shirts[W.size].tracks, pants: WalkTrack[] = J.tracks;
+              layerShirtOverPants(shirts.map(t => t.mesh.geometry.attributes.position.array as Float32Array),
+                pants.map(t => t.mesh.geometry.attributes.position.array as Float32Array));
+              for (const t of [...shirts, ...pants]) refreshWalkNormals(t);
+            }
           }
         }
         controls.update(); renderer.render(scene, camera);
@@ -179,11 +187,10 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     const W = S.walk || (S.walk = { group: new THREE.Group(), shirts: {}, jeans: {}, loading: {} });
     if (!W.added) { S.scene.add(W.group); W.added = true; }
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
-    const jz = jOn && jeans!.belt && meta.walk?.jeans?.[jeans!.size + 'belt'] ? jeans!.size + 'belt' : jeans?.size;
-    const js = jOn && jeans!.walk !== false && jz && meta.walk?.jeans?.[jz] ? jz : null;
-    // the shirt walked over these jeans (real collision) when that pair was simulated
-    const sk = js && meta.walk?.layered?.[size] === js ? `${size}_j${js}` : size;
-    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js;
+    const jz = jOn && !jeans?.productWalk && jeans!.belt && meta.walk?.jeans?.[jeans!.size + 'belt'] ? jeans!.size + 'belt' : jeans?.size;
+    const selected = selectWalk(meta, size, jOn ? jz : null, jeans?.walk !== false, jeans?.productWalk);
+    const { js, sk } = selected;
+    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = selected.packedPants;
     const has = !!meta.walk?.sizes[size];
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
@@ -198,7 +205,10 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
     const dir = meta.walk!.dir;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loadGlb = (u: string) => new Promise<any>((res, rej) => S.loader.load(u, res, undefined, rej));
+    const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
+      if (packed) loadPacked(THREE, S.loader, u + '.gz', res, undefined, rej);
+      else S.loader.load(u, res, undefined, rej);
+    });
     const jobs: Promise<unknown>[] = [];
     if (!W.body && !W.loading.body) {
       const info = fetch(`${dir}/walk_body.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
@@ -222,8 +232,8 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }
     if (W.loading.body) jobs.push(W.loading.body);
     if (!W.shirts[sk] && !W.loading[sk]) {
-      const info = fetch(`${dir}/walk_${sk}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
-      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`, info), info])
+      const info = fetch(`${selected.shirtDir}/walk_${selected.shirtFile}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading[sk] = Promise.all([loadGlb(`${selected.shirtDir}/walk_shirt_${selected.shirtFile}.glb`, selected.packedShirt), fetchBin(`${selected.shirtDir}/walk_shirt_${selected.shirtFile}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -243,8 +253,8 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }
     if (W.loading[sk]) jobs.push(W.loading[sk]);
     if (js && !W.jeans[js] && !W.loading['jeans_' + js]) {
-      const info = fetch(`${dir}/walk_jeans_${js}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
-      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`, info), info])
+      const info = fetch(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading['jeans_' + js] = Promise.all([loadGlb(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.glb`, selected.packedPants), fetchBin(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -272,7 +282,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }).catch(() => { if (!stale) { setWalking(false); setWalkStatus('Could not load the catwalk.'); } });
     return () => { stale = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walking, size, mode, meta, loading, jOn, jeans?.size, jeans?.walk, jeans?.belt, showShirt]);
+  }, [walking, size, mode, meta, loading, jOn, jeans?.size, jeans?.walk, jeans?.belt, jeans?.productWalk, showShirt]);
 
   // ── jeans: load the chosen simulation on demand; the basic pants are swapped for them ───────────
   useEffect(() => {

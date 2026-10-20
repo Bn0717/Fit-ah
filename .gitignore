@@ -70,3 +70,7 @@ next-env.d.ts
 # hidden products (not shown on the site yet)
 /public/models/fitlab/products/xin_check/
 /public/models/fitlab/products/stallion_brown/
+
+# Product catwalks load packed files, with raw exports retained locally.
+/public/models/fitlab/walk/*/*.bin
+/public/models/fitlab/walk/*/*.glb
