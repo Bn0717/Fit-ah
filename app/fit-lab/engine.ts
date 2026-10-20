@@ -108,6 +108,53 @@ export const blend = (w: Record<string, number>, f: (k: string) => number) =>
 export const clamp = (x: number, a: number, b: number) => Math.min(Math.max(x, a), b);
 
 // ─── Catwalk playback ───────────────────────────────────────────────────────────
+export interface WalkPackingInfo {
+  packed?: { version: number; regions: { offset: number; dtype: 'int16' | 'int8' | 'uint8'; frames: number; width: number }[] };
+}
+
+// Decode into the original byte layout. makeTrack/applyFrame remain unchanged.
+export function unpackWalk(buf: ArrayBuffer, info: WalkPackingInfo): ArrayBuffer {
+  if (info.packed?.version !== 1) throw new Error('Unsupported or missing catwalk packing metadata');
+  const input = new Uint8Array(buf), out = new ArrayBuffer(buf.byteLength), bytes = new Uint8Array(out);
+  const view = new DataView(out);
+  let end = 0;
+  for (const region of info.packed.regions) {
+    const { offset, dtype, frames, width } = region;
+    if (!['int16', 'int8', 'uint8'].includes(dtype) || !Number.isSafeInteger(offset) || offset !== end ||
+        !Number.isSafeInteger(frames) || frames < 1 || !Number.isSafeInteger(width) || width < 1) {
+      throw new Error('Invalid catwalk packing region');
+    }
+    const count = frames * width, itemSize = dtype === 'int16' ? 2 : 1;
+    end = offset + count * itemSize;
+    if (!Number.isSafeInteger(end) || end > buf.byteLength) throw new Error('Truncated catwalk packing region');
+    for (let i = 0; i < count; i++) {
+      if (itemSize === 2) {
+        const delta = input[offset + i] | (input[offset + count + i] << 8);
+        const previous = i < width ? 0 : view.getUint16(offset + (i - width) * 2, true);
+        view.setUint16(offset + i * 2, delta + previous, true); // wraps to the original int16 bits
+      } else {
+        bytes[offset + i] = input[offset + i] + (i < width ? 0 : bytes[offset + i - width]);
+      }
+    }
+  }
+  if (end !== buf.byteLength) throw new Error('Incomplete catwalk packing regions');
+  return out;
+}
+
+export async function fetchBin(url: string, metadata: WalkPackingInfo | Promise<WalkPackingInfo>): Promise<ArrayBuffer> {
+  let response = await fetch(url + '.gz');
+  const packed = response.status !== 404;
+  if (!packed) response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  let buf = await response.arrayBuffer();
+  if (!packed) return buf; // Original file fallback: never delta-decode it.
+  const head = new Uint8Array(buf);
+  if (head[0] === 0x1f && head[1] === 0x8b) {
+    buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  return unpackWalk(buf, await metadata);
+}
+
 // One track per three.js mesh: Int16 positions per frame per (compacted) Blender vertex, Blender Z-up.
 export interface QInfo { n: number; min: number[]; scale: number[]; frames: number }
 export interface WalkTrack {

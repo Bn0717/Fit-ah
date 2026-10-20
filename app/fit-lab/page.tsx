@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { loadRef, makeTexture, type Ref } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
-import { loadPacked, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, rootPath, solveBody,
+import { loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, rootPath, solveBody,
   type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, loadStored, type LabItem, type SizeFit } from './Wardrobe';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
@@ -350,12 +350,12 @@ function FitLab() {
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
     const dir = meta.walk!.dir;
-    const fetchBin = (u: string) => fetch(u).then(r => { if (!r.ok) throw new Error(u); return r.arrayBuffer(); });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string) => new Promise<any>((res, rej) => S.loader.load(u, res, undefined, rej));
     const jobs: Promise<unknown>[] = [];
     if (!W.body && !W.loading.body) {
-      W.loading.body = Promise.all([loadGlb(`${dir}/walk_body.glb`), fetchBin(`${dir}/walk_body.bin`), fetch(`${dir}/walk_body.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_body.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading.body = Promise.all([loadGlb(`${dir}/walk_body.glb`), fetchBin(`${dir}/walk_body.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -375,7 +375,8 @@ function FitLab() {
     }
     if (W.loading.body) jobs.push(W.loading.body);
     if (!W.shirts[sk] && !W.loading[sk]) {
-      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`), fetch(`${dir}/walk_${sk}.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_${sk}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -395,7 +396,8 @@ function FitLab() {
     }
     if (W.loading[sk]) jobs.push(W.loading[sk]);
     if (js && !W.jeans[js] && !W.loading['jeans_' + js]) {
-      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`), fetch(`${dir}/walk_jeans_${js}.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_jeans_${js}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
