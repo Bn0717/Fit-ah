@@ -12,7 +12,6 @@ import dynamic from 'next/dynamic';
 import { Inter_Tight, Archivo } from 'next/font/google';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getAvatar } from '@/lib/firebase/firestore';
 import { colors, useLoginForm, LoginCard, ResetModal } from '@/components/login/LoginCard';
 import { seg, ease, ENTER_MS } from '@/components/login/HeroStage';
 import css from './login.module.css';
@@ -34,7 +33,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [drawer, setDrawer] = useState(false);
-  // fly the camera into the shirt, then open the next page (after sign-in, or from "My profile")
+  // fly the camera into the shirt, then open the next page (after sign-in, or from "My wardrobe")
   const enterAt = useRef<number | null>(null);
   const [entering, setEntering] = useState<string | null>(null);
   const flyTo = (href: string, label: string) => {
@@ -46,10 +45,9 @@ export default function LoginPage() {
     setEntering(label);
     setTimeout(() => router.push(href), ENTER_MS + 400);
   };
-  // same places as the old login: your profile, or onboarding if you have no body profile yet
-  const f = useLoginForm(async uid => {
-    const profile = await getAvatar(uid);
-    flyTo(profile ? '/profile' : '/onboarding', profile ? 'Opening your profile…' : 'Setting up your profile…');
+  // Sign-in opens the wardrobe; body setup remains available from the app.
+  const f = useLoginForm(() => {
+    flyTo('/items', 'Opening your wardrobe…');
   });
   const [loaded, setLoaded] = useState(0);
   const progress = useRef(0);
@@ -60,7 +58,7 @@ export default function LoginPage() {
     if (!stylers.current.some(s => s[0] === el)) stylers.current.push([el, fn]);
   };
 
-  // signed-in visitors can still read the page; the top-right button takes them to their profile
+  // signed-in visitors can still read the page; the top-right button takes them to their wardrobe
   // /login?signin=1 opens the sign-in panel straight away (for links from other pages)
   useEffect(() => { if (new URLSearchParams(window.location.search).get('signin')) setDrawer(true); }, []);
   // scroll -> progress (0..1 across the story) -> styles, every frame, without re-rendering React
@@ -117,10 +115,10 @@ export default function LoginPage() {
             <button className="text-left hover:opacity-60" onClick={() => go('wardrobe')}>Wardrobe</button>
             <button className="text-left hover:opacity-60" onClick={() => go('signin')}>Get started</button>
           </nav>
-          <button onClick={() => (user ? flyTo('/profile', 'Opening your profile…') : setDrawer(true))}
+          <button onClick={() => (user ? flyTo('/items', 'Opening your wardrobe…') : setDrawer(true))}
             className="px-5 py-2.5 rounded-full text-sm font-semibold text-white shadow-sm transition-transform hover:scale-[1.03] active:scale-95"
             style={{ backgroundColor: navy }}>
-            {user ? 'My profile' : 'Sign In'}
+            {user ? 'My wardrobe' : 'Sign In'}
           </button>
         </div>
       </header>

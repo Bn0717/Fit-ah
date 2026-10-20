@@ -5,18 +5,20 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { loadPantsRef, makePantsTexture } from '@/app/fit-lab/pantsSwap';
 
 const MODEL = '/models/login/hero.glb?v=3';
 const TEE = '/models/login/tee.glb?v=3';
 // mpos = where it floats on a phone (the narrow view has less room: keep clear of the arms, text and table)
-type Floater = { url: string; pos: [number, number, number]; mpos?: [number, number, number]; scale: number; spin: number; tex?: string; desktopOnly?: boolean };
+type Floater = { url: string; pos: [number, number, number]; mpos?: [number, number, number]; scale: number; spin: number; tex?: string; pantsPhoto?: boolean; desktopOnly?: boolean };
+// Fixed promotional assets: never read the user's wardrobe, hidden items or uploads.
 const FLOATERS: Floater[] = [
   // url, position (desktop), scale, spin direction; tex = another TNT CO tee's shop photos on the same tee
   // (models/login/tees/<tex>_f.jpg / _b.jpg, padded by blender/pad_tee_photo.py)
   { url: TEE, pos: [1.25, 1.42, -0.35], mpos: [0.7, 1.4, 0], scale: 0.55, spin: 1 },
-  { url: '/models/fitlab/products/stallion_brown/belt/jeans_M.glb', pos: [1.5, 0.45, 0.15], mpos: [0.72, 0.35, 0], scale: 0.42, spin: -1 },
-  { url: '/models/fitlab/products/ns_matrix_white/belt/jeans_M.glb', pos: [-1.35, 0.38, 0.25], mpos: [-0.72, 0.12, 0], scale: 0.5, spin: 1 },
-  { url: '/models/fitlab/products/xin_check/belt/jeans_M.glb', pos: [-0.8, 0.9, -1.5], mpos: [-0.76, 0.62, 0], scale: 0.38, spin: -1 },
+  { url: '/models/login/jeans.glb.gz', pantsPhoto: true, pos: [1.5, 0.45, 0.15], mpos: [0.72, 0.35, 0], scale: 0.42, spin: -1 },
+  { url: '/models/login/shorts.glb.gz', pos: [-1.35, 0.38, 0.25], mpos: [-0.72, 0.12, 0], scale: 0.5, spin: 1 },
+  { url: '/models/login/jeans.glb.gz', pos: [-0.8, 0.9, -1.5], mpos: [-0.76, 0.62, 0], scale: 0.38, spin: -1 },
   { url: TEE, tex: 'maui-logo-tee-pink', pos: [-0.75, 1.98, -1.7], mpos: [-0.6, 1.72, 0], scale: 0.48, spin: -1 },
   { url: TEE, tex: 'horsehoes-tee-black', pos: [0.95, 2.05, -1.4], mpos: [0.45, 1.86, 0], scale: 0.45, spin: 1 },
   { url: TEE, tex: 'maui-logo-tee-blue', pos: [2.15, 1.05, -1.7], scale: 0.5, spin: -1, desktopOnly: true },
@@ -118,19 +120,39 @@ export default function HeroStage({ progress, onProgress, enterAt }: {
       const cache: Record<string, Promise<any>> = {};
       const texLoader = new THREE.TextureLoader();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const get = (url: string) => (cache[url] ||= new Promise<any>((res, rej) => loader.load(url, (g: any) => res(g.scene), undefined, rej)));
+      const get = (url: string) => (cache[url] ||= (async () => {
+        if (!url.endsWith('.gz')) return new Promise<any>((res, rej) => loader.load(url, (g: any) => res(g.scene), undefined, rej));
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Login asset unavailable: ${url}`);
+        const packed = await response.arrayBuffer();
+        const bytes = new Uint8Array(packed);
+        const data = bytes[0] === 0x1f && bytes[1] === 0x8b
+          ? await new Response(new Blob([packed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+          : packed;
+        return (await loader.parseAsync(data, '/models/login/')).scene;
+      })());
+      let stallionTextures: Promise<{ f: HTMLCanvasElement; b: HTMLCanvasElement }> | undefined;
+      const getStallionTextures = () => (stallionTextures ||= loadPantsRef('/models/login/pants-outline.json').then(async ref => {
+        const [front, back] = await Promise.all([
+          makePantsTexture('/media/login/stallion.png', ref.front),
+          makePantsTexture('/media/login/stallion_back.png', ref.back),
+        ]);
+        return { f: front.canvas, b: back.canvas };
+      }));
       const photo = (url: string) => {
         const t = texLoader.load(url);
         t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;   // glTF texture convention
         return t;
       };
       function loadFloaters() {
-        FLOATERS.forEach((f, i) => get(f.url).then(src => {
+        FLOATERS.forEach((f, i) => get(f.url).then(async src => {
+          const pantsTextures = f.pantsPhoto ? await getStallionTextures() : null;
           if (cancelled) return;
           const obj = src.clone(true);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           obj.traverse((o: any) => {
             if (!o.isMesh) return;
+            o.morphTargetInfluences?.fill(0);
             const one = !Array.isArray(o.material);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mats = (one ? [o.material] : o.material).map((m: any) => {
@@ -140,11 +162,16 @@ export default function HeroStage({ progress, onProgress, enterAt }: {
                 c.map = photo(`/models/login/tees/${f.tex}_${side}.jpg`);
                 if ('sheen' in c) c.sheen = 0;                 // the sheen was tinted for the green tee
               }
+              if (pantsTextures && side) {
+                const t = new THREE.CanvasTexture(pantsTextures[side]);
+                t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+                c.map = t;
+              }
               return c;
             });
             o.material = one ? mats[0] : mats;
           });
-          const box = new THREE.Box3().setFromObject(obj);
+          const box = new THREE.Box3().setFromObject(obj, true);
           obj.position.sub(box.getCenter(new THREE.Vector3()));   // spin around its own middle
           const root = new THREE.Group(); root.add(obj); root.scale.setScalar(0.0001);
           scene.add(root);
