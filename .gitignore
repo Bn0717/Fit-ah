@@ -60,6 +60,8 @@ next-env.d.ts
 /public/models/fitlab/exact/
 /public/models/fitlab/body_M_shirt_M.*
 /public/models/fitlab/walk_sizes*.mp4
+# Catwalk playback loads losslessly packed .bin.gz; retain originals locally.
+/public/models/fitlab/walk/*.bin
 /public/models/fitlab/grid/**/*.glb
 !/public/models/fitlab/grid/body.glb
 /public/models/fitlab/grid/jeans_*.glb.gz

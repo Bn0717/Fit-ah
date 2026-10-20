@@ -6,7 +6,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, rootPath, solveBody, jeansVarWeights,
-  pushOutside, cpuMorphed, loadPacked, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type WalkTrack } from './engine';
+  pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type WalkTrack } from './engine';
 import type { Result } from './colourway';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
@@ -197,12 +197,12 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
     const dir = meta.walk!.dir;
-    const fetchBin = (u: string) => fetch(u).then(r => { if (!r.ok) throw new Error(u); return r.arrayBuffer(); });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string) => new Promise<any>((res, rej) => S.loader.load(u, res, undefined, rej));
     const jobs: Promise<unknown>[] = [];
     if (!W.body && !W.loading.body) {
-      W.loading.body = Promise.all([loadGlb(`${dir}/walk_body.glb`), fetchBin(`${dir}/walk_body.bin`), fetch(`${dir}/walk_body.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_body.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading.body = Promise.all([loadGlb(`${dir}/walk_body.glb`), fetchBin(`${dir}/walk_body.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -222,7 +222,8 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }
     if (W.loading.body) jobs.push(W.loading.body);
     if (!W.shirts[sk] && !W.loading[sk]) {
-      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`), fetch(`${dir}/walk_${sk}.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_${sk}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -242,7 +243,8 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }
     if (W.loading[sk]) jobs.push(W.loading[sk]);
     if (js && !W.jeans[js] && !W.loading['jeans_' + js]) {
-      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`), fetch(`${dir}/walk_jeans_${js}.json`).then(r => r.json())])
+      const info = fetch(`${dir}/walk_jeans_${js}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
