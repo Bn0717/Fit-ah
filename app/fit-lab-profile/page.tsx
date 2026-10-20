@@ -71,7 +71,7 @@ export default function MyFittingRoom() {
         const a = p as any;
         // stored as half widths; older test data can be junk (e.g. 30 cm "chest"): fall back to the 175 cm body
         const chest = a.chest > 35 && a.chest < 80 ? a.chest * 2 : 101, waist = a.waist > 25 && a.waist < 80 ? a.waist * 2 : 78;
-        const b: Body = { height: a.height > 120 && a.height < 230 ? a.height : 175, chest, waist, shoulder: a.shoulder > 30 && a.shoulder < 65 ? a.shoulder : 45, belly: a.belly ?? 0 };
+        const b: Body = { height: a.height > 120 && a.height < 230 ? a.height : 175, chest, waist, shoulder: a.shoulder > 30 && a.shoulder < 65 ? a.shoulder : 45, belly: 0 };
         setSaved(b); setBody(b);
         setProfile({ name: a.displayName || '', age: a.age ? String(a.age) : '', gender: a.gender || '', photo: a.photoUrl || null });
       }
@@ -85,7 +85,7 @@ export default function MyFittingRoom() {
     setSaving(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await saveAvatar({ userId: user.uid, height: b.height, chest: b.chest / 2, waist: b.waist / 2, shoulder: b.shoulder, belly: b.belly,
+      await saveAvatar({ userId: user.uid, height: b.height, chest: b.chest / 2, waist: b.waist / 2, shoulder: b.shoulder, belly: 0,
         displayName: profile.name, age: parseInt(profile.age) || 0, gender: profile.gender, photoUrl: profile.photo } as any);
       setSaved(b); setBody(b); flash('Measurements saved');
     } finally { setSaving(false); }
@@ -182,17 +182,16 @@ export default function MyFittingRoom() {
   const sb0 = meta ? solveBody(meta, simH, simC, null, null, 0) : null;
   const wRange = sb0?.ok ? [Math.ceil(sb0.range.waist[0]), Math.floor(sb0.range.waist[1])] : [70, 90];
   const shRange = sb0?.ok ? [Math.ceil(sb0.range.shoulder[0] * 2) / 2, Math.floor(sb0.range.shoulder[1] * 2) / 2] : [42, 50];
-  // while pants are worn the body follows the same rule as /fit-lab (wornBody): natural waist / belly for pants
-  // simulated only there, and a waist within 2 cm of natural shown at natural
+  // Pants use the natural waist; keep the saved waist for shirt-only fitting.
   const natW = sb0?.ok ? sb0.natural.waist : null;
   const wornPants = bottom && bottomItem && bottomItem.kind !== 'unsim' ? pantsOf(bottomItem) : null;
   // a shirt simulated with shoulder / waist / belly changes only on some bodies: natural shape elsewhere (no guesses)
   const shirtLock = !!(top && meta && !shirtShapeOk(meta, simH, simC));
   const simS = shirtLock ? null : clamp(body.shoulder, shRange[0], shRange[1]);
   const wb = meta ? wornBody(meta, wornPants, bottom?.size ?? null, simH, simC, simS,
-      shirtLock ? null : clamp(body.waist, wRange[0], wRange[1]), shirtLock ? 0 : body.belly)
-    : { waist: body.waist, belly: body.belly, lock: false, snap: false };
-  const simW = wb.waist, simB = wb.belly;      // simW null = this body's natural waist
+      shirtLock ? null : clamp(body.waist, wRange[0], wRange[1]), 0)
+    : { waist: body.waist, belly: 0, lock: false, snap: false };
+  const simW = wb.waist, simB = 0; // Natural belly only; simW null means natural waist.
   const sb = meta ? solveBody(meta, simH, simC, simS, simW, simB) : null;
   const outside = [
     body.height < RANGE.height[0] || body.height > RANGE.height[1] ? `height (${RANGE.height[0]}–${RANGE.height[1]} cm)` : null,
@@ -214,9 +213,9 @@ export default function MyFittingRoom() {
   const topBest = SIZES.find(sz => topFits[sz] && topFits[sz]!.tier !== 'Compression' && topFits[sz]!.tier !== 'Slim') ?? 'XL';
   const jeansAt = useCallback((it: WItem | null, sz: string, withBelt: boolean): JeansState | null => {
     const P = pantsOf(it);
-    return meta && P ? jeansState(meta, P, sz, withBelt, simH, simC, simS, simW, simB) : null;
+    return meta && P ? jeansState(meta, P, sz, withBelt, simH, simC, simS, null, 0) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, productData, simH, simC, simS, simW, simB]);
+  }, [meta, productData, simH, simC, simS]);
   const bottomSizes = (it: WItem | null) => it?.kind === 'product' ? Object.keys(productData[it.id]?.sizes ?? {}) : JEANS_SIZES;
   // the smallest size whose waistband closes and that was simulated for this body (null: none fits / none simulated)
   const bottomBest = (it: WItem | null) =>
@@ -267,7 +266,7 @@ export default function MyFittingRoom() {
     setSaving(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await saveAvatar({ userId: user.uid, height: b.height, chest: b.chest / 2, waist: b.waist / 2, shoulder: b.shoulder, belly: b.belly,
+      await saveAvatar({ userId: user.uid, height: b.height, chest: b.chest / 2, waist: b.waist / 2, shoulder: b.shoulder, belly: 0,
         displayName: profile.name, age: parseInt(profile.age) || 0, gender: profile.gender, photoUrl: photo } as any);
       setSaved(b); setBody(b); flash('Scan saved: your 3D body and measurements are updated');
     } finally { setSaving(false); }
@@ -352,7 +351,7 @@ export default function MyFittingRoom() {
           alert={!!js?.hide}
           extra={js?.hide && js.noSim && !js.tooSmall && !js.cantPullOn && js.now && natW !== null ? (
             <button onClick={() => setBody({ ...body, waist: Math.round(natW), belly: 0 })} className="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
-              style={{ borderColor: C.navy, color: C.navy }}>See them with a natural waist & belly</button>
+              style={{ borderColor: C.navy, color: C.navy }}>See them with a natural waist</button>
           ) : js && !js.hide && !js.elastic && js.variant !== 'held' ? (
             <button onClick={() => setBelt(b => !b)} className="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition"
               style={belt ? { background: C.navy, color: '#fff', borderColor: C.navy } : { borderColor: C.line, color: C.navy }}>
@@ -488,9 +487,10 @@ export default function MyFittingRoom() {
 
   const bodyPanel = (docked: boolean) => (
     <BodyPanel body={body} setBody={b => { setBody(b); setFromScan(false); }} saved={saved} dirty={dirty} saving={saving} fromScan={fromScan}
+      waistLocked={wb.lock || shirtLock} waistDisplay={wb.lock || shirtLock ? Math.round((sb?.natural.waist ?? body.waist) * 10) / 10 : body.waist}
       wRange={wRange} shRange={shRange} profile={profile} onClose={() => setDrawer(false)} docked={docked}
-      wornNote={shirtLock ? `Shoulder, waist and belly are shown natural for this height and chest: ${topItem?.name ?? 'this shirt'} has not been simulated with a different shape here yet. Your numbers are kept.`
-        : wb.lock ? `Waist and belly are shown natural while you wear ${bottomItem?.name ?? 'these pants'} (they were simulated at the natural waist only). Your numbers are kept.` : null}
+      wornNote={shirtLock ? `Shoulder and waist are shown natural for this height and chest: ${topItem?.name ?? 'this shirt'} has not been simulated with a different shape here yet. Your numbers are kept.`
+        : wb.lock ? `Waist is shown natural while you wear ${bottomItem?.name ?? 'these pants'}. Your waist adjustment is available again when you take the pants off.` : null}
       onSave={() => saveBody()} onReset={() => saved && setBody(saved)} onScan={() => setScan({ photo: profile.photo })}
       onPhoto={onProfilePhoto} onEditProfile={() => setEditProfile(true)} />
   );
@@ -570,7 +570,7 @@ export default function MyFittingRoom() {
       {editProfile && <ProfileDialog profile={profile} onClose={() => setEditProfile(false)} onSave={async p => {
         if (!user) return;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await saveAvatar({ userId: user.uid, height: (saved ?? body).height, chest: (saved ?? body).chest / 2, waist: (saved ?? body).waist / 2, shoulder: (saved ?? body).shoulder, belly: (saved ?? body).belly,
+        await saveAvatar({ userId: user.uid, height: (saved ?? body).height, chest: (saved ?? body).chest / 2, waist: (saved ?? body).waist / 2, shoulder: (saved ?? body).shoulder, belly: 0,
           displayName: p.name, age: parseInt(p.age) || 0, gender: p.gender, photoUrl: profile.photo } as any);
         setProfile(x => ({ ...x, ...p })); setEditProfile(false); flash('Profile saved');
       }} />}
@@ -579,9 +579,9 @@ export default function MyFittingRoom() {
 }
 
 // ─── left panel: my body ────────────────────────────────────────────────────────────
-function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked }: {
+function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked }: {
   body: Body; setBody: (b: Body) => void; saved: Body | null; dirty: boolean; saving: boolean; fromScan: boolean; wornNote?: string | null;
-  wRange: number[]; shRange: number[];
+  wRange: number[]; shRange: number[]; waistLocked: boolean; waistDisplay: number;
   profile: { name: string; age: string; gender: string; photo: string | null };
   onSave: () => void; onReset: () => void; onScan: () => void; onPhoto: (f: File) => void; onEditProfile: () => void; onClose: () => void;
   docked?: boolean;    // always on screen (big screens): no close button
@@ -611,16 +611,9 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
       <div className="flex-1 space-y-5 px-4 py-4">
         <Measure label="Height" value={body.height} min={RANGE.height[0]} max={RANGE.height[1]} typeMin={140} typeMax={210} onChange={set('height')} />
         <Measure label="Chest" value={body.chest} min={RANGE.chest[0]} max={RANGE.chest[1]} typeMin={70} typeMax={150} onChange={set('chest')} pm={pm(7)} />
-        <Measure label="Waist" value={body.waist} min={wRange[0]} max={wRange[1]} typeMin={55} typeMax={150} onChange={set('waist')} pm={pm(7)} />
+        <Measure label="Waist" disabled={waistLocked} value={waistDisplay} min={wRange[0]} max={wRange[1]} typeMin={55} typeMax={150} onChange={set('waist')} pm={pm(7)} />
         {wornNote && <p className="rounded-lg px-3 py-2 text-[11px]" style={{ background: C.cream, color: C.mute }}>{wornNote}</p>}
         <Measure label="Shoulder" value={body.shoulder} min={shRange[0]} max={shRange[1]} typeMin={35} typeMax={60} onChange={set('shoulder')} pm={pm(2.5)} />
-        <div>
-          <div className="mb-1 flex items-baseline justify-between">
-            <span className="text-xs font-semibold" style={{ color: C.ink }}>Belly</span>
-            <span className="text-sm font-bold" style={{ color: C.navy }}>{body.belly < -0.15 ? 'Flatter' : body.belly > 0.15 ? 'Rounder' : 'Natural'}</span>
-          </div>
-          <input type="range" min={-1} max={1} step={0.1} value={body.belly} onChange={e => set('belly')(Number(e.target.value))} className="w-full" style={{ accentColor: C.navy }} aria-label="Belly shape" />
-        </div>
       </div>
       <div className="sticky bottom-0 border-t bg-white px-4 py-3" style={{ borderColor: C.line }}>
         {dirty ? (
@@ -635,14 +628,15 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
   );
 }
 
-function Measure({ label, value, min, max, typeMin, typeMax, onChange, pm }: {
-  label: string; value: number; min: number; max: number; typeMin: number; typeMax: number; onChange: (v: number) => void; pm?: number;
+function Measure({ label, value, min, max, typeMin, typeMax, onChange, pm, disabled = false }: {
+  label: string; value: number; min: number; max: number; typeMin: number; typeMax: number; onChange: (v: number) => void; pm?: number; disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
+  useEffect(() => { if (disabled) setEditing(false); }, [disabled]);
   const out = value < min - 0.25 || value > max + 0.25;
   return (
-    <div>
+    <fieldset disabled={disabled} className="min-w-0 disabled:opacity-50">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-xs font-semibold" style={{ color: C.ink }}>{label}</span>
         {editing ? (
@@ -658,7 +652,7 @@ function Measure({ label, value, min, max, typeMin, typeMax, onChange, pm }: {
       </div>
       <input type="range" min={min} max={max} step={0.5} value={clamp(value, min, max)} onChange={e => onChange(Number(e.target.value))} className="w-full" style={{ accentColor: C.navy }} aria-label={label} />
       {out && <p className="mt-0.5 text-[10px]" style={{ color: C.amber }}>Outside our simulated bodies — the 3D uses {clamp(value, min, max)} cm.</p>}
-    </div>
+    </fieldset>
   );
 }
 

@@ -101,7 +101,7 @@ function FitLab() {
   const pants: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>; dir: string } | null =
     pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: GRID_DIR } : null)
       : product && product.id === pantsId ? { name: `${product.brand} ${product.name}`, sizes: product.belt, drop: product.drop, belt: product.belt, dir: product.dir } : null;
-  const [belly, setBelly] = useState(0);                              // -1 flat .. 0 natural .. +1 round
+  const belly = 0; // Belly adjustment is temporarily disabled; always use the natural shape.
   // "My exact fit": a real simulation on this exact body (blender/exact_fit.sh via /api/fitlab/exact)
   const [exact, setExact] = useState<{ id?: string; step?: string; pct?: number; msg?: string; glb?: string | null;
     body?: Record<string, number>; shirt?: Record<string, number | null>; size?: string; showing?: boolean; error?: string } | null>(null);
@@ -645,7 +645,6 @@ function FitLab() {
     + (sb?.ok ? VARIANTS.reduce((s, v) => s + sb.vw[v] * blend(w, k => (meta!.shape![k][v]?.[m] ?? 0)), 0) : 0);
   const bodyNow = meta && { chest: tape('chest'), waist: tape('waist'), hip: tape('hip'), shoulder: sb?.ok ? tape('shoulder') : null,
     belly: meta && Object.keys(w).every(k => meta.body[k].belly !== undefined) ? tape('belly') : null };
-  const hasBelly = !!meta?.shape && Object.keys(w).every(k => meta.shape![k]?.bm && meta.shape![k]?.bp);
   const varDelta = (v: Variant, m: keyof ShirtNums) => {
     const g = meta!.shirt_var_grid?.[size];
     return g && Object.keys(w).every(k => g[k]?.[v]) ? blend(w, k => g[k][v]![m]) : (meta!.shirt_var?.[size]?.[v]?.[m] ?? 0);
@@ -1139,7 +1138,7 @@ function FitLab() {
                     ? <>Size {jeansSize} cannot be pulled on: the cloth simulation could not get these over this body (legs and {(2 * jeansNow.chart.waist).toFixed(0)} cm waistband too small). Try a bigger size.</>
                     : tooSmall || jeansNow.waistEase < -2
                       ? <>Size {jeansSize} can&apos;t be worn on this body: the {(2 * jeansNow.chart.waist).toFixed(0)} cm waistband cannot close on a {jeansNow.bodyWaist.toFixed(0)} cm waist. Try a bigger size.</>
-                      : <>Not simulated yet: jeans with a slimmer / fuller waist or a different belly have only been simulated around the 175 cm / chest 101 cm body. Set the waist and belly back to natural, or choose a body near 175 cm / 101 cm.</>}
+                      : <>Not simulated yet: jeans with a slimmer / fuller waist have only been simulated around the 175 cm / chest 101 cm body. Set the waist back to natural, or choose a body near 175 cm / 101 cm.</>}
                 </div>
               )}
               {mode === 'fit' && (
@@ -1256,17 +1255,8 @@ function FitLab() {
                   {sb?.ok && shRange && wRange && <>
                     <Slider label="Shoulder" disabled={walking || shirtLock} note={shirtLock ? 'natural (the shirt was not simulated with other shapes at this height / chest yet)' : shoulder === null ? 'natural' : 'across the back'} step={0.5}
                       value={clamp(half(shoulderNow ?? sb.natural.shoulder), shRange[0], shRange[1])} min={shRange[0]} max={shRange[1]} onChange={setShoulder} />
-                    <Slider label="Waist" disabled={walking || jeansLock || shirtLock} note={shirtLock ? 'natural (shirt: see shoulder)' : jeansLock ? 'natural (these pants were simulated at the natural waist only)' : waist === null ? 'natural' : undefined}
+                    <Slider label="Waist" disabled={walking || jeansLock || shirtLock} note={shirtLock ? 'natural (shirt: see shoulder)' : jeansLock ? 'natural while pants are worn' : waist === null ? 'natural' : undefined}
                       value={clamp(Math.round(waistNow ?? sb.natural.waist), wRange[0], wRange[1])} min={wRange[0]} max={wRange[1]} onChange={setWaist} />
-                    {hasBelly && (
-                      <label className="block text-sm" style={walking || jeansLock ? { opacity: 0.45 } : undefined}>
-                        <div className="flex justify-between"><span>Belly{jeansLock && <span style={{ opacity: 0.55 }}> · natural (these pants were simulated with the natural belly only)</span>}</span>
-                          <span className="font-semibold">{belly < -0.15 ? 'Flatter' : belly > 0.15 ? 'Rounder' : 'Natural'}{bodyNow?.belly != null && ` · ${bodyNow.belly.toFixed(1)} cm deep`}</span></div>
-                        <input type="range" min={-1} max={1} step={0.1} value={bellyNow} disabled={walking || jeansLock || shirtLock}
-                          onChange={e => setBelly(Number(e.target.value))} className="mt-1 w-full" style={{ accentColor: C.navy }} />
-                        <div className="flex justify-between text-[10px]" style={{ opacity: 0.5 }}><span>flat</span><span>same waist, different shape</span><span>round</span></div>
-                      </label>
-                    )}
                     {(shoulder !== null || waist !== null) && (
                       <button onClick={() => { setShoulder(null); setWaist(null); }} className="text-xs underline" style={{ opacity: 0.7 }}>
                         Reset shoulder and waist to natural for this body
