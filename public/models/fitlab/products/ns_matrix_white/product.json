@@ -1552,5 +1552,21 @@
    }
   }
  },
- "drop": {}
+ "drop": {},
+ "walk": {
+  "dir": "/models/fitlab/walk/ns_matrix_white",
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL",
+   "2XL"
+  ],
+  "layered": {
+   "S": "M",
+   "M": "M",
+   "L": "L",
+   "XL": "XL"
+  }
+ }
 }

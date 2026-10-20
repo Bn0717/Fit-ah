@@ -15,8 +15,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { loadRef, makeTexture, type Ref } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
-import { loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, rootPath, solveBody,
-  type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
+import { selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
+  type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, loadStored, type LabItem, type SizeFit } from './Wardrobe';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -27,7 +27,7 @@ const PANTS_REF = '/models/fitlab/pants_xin/outline.json';
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
 const SAME_CUT_MAX = 0.05;   // mean proportion difference allowed vs the Xin outline (pantsSwap.ts compare): Xin's own photos 0.7-1.6 %, Stallion (another cut) 6.6-7.5 %
-type PantsProduct = { id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null };
+type PantsProduct = { walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -270,7 +270,15 @@ function FitLab() {
             const jp = J ? joinParts(J.tracks.map((t: WalkTrack) => t.mesh.geometry.attributes.position.array as Float32Array)) : null;   // all panels: one garment
             // a shirt walked over these jeans in the simulation already rests on them; others are pushed out
             const layered = W.size.includes('_j');
-            for (const t of W.shirts[W.size].tracks) applyFrame(t, f, W.mode === 'fit', 'jersey', jp && !layered ? (a => { pushOutside(a, jp); }) : undefined);
+            for (const t of W.shirts[W.size].tracks) applyFrame(t, f, W.mode === 'fit', 'jersey', jp && !layered && !W.productPants ? (a => { pushOutside(a, jp); }) : undefined);
+            // Unpaired product walks need both steps: move the shirt out, then press residual
+            // shorts folds underneath it. pushOutside alone deliberately caps its correction.
+            if (J && W.productPants && !layered && W.shirts[W.size].root.visible) {
+              const shirts: WalkTrack[] = W.shirts[W.size].tracks, pants: WalkTrack[] = J.tracks;
+              layerShirtOverPants(shirts.map(t => t.mesh.geometry.attributes.position.array as Float32Array),
+                pants.map(t => t.mesh.geometry.attributes.position.array as Float32Array));
+              for (const t of [...shirts, ...pants]) refreshWalkNormals(t);
+            }
           }
         }
         controls.update(); renderer.render(scene, camera);
@@ -331,11 +339,10 @@ function FitLab() {
     if (!W.added) { S.scene.add(W.group); W.added = true; }
     W.jeans ||= {};
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
-    const jz = jeansSize && belt && meta.walk?.jeans?.[jeansSize + 'belt'] ? jeansSize + 'belt' : jeansSize;
-    const js = pantsId === 'xin' && jz && meta.walk?.jeans?.[jz] ? jz : null;
-    // shirt walked over these jeans (real collision) when that pair was simulated, else the shirt walked over leggings
-    const sk = js && meta.walk?.layered?.[size] === js ? `${size}_j${js}` : size;
-    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js;
+    const jz = pantsId === 'xin' && jeansSize && belt && meta.walk?.jeans?.[jeansSize + 'belt'] ? jeansSize + 'belt' : jeansSize;
+    const selected = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined);
+    const { js, sk } = selected;
+    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = selected.packedPants;
     const has = !!meta.walk?.sizes[size];
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
@@ -351,7 +358,10 @@ function FitLab() {
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
     const dir = meta.walk!.dir;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loadGlb = (u: string) => new Promise<any>((res, rej) => S.loader.load(u, res, undefined, rej));
+    const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
+      if (packed) loadPacked(THREE, S.loader, u + '.gz', res, undefined, rej);
+      else S.loader.load(u, res, undefined, rej);
+    });
     const jobs: Promise<unknown>[] = [];
     if (!W.body && !W.loading.body) {
       const info = fetch(`${dir}/walk_body.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
@@ -375,8 +385,8 @@ function FitLab() {
     }
     if (W.loading.body) jobs.push(W.loading.body);
     if (!W.shirts[sk] && !W.loading[sk]) {
-      const info = fetch(`${dir}/walk_${sk}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
-      W.loading[sk] = Promise.all([loadGlb(`${dir}/walk_shirt_${sk}.glb`), fetchBin(`${dir}/walk_shirt_${sk}.bin`, info), info])
+      const info = fetch(`${selected.shirtDir}/walk_${selected.shirtFile}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading[sk] = Promise.all([loadGlb(`${selected.shirtDir}/walk_shirt_${selected.shirtFile}.glb`, selected.packedShirt), fetchBin(`${selected.shirtDir}/walk_shirt_${selected.shirtFile}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -396,8 +406,8 @@ function FitLab() {
     }
     if (W.loading[sk]) jobs.push(W.loading[sk]);
     if (js && !W.jeans[js] && !W.loading['jeans_' + js]) {
-      const info = fetch(`${dir}/walk_jeans_${js}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
-      W.loading['jeans_' + js] = Promise.all([loadGlb(`${dir}/walk_jeans_${js}.glb`), fetchBin(`${dir}/walk_jeans_${js}.bin`, info), info])
+      const info = fetch(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.json`).then(r => { if (!r.ok) throw new Error(`Catwalk metadata: ${r.status}`); return r.json(); });
+      W.loading['jeans_' + js] = Promise.all([loadGlb(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.glb`, selected.packedPants), fetchBin(`${selected.pantsDir}/walk_jeans_${selected.pantsFile}.bin`, info), info])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .then(([g, buf, info]: any[]) => {
           const tracks: WalkTrack[] = [];
@@ -424,7 +434,7 @@ function FitLab() {
       W.last = -1; show(true); setWalkStatus(null);
     }).catch(() => { if (!stale) { setWalking(false); setWalkStatus('Could not load the catwalk.'); } });
     return () => { stale = true; };
-  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt]);
+  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt, pantsId, product?.walk, product?.id]);
 
   // ── jeans: load the selected size on demand, swap with the basic pants ───────────────
   // drop = nothing holds the waistband (gravity + friction decide where it ends up), belt = a belt holds it at the
@@ -1228,8 +1238,9 @@ function FitLab() {
                     <div className="text-xs" style={{ opacity: 0.55 }}>Rise ({jeansNow.chart.rise} cm) is not in TNT&apos;s size chart: estimated.</div>
                   </div>
                 )}
-                {jeansSize && walking && <p className="text-xs" style={{ opacity: 0.6 }}>{pantsId !== 'xin'
-                  // only the Xin jeans (and their photo swaps) were walked: say so instead of naming the Xin walk
+                {jeansSize && walking && <p className="text-xs" style={{ opacity: 0.6 }}>{pantsId !== 'xin' && product?.id === pantsId && product.walk?.sizes.includes(jeansSize)
+                  ? `Walking in shorts ${jeansSize}: the mesh fabric was cloth-simulated through the whole walk (elastic waist holds them up).${shirtOn && product.walk.layered[size] === jeansSize ? ` The ${size} shirt was simulated over these shorts.` : ' The shirt uses its separate walk.'}`
+                  : pantsId !== 'xin'
                   ? `The catwalk shows the basic pants: ${pants?.name ?? 'these pants'} have not been walked yet (each walk is a full one-hour cloth simulation).`
                   : meta?.walk?.jeans?.[jeansSize]
                   ? `Walking in jeans ${jeansSize}: the denim was cloth-simulated through the whole walk (waistband held at the waist as if belted, legs swing freely).${shirtOn && meta.walk.layered?.[size] === jeansSize ? ` The ${size} shirt was simulated walking over these jeans, so its hem really rests on and swings over the denim.` : ''}`

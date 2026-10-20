@@ -44,6 +44,30 @@ export const SIZES = ['S', 'M', 'L', 'XL'] as const;
 export type Size = typeof SIZES[number];
 export type ViewMode = 'fabric' | 'fit';
 
+// Product walks use their own directory and cache keys so size M cannot reuse Xin's M mesh.
+export interface ProductWalk {
+  dir: string;
+  sizes: string[];
+  layered: Partial<Record<Size, string>>;
+}
+
+export function selectWalk(meta: GridMeta, shirt: Size, pants: string | null | undefined,
+  legacy: boolean, product?: ProductWalk) {
+  const base = meta.walk?.dir ?? '';
+  const own = !!pants && !!product?.sizes.includes(pants);
+  const pantsFile = own ? pants! : legacy && pants && meta.walk?.jeans?.[pants] ? pants : null;
+  const pantsDir = own ? product!.dir : base;
+  const layered = !!pantsFile && (own ? product!.layered[shirt] : meta.walk?.layered?.[shirt]) === pantsFile;
+  const shirtFile = layered ? `${shirt}_j${pantsFile}` : shirt;
+  const shirtDir = own && layered ? pantsDir : base;
+  return {
+    js: pantsFile && own ? `${pantsDir}/${pantsFile}` : pantsFile,
+    sk: own && layered ? `${shirtDir}/${shirtFile}` : shirtFile,
+    pantsFile, pantsDir, shirtFile, shirtDir,
+    packedPants: own, packedShirt: own && layered,
+  };
+}
+
 export interface GridMeta {
   heights: number[];                      // e.g. [165, 175, 185]
   chests: number[];                       // e.g. [92, 101, 110]
@@ -186,6 +210,21 @@ export function applyFrame(t: WalkTrack, f: number, fit: boolean, fabric: keyof 
   }
   if (adjust) adjust(a);                      // e.g. layering: the shirt pushed out over the jeans
   pos.needsUpdate = true;
+  refreshWalkNormals(t);
+  if (fit && t.strain && g.attributes.color) {
+    const col = g.attributes.color, sb = f * t.info.n;
+    for (let i = 0; i < pos.count; i++) {
+      const c = fitColor(t.strain[sb + vid[i]] * 0.001, t.gap ? t.gap[sb + vid[i]] * 0.1 : 2, fabric);   // same rule as the static fit map
+      col.setXYZ(i, c[0], c[1], c[2]);
+    }
+    col.needsUpdate = true;
+  }
+}
+
+// Recompute after display-only layering, keeping UV-split vertices smooth like the baked frames.
+export function refreshWalkNormals(t: WalkTrack) {
+  const g = t.mesh.geometry, pos = g.attributes.position, a = pos.array as Float32Array, vid = t.vid;
+  g.attributes.position.needsUpdate = true;
   // normals accumulated per Blender vertex, so UV seams (split vertices) stay smooth
   const acc = t.acc; acc.fill(0);
   const idx = g.index.array, nrm = g.attributes.normal;
@@ -201,18 +240,9 @@ export function applyFrame(t: WalkTrack, f: number, fit: boolean, fabric: keyof 
     nrm.setXYZ(i, acc[v] / l, acc[v + 1] / l, acc[v + 2] / l);
   }
   nrm.needsUpdate = true;
-  if (fit && t.strain && g.attributes.color) {
-    const col = g.attributes.color, sb = f * t.info.n;
-    for (let i = 0; i < pos.count; i++) {
-      const c = fitColor(t.strain[sb + vid[i]] * 0.001, t.gap ? t.gap[sb + vid[i]] * 0.1 : 2, fabric);   // same rule as the static fit map
-      col.setXYZ(i, c[0], c[1], c[2]);
-    }
-    col.needsUpdate = true;
-  }
 }
 
-// Smoothed walking path of the body (Blender x, y) and the walking direction per frame, so the catwalk
-// plays on the spot facing the camera (the recorded walk curves, so the direction changes over time).
+// Smoothed walking path of the body and heading: the curved recorded walk plays on the spot.
 export function rootPath(t: WalkTrack): { path: [number, number][]; heading: number[] } {
   const { n, frames, min, scale } = t.info, raw: [number, number][] = [];
   for (let f = 0; f < frames; f++) {

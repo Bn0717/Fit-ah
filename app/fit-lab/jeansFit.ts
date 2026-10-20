@@ -4,9 +4,9 @@
 // whether this body + waist / belly was really simulated, and the fit label in cm.
 // Rule: jeans that cannot be worn, or were not simulated for this body, are not drawn (an honest "can't" is
 // better than a broken-looking simulation).
-import { solveBody, blend, VARIANTS, jeansVarWeights, type GridMeta, type JeansSim, type JeansBody, type Tape, type Variant } from './engine';
+import { solveBody, blend, VARIANTS, jeansVarWeights, type ProductWalk, type GridMeta, type JeansSim, type JeansBody, type Tape, type Variant } from './engine';
 
-export type PantsData = { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>;
+export type PantsData = { walk?: ProductWalk; name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>;
   elasticStretch?: number | null };   // elastic waist: stretches up to this x relaxed
 export type JeansVariant = 'held' | 'drop' | 'belt';
 export interface JeansNow {
