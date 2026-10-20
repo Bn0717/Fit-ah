@@ -8,7 +8,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn, signInWithGoogle, resetPassword } from '@/lib/firebase/auth';
-import { getAvatar } from '@/lib/firebase/firestore';
 
 export const colors = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC' };
 
@@ -29,8 +28,7 @@ export function useLoginForm(onSignedIn?: (uid: string) => void | Promise<void>)
 
   const goNext = async (uid: string) => {
     if (onSignedIn) return onSignedIn(uid);           // the page plays its own transition
-    const profile = await getAvatar(uid);
-    router.push(profile ? '/profile' : '/onboarding');
+    router.push('/items');
   };
 
   const handleLogin = async (e: React.FormEvent) => {

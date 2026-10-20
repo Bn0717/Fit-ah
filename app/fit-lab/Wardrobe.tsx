@@ -6,6 +6,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import type { Vector3 } from 'three';
 import type { Result } from './colourway';
 import type { ClothingItem } from '@/lib/types/clothing';
 import type { ParametricAvatar } from '@/lib/types/avatar';
@@ -216,6 +217,26 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
       const camera = new THREE.PerspectiveCamera(32, W / H, 0.05, 20);
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 1.5;
+      controls.enablePan = false;
+      // Fit the whole garment, including its rotation, into this viewport.
+      let garmentBounds: { center: Vector3; radius: number } | null = null;
+      const fitCamera = () => {
+        if (!garmentBounds) return;
+        const { center, radius } = garmentBounds;
+        const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+        const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+        const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.15;
+        const direction = camera.position.clone().sub(controls.target).normalize();
+        if (!direction.lengthSq()) direction.set(0, 0, 1);
+        controls.target.copy(center);
+        camera.position.copy(center).addScaledVector(direction, distance);
+        camera.near = Math.max(radius / 100, 0.001);
+        camera.far = distance + radius * 20;
+        camera.updateProjectionMatrix();
+        controls.minDistance = radius * 1.5;
+        controls.maxDistance = distance * 2;
+        controls.update();
+      };
       const texs: unknown[] = [];
       // one download + parse per shirt file, shared by every 3D view on the page (cards, item window)
       const url = fileUrl ?? `${gridDir}/shirt_${size}.glb.gz`;
@@ -241,10 +262,13 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
             }
             o.material = m;
           });
-          const box = new THREE.Box3().setFromObject(g.scene), c = new THREE.Vector3(), sz = new THREE.Vector3();
-          box.getCenter(c); box.getSize(sz);
-          controls.target.copy(c);
-          camera.position.set(c.x, c.y + sz.y * 0.1, c.z + Math.max(sz.x, sz.y) * 2.1);
+          // Default bounds include every morph target, even with zero influence.
+          // Measure the visible vertices so unused body variants cannot zoom us out.
+          const sphere = new THREE.Box3().setFromObject(g.scene, true).getBoundingSphere(new THREE.Sphere());
+          garmentBounds = { center: sphere.center, radius: Math.max(sphere.radius, 0.01) };
+          camera.position.copy(sphere.center).add(new THREE.Vector3(0, 0, 1));
+          controls.target.copy(sphere.center);
+          fitCamera();
           scene.add(g.scene); setReady(true);
         });
       const tick = () => { frame = requestAnimationFrame(tick); controls.update(); renderer.render(scene, camera); };
@@ -252,6 +276,7 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
       const ro = new ResizeObserver(() => {
         const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
         camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false);
+        fitCamera();
       });
       ro.observe(canvas);
       cleanup = () => {
@@ -262,20 +287,103 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
     return () => { cancelled = true; cleanup(); };
   }, [item, size, gridDir, compact, fileUrl]);
   return (
-    <div className={`relative overflow-hidden ${compact ? 'h-full w-full' : 'aspect-[3/4] rounded-xl'}`} style={{ backgroundColor: compact ? '#fff' : C.cream }}>
-      <canvas ref={ref} className="block h-full w-full" />
+    <div className={`relative overflow-hidden ${compact ? 'h-full w-full' : 'h-[clamp(240px,38dvh,360px)] rounded-xl sm:h-[400px]'}`} style={{ backgroundColor: compact ? '#fff' : C.cream }}>
+      <canvas ref={ref} className="absolute inset-0 block h-full w-full" />
       {!ready && !compact && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
           <p className="text-xs font-semibold" style={{ color: C.navy }}>Loading 3D model…</p>
         </div>
       )}
-      {ready && !compact && <div className="absolute bottom-2 left-0 right-0 flex justify-center"><span className="rounded-full bg-black/30 px-2 py-1 text-[10px] text-white/80">{label ?? `Size ${size} as simulated on the 175 cm body · drag to rotate`}</span></div>}
+      {ready && !compact && <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex justify-center"><span className="rounded-full bg-black/40 px-2 py-1 text-center text-[10px] text-white">{label ?? `Size ${size} as simulated on the 175 cm body · drag to rotate`}</span></div>}
     </div>
   );
 }
 
 // ─── item window ─────────────────────────────────────────────────────────────────
+// Keep the familiar comparison table at every screen size.
+function GarmentSizeChart({ headers, rows, selected, onSelect }: {
+  headers: string[];
+  rows: { size: string; measurements: (number | undefined)[]; fit: string; color: string }[];
+  selected: string;
+  onSelect: (size: string) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-3 text-[11px] text-slate-500 md:hidden">All measurements in cm · tap a row to select</p>
+      <div className="overflow-hidden rounded-xl border md:overflow-x-auto md:rounded-none md:border-0" style={{ borderColor: C.peach }}>
+        <table className="w-full table-fixed border-collapse text-[11px] min-[375px]:text-xs md:hidden" style={{ color: C.navy }}>
+          <caption className="sr-only">Garment size measurements in centimeters and fit on your body</caption>
+          <colgroup>
+            <col className="w-[10%]" />
+            {headers.map(header => <col key={header} className="w-[17%]" />)}
+            <col className="w-[22%]" />
+          </colgroup>
+          <thead style={{ backgroundColor: C.cream }}>
+            <tr>
+              <th scope="col" className="px-1 py-3 text-center text-[10px] font-semibold">Size</th>
+              {headers.map(header => {
+                const [name, qualifier] = header.split(' (');
+                return <th scope="col" key={header} className="px-0.5 py-3 text-center text-[10px] font-semibold leading-snug min-[375px]:text-[11px]">
+                  <span className="block">{name === 'Leg opening' ? <>Leg<br />opening</> : name}</span>
+                  {qualifier && <span className="block font-normal opacity-55">({qualifier}</span>}
+                </th>;
+              })}
+              <th scope="col" className="px-2 py-3 text-left text-[10px] font-semibold leading-snug">On your<br />body</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const active = row.size === selected;
+              const fitParts = row.fit.match(/^(.*?)\s*(\([+-]?[\d.]+ cm\))$/);
+              return (
+                <tr key={row.size} onClick={() => onSelect(row.size)} className="cursor-pointer border-t transition-colors hover:bg-pink-50"
+                  style={{ borderColor: C.peach, backgroundColor: active ? C.pink + '25' : index % 2 ? C.cream + '60' : 'white' }}>
+                  <th scope="row" className="py-3 text-center">
+                    <button type="button" onClick={e => { e.stopPropagation(); onSelect(row.size); }} aria-label={`Select size ${row.size}`} aria-pressed={active}
+                      className="flex min-h-11 w-full items-center justify-center rounded-lg font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                      style={{ color: C.navy }}>
+                      <span className="rounded-md px-1 py-1.5" style={{ backgroundColor: active ? C.navy : 'transparent', color: active ? 'white' : C.navy }}>{row.size}</span>
+                    </button>
+                  </th>
+                  {headers.map((header, i) => <td key={header} className="px-0.5 py-3 text-center font-medium tabular-nums">{row.measurements[i] ?? '—'}</td>)}
+                  <td className="px-2 py-3 text-[10px] font-medium leading-snug min-[375px]:text-[11px]" style={{ color: row.color }}>
+                    <span className="block">{(fitParts ? fitParts[1] : row.fit).replace(/\band\s+(\S+)$/, 'and\u00a0$1')}</span>
+                    {fitParts && <span className="mt-1 block whitespace-nowrap text-[10px] tabular-nums opacity-80">{fitParts[2]}</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <table className="hidden w-full text-sm md:table" style={{ color: C.navy }}>
+          <caption className="sr-only">Garment size measurements in centimeters and fit on your body</caption>
+          <thead>
+            <tr style={{ backgroundColor: C.cream }}>
+              {['Size', ...headers, 'On your body'].map(header => (
+                <th scope="col" key={header} className="px-2 py-3 text-left text-xs font-bold">{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.size} onClick={() => onSelect(row.size)} className="cursor-pointer border-b"
+                style={{ borderColor: C.peach, backgroundColor: row.size === selected ? C.pink + '30' : 'transparent' }}>
+                <th scope="row" className="text-left">
+                  <button type="button" onClick={e => { e.stopPropagation(); onSelect(row.size); }} aria-label={`Select size ${row.size}`} aria-pressed={row.size === selected}
+                    className="min-h-11 w-full px-2 py-3 text-left font-bold">{row.size}</button>
+                </th>
+                {headers.map((header, i) => <td key={header} className="whitespace-nowrap px-2 py-3">{row.measurements[i] === undefined ? '—' : `${row.measurements[i]} cm`}</td>)}
+                <td className="px-2 py-3 text-xs font-semibold" style={{ color: row.color }}>{row.fit}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, onCheckFit, fav, onFav, match }: {
   item: LabItem | null; onClose: () => void; chart: Partial<Chart>; sizeFit: SizeFit; size: Size; gridDir: string;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;   // sizes of its own chart that match the simulation
@@ -325,7 +433,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
+          <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-8 [&>div]:min-w-0">
             <div>
               {view === '2d' ? (
                 <>
@@ -337,7 +445,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                       </button>
                     ))}
                   </div>
-                  <div className="flex h-[40dvh] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
+                  <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
@@ -357,34 +465,20 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
 
             <div>
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ backgroundColor: C.cream }}>
-                      {['Size', 'Chest (width)', 'Length', 'Shoulder', 'Sleeve', 'On your body'].map(h => (
-                        <th key={h} className="px-2 py-3 text-left text-xs font-bold" style={{ color: C.navy }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {SIZES.map(s => {
-                      const f = sizeFit[s];
-                      return (
-                        <tr key={s} onClick={() => setViewSize(s)} className="cursor-pointer border-b" style={{ borderColor: C.peach, backgroundColor: s === viewSize ? C.pink + '30' : 'transparent' }}>
-                          <td className="px-2 py-3 font-bold" style={{ color: C.navy }}>{s}</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{chart[s] ? `${chart[s]!.chest} cm` : '—'}</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{chart[s] ? `${chart[s]!.length} cm` : '—'}</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{chart[s] ? `${chart[s]!.shoulder} cm` : '—'}</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{chart[s] ? `${chart[s]!.sleeve} cm` : '—'}</td>
-                          <td className="px-2 py-3 text-xs font-semibold" style={{ color: match?.[s] && !match[s].ok ? '#b45309' : f?.color ?? C.navy }}>
-                            {match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm)` : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <GarmentSizeChart
+                headers={['Chest (width)', 'Length', 'Shoulder', 'Sleeve']}
+                selected={viewSize}
+                onSelect={s => setViewSize(s as Size)}
+                rows={SIZES.map(s => {
+                  const f = sizeFit[s], c = chart[s];
+                  return {
+                    size: s,
+                    measurements: [c?.chest, c?.length, c?.shoulder, c?.sleeve],
+                    fit: match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm)` : '—',
+                    color: match?.[s] && !match[s].ok ? '#b45309' : f?.color ?? C.navy,
+                  };
+                })}
+              />
               <p className="mt-2 text-xs" style={{ color: C.navy, opacity: 0.6 }}>
                 Tap a size to pick it. &quot;On your body&quot; = room at the chest between the simulated shirt and your body in the fitting room
                 ({body.height} cm, chest {body.chest.toFixed(0)} cm).
@@ -396,7 +490,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                 </div>
                 <button onClick={() => setStyle(true)}
                   className="flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90" style={{ backgroundColor: C.pink, color: C.navy }}>
-                  <span className="text-lg">✨</span> AI Style Suggestion (weather)
+                  AI Style Suggestion (weather)
                 </button>
                 <div className="rounded-lg p-4" style={{ backgroundColor: C.cream }}>
                   <p className="text-xs" style={{ color: C.navy, opacity: 0.7 }}>
@@ -423,7 +517,7 @@ function TryOn({ can, size, why, onClick }: { can: boolean; size: string; why: s
     <div>
       <button onClick={onClick} disabled={!can}
         className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg px-6 font-semibold text-white hover:opacity-90" style={{ backgroundColor: C.navy, opacity: can ? 1 : 0.4 }}>
-        <span className="text-lg">🪞</span> Try it on (size {size})
+        <span className="text-lg"></span> Try it on (size {size})
       </button>
       {!can && <p className="mt-2 text-xs" style={{ color: '#b45309' }}>{why}</p>}
     </div>
@@ -471,7 +565,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
+          <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-8 [&>div]:min-w-0">
             <div>
               {view === '2d' ? (
                 <>
@@ -483,7 +577,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                       </button>
                     ))}
                   </div>
-                  <div className="flex h-[40dvh] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
+                  <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
@@ -503,34 +597,20 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
 
             <div>
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ backgroundColor: C.cream }}>
-                      {['Size', 'Waist (flat)', 'Hip (flat)', 'Length', 'Leg opening', 'On your body'].map(h => (
-                        <th key={h} className="px-2 py-3 text-left text-xs font-bold" style={{ color: C.navy }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizes.map(s => {
-                      const f = fits[s], c = chart[s];
-                      return (
-                        <tr key={s} onClick={() => setViewSize(s)} className="cursor-pointer border-b" style={{ borderColor: C.peach, backgroundColor: s === viewSize ? C.pink + '30' : 'transparent' }}>
-                          <td className="px-2 py-3 font-bold" style={{ color: C.navy }}>{s}</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{c?.waist} cm</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{c?.hip} cm</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{c?.length} cm</td>
-                          <td className="whitespace-nowrap px-2 py-3" style={{ color: C.navy }}>{c?.opening} cm</td>
-                          <td className="px-2 py-3 text-xs font-semibold" style={{ color: match?.[s] && !match[s].ok ? '#b45309' : f?.color ?? C.navy }}>
-                            {match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm)` : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <GarmentSizeChart
+                headers={['Waist (flat)', 'Hip (flat)', 'Length', 'Leg opening']}
+                selected={viewSize}
+                onSelect={setViewSize}
+                rows={sizes.map(s => {
+                  const f = fits[s], c = chart[s];
+                  return {
+                    size: s,
+                    measurements: [c?.waist, c?.hip, c?.length, c?.opening],
+                    fit: match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm)` : '—',
+                    color: match?.[s] && !match[s].ok ? '#b45309' : f?.color ?? C.navy,
+                  };
+                })}
+              />
               <p className="mt-2 text-xs" style={{ color: C.navy, opacity: 0.6 }}>
                 Tap a size to pick it. &quot;On your body&quot; = waistband (2 × flat waist) minus your waist in the fitting room ({body.height} cm, waist {body.waist.toFixed(0)} cm).
               </p>

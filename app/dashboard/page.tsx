@@ -113,10 +113,10 @@ export default function DashboardPage() {
               Hi, {name}
             </h1>
             {me ? (
-              <div className="flex flex-wrap gap-2 mt-4">
+              <div className="mt-4 grid grid-cols-4 gap-1 sm:flex sm:gap-2">
                 {([['Height', me.height], ['Chest', me.chest], ['Waist', me.waist], ['Shoulder', me.shoulder]] as const).map(([k, v]) => (
-                  <span key={k} className="px-3 py-1.5 rounded-full bg-white border text-[12px] sm:text-[13px]" style={{ borderColor: C.peach }}>
-                    <span className="opacity-60">{k}</span> <b className="font-semibold">{Math.round(v * 10) / 10} cm</b>
+                  <span key={k} className="flex min-w-0 flex-col items-center gap-0.5 rounded-2xl border bg-white px-1 py-2 text-[10px] min-[375px]:text-[11px] sm:flex-row sm:gap-1 sm:rounded-full sm:px-3 sm:py-1.5 sm:text-[13px]" style={{ borderColor: C.peach }}>
+                    <span className="opacity-60">{k}</span> <b className="whitespace-nowrap font-semibold">{Math.round(v * 10) / 10} cm</b>
                   </span>
                 ))}
               </div>
@@ -242,7 +242,7 @@ function PieceRow({ p, onTry }: { p: LabPiece; onTry: (p: LabPiece, size: string
   const tone = s ? s.tone : p.verdict.tone, text = s ? s.label : p.verdict.text;
   const canTry = !!s && s.tone !== 'grey' && s.tone !== 'red';      // the fitting room only shows what was simulated and can be worn
   return (
-    <li className="rounded-xl p-3 grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.3fr)_auto] gap-x-3 md:gap-x-4 gap-y-2 items-center" style={{ backgroundColor: C.cream }}>
+    <li className="rounded-xl p-3 grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,17rem)] gap-x-3 md:gap-x-4 gap-y-2 items-center" style={{ backgroundColor: C.cream }}>
       <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-white overflow-hidden flex items-center justify-center row-span-4 md:row-span-1 self-start md:self-center">
         <img src={p.img} alt="" className="w-full h-full object-contain p-1 mix-blend-multiply" loading="lazy" />
       </div>

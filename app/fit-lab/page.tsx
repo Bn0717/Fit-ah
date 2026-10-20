@@ -128,7 +128,7 @@ function FitLab() {
   // a shirt size still downloading: say so (a bare body would look like "this size can't be worn")
   const [shirtProg, setShirtProg] = useState<{ size: string; pct: number } | null>(null);
   // ── the page is the wardrobe (like /items: tabs, favourites, recent, outfits); the fitting room is a full-screen
-  // layer on top of it, opened by "Try it on" (the 3D scene stays loaded underneath, paused while it is closed) ──
+  // layer on top of it, opened by "" (the 3D scene stays loaded underneath, paused while it is closed) ──
   const [roomOpen, setRoomOpen] = useState(false);
   const [tab, setTab] = useState<'all' | 'fav' | 'recent' | 'outfits'>('all');
   const [kindFilter, setKindFilter] = useState<'all' | 'tops' | 'bottoms'>('all');
@@ -819,7 +819,6 @@ function FitLab() {
   const wearingLabel = [activeTop && `${activeTop.name} ${size}`, activeBottom && `${activeBottom.name} ${jeansSize}`].filter(Boolean).join(' + ');
   const wearing = [activeTop && { name: activeTop.name, size }, activeBottom && { name: activeBottom.name, size: jeansSize! }].filter(Boolean) as { name: string; size: string }[];
   const walkNote = walkStatus || `Walking ${shirtOn ? `in size ${size}` : 'without a shirt'}. Cloth physics replayed frame by frame on the ${walkBody?.height} cm / chest ${walkBody?.chest} cm body.`;
-  const FIT_NOTE = 'Tight = fabric stretched (shirt 2 / 4 / 8 %, denim 3 / 4.5 / 6 %). Loose = room to the body 0.5 / 1.5 / 2.5 cm +.';
   const toggleFav = (id: string) => setFavs(f => f.includes(id) ? f.filter(x => x !== id) : [...f, id]);
   // a product's pants sizes are known once its product.json has loaded: keep the worn size one it has
   useEffect(() => {
@@ -1139,17 +1138,15 @@ function FitLab() {
                       <span key={l} className="flex items-center gap-1 whitespace-nowrap"><span className="inline-block h-2.5 w-2.5 rounded-sm border lg:h-3 lg:w-3" style={{ background: c, borderColor: '#ddd' }} />{l}</span>
                     ))}
                   </div>
-                  <div className="mt-1 hidden lg:block" style={{ opacity: 0.6 }}>{FIT_NOTE}</div>
                 </div>
               )}
         </div>
 
         <aside className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-3 sm:p-4 md:space-y-5 md:p-5" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
           {/* stacked layout (phone, tablet upright): the notes that sit on the 3D on wide screens, so nothing covers the body */}
-          {((walkStatus || walking) || mode === 'fit') && (
+          {(walkStatus || walking) && (
             <div className="space-y-1 rounded-xl px-3 py-2 text-xs lg:hidden landscape:sm:hidden" style={{ background: '#fff' }}>
               {(walkStatus || walking) && <p>🚶 {walkNote}</p>}
-              {mode === 'fit' && <p style={{ opacity: 0.7 }}>🎨 {FIT_NOTE}</p>}
             </div>
           )}
           <section className="rounded-2xl p-4 shadow-sm md:p-5" style={{ background: '#fff' }}>
