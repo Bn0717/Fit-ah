@@ -12,12 +12,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { saveWardrobeItem, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { loadRef, makeTexture, type Ref } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
 import { selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
   type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
-import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, loadStored, type LabItem, type SizeFit } from './Wardrobe';
+import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/products/<id>/product.json)
@@ -63,10 +64,12 @@ export default function FitLabPage() {
       </div>
     );
   }
-  return <FitLab />;
+  return <FitLab key={user.uid} />;
 }
 
 function FitLab() {
+  const { user } = useAuth();
+  const userId = user!.uid;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sceneRef = useRef<any>({});
@@ -690,13 +693,15 @@ function FitLab() {
     return { id, brand, name, frontUrl: URL.createObjectURL(front), backUrl: URL.createObjectURL(back), tex: { front: tf, back: tb } };
   };
   const addItem = async (d: { brand: string; name: string; front: File; back: File; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }) => {
-    const id = `item_${Date.now()}`;
+    const id = `item_${crypto.randomUUID()}`;
     if (d.kind === 'pants') {
       try {
         const it = await buildPants(id, d.brand, d.name, d.front, d.back);
         if (typeof it === 'string') return it;
+        const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'pants' as const, chart: d.chart, chartMode: d.chartMode };
+        await saveWardrobeItem(userId, record);
+        await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
         setPantsItems(x => [...x, { ...it, chart: d.chart }]);
-        storeItem({ id, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'pants', chart: d.chart, chartMode: d.chartMode });
         setToast(`Added "${d.name}". Tap it to try it on.`);
         return null;
       } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
@@ -704,35 +709,39 @@ function FitLab() {
     try {
       const it = await buildItem(id, d.brand, d.name, d.front, d.back);
       if (typeof it === 'string') return it;
+      const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode };
+      await saveWardrobeItem(userId, record);
+      await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
       setItems(x => [...x, { ...it, chart: d.chart }]);
-      storeItem({ id, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), chart: d.chart, chartMode: d.chartMode });
       setToast(`Added "${d.name}". Tap it to try it on.`);
       return null;
     } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
   };
-  // items added earlier in this browser
+  // Restore account clothes and migrate existing browser-only copies.
   useEffect(() => {
     if (!meta) return;
     let stop = false;
-    loadStored().then(async recs => {
+    syncWardrobe(userId, message => { if (!stop) setToast(message); }).then(async recs => {
       recs.sort((a, b) => a.created - b.created);
       setLoadingIds(recs.filter(r => r.kind !== 'pants').map(r => r.id)); setPantsLoading(recs.filter(r => r.kind === 'pants').map(r => r.id));
       for (const r of recs) {
         try {
           if (r.kind === 'pants') {
             const it = await buildPants(r.id, r.brand, r.name, r.front, r.back);
-            if (!stop && typeof it !== 'string') setPantsItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
+            if (typeof it === 'string') throw new Error(it);
+            if (!stop) setPantsItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
           } else {
             const it = await buildItem(r.id, r.brand, r.name, r.front, r.back);
-            if (!stop && typeof it !== 'string') setItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
+            if (typeof it === 'string') throw new Error(it);
+            if (!stop) setItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
           }
-        } catch { /* skip unreadable */ }
+        } catch { if (!stop) setToast(`Could not restore "${r.name}". Its saved photos have been kept; refresh to retry.`); }
         if (!stop) { setLoadingIds(x => x.filter(y => y !== r.id)); setPantsLoading(x => x.filter(y => y !== r.id)); }
       }
     });
     return () => { stop = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta]);
+  }, [meta, userId]);
   // wear an item in the fitting room: its photos become the shirt textures of every size and the catwalk
   const wear = (it: LabItem) => {
     const S = sceneRef.current;
@@ -751,24 +760,26 @@ function FitLab() {
     S.colourway = it.tex ? S.itemTex[it.id] : null;
     applyColourway(S); setActiveId(it.id);
   };
-  const removeItem = (it: LabItem) => {
+  const removeItem = async (it: LabItem) => {
     if (!confirm(`Remove "${it.name}" from the Fit Lab wardrobe?`)) return;
+    try { await deleteWardrobeItem(userId, it.id); await unstoreItem(it.id); } catch { setToast('Could not remove this item. Please try again.'); return; }
     const S = sceneRef.current;
     if (activeId === it.id) wear(GON);
     S.itemTex?.[it.id]?.front.dispose(); S.itemTex?.[it.id]?.back.dispose(); if (S.itemTex) delete S.itemTex[it.id];
-    setItems(x => x.filter(y => y.id !== it.id)); unstoreItem(it.id);
+    setItems(x => x.filter(y => y.id !== it.id));
   };
   // wear a pants photo swap (null = the original Xin photos): always on the simulated Xin jeans
   const wearPants = (id: string | null) => {
     setPantsSkin(id);
     if (id) { setPantsId('xin'); setJeansSize(j => j ?? 'L'); }
   };
-  const removePants = (it: PantsItem) => {
+  const removePants = async (it: PantsItem) => {
     if (!confirm(`Remove "${it.name}" from the Fit Lab wardrobe?`)) return;
+    try { await deleteWardrobeItem(userId, it.id); await unstoreItem(it.id); } catch { setToast('Could not remove this item. Please try again.'); return; }
     const S = sceneRef.current;
     if (pantsSkin === it.id) setPantsSkin(null);
     S.pantsTex?.[it.id]?.front.dispose(); S.pantsTex?.[it.id]?.back.dispose(); if (S.pantsTex) delete S.pantsTex[it.id];
-    setPantsItems(x => x.filter(y => y.id !== it.id)); unstoreItem(it.id);
+    setPantsItems(x => x.filter(y => y.id !== it.id));
   };
   const hideBuiltin = (it: LabItem, top: boolean) => {
     if (!confirm(`Remove "${it.name}" from the Fit Lab wardrobe? (Built-in item: "Restore" brings it back.)`)) return;
