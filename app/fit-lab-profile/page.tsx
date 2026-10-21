@@ -19,7 +19,7 @@ import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, FIT_LEGEND,
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
 import { jeansState, wornBody, type PantsData, type JeansState } from '../fit-lab/jeansFit';
-import { loadStored } from '../fit-lab/Wardrobe';
+import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getAvatar, saveAvatar } from '@/lib/firebase/firestore';
 import { useStored, type Outfit } from '../fit-lab/WardrobeExtras';
@@ -98,11 +98,19 @@ export default function MyFittingRoom() {
   const [hidden, setHidden] = useState<string[]>([]);
   useEffect(() => {
     fetch(`${GRID_DIR}/meta.json`).then(r => r.json()).then(setMeta);
-    loadStored().then(rs => setStored(rs.sort((a, b) => a.created - b.created).map(r => ({ id: r.id, name: r.name, brand: r.brand, front: r.front, back: r.back, kind: r.kind ?? 'shirt' }))));
     fetch('/models/fitlab/products/index.json').then(r => r.json())
       .then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => setProducts([]));   // "hidden": not ready for shoppers yet
     try { setHidden(JSON.parse(localStorage.getItem('fitlab_hidden') || '[]')); } catch { /* storage blocked */ }
   }, []);
+  useEffect(() => {
+    setStored([]);
+    if (!user) return;
+    let cancelled = false;
+    syncWardrobe(user.uid, message => { if (!cancelled) setToast(message); }).then(rs => {
+      if (!cancelled) setStored(rs.sort((a, b) => a.created - b.created).map(r => ({ id: r.id, name: r.name, brand: r.brand, front: r.front, back: r.back, kind: r.kind ?? 'shirt' })));
+    });
+    return () => { cancelled = true; };
+  }, [user?.uid]);
   const urls = useMemo(() => Object.fromEntries(stored.map(s => [s.id, { front: URL.createObjectURL(s.front), back: URL.createObjectURL(s.back) }])), [stored]);
 
   // ── wardrobe: Tops / Bottoms ───────────────────────────────────────────────────

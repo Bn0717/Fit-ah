@@ -2,7 +2,7 @@
 // Fit Lab wardrobe, in the style of /items (ItemDetailsModal): item cards, an item window with a 2D photo
 // view and a 3D view of the simulated shirt, the size chart, "Try it on" (opens the fitting room wearing it)
 // and the weather-based AI style suggestions (StyleOverlay from the wardrobe's fit window).
-// Items are colourways of the same cut (see colourway.ts); added ones are kept in this browser (IndexedDB).
+// Items are colourways of the same cut (see colourway.ts); added ones are saved to the account, with a browser cache (IndexedDB).
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -27,20 +27,7 @@ export interface LabItem {
 }
 export type SizeFit = Record<Size, { verdict: string; color: string; ease: number } | null>;
 
-// ─── browser storage for added items (photos are re-aligned on load) ───────────────
-interface StoredItem { id: string; brand: string; name: string; front: Blob; back: Blob; created: number; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }
-const openDb = () => new Promise<IDBDatabase>((res, rej) => {
-  const r = indexedDB.open('fitlab', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
-  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-});
-const tx = async <T,>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>) => {
-  const db = await openDb();
-  return new Promise<T>((res, rej) => { const q = f(db.transaction('items', mode).objectStore('items')); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
-};
-export const storeItem = (it: StoredItem) => tx('readwrite', s => s.put(it)).catch(() => undefined);
-export const unstoreItem = (id: string) => tx('readwrite', s => s.delete(id)).catch(() => undefined);
-export const loadStored = () => tx<StoredItem[]>('readonly', s => s.getAll() as IDBRequest<StoredItem[]>).catch(() => [] as StoredItem[]);
+export { storeItem, unstoreItem, loadStored } from './wardrobeStorage';
 
 // ─── item cards ──────────────────────────────────────────────────────────────────
 // one wardrobe section (Tops, Bottoms): its own cards and its own add button. Touch first: the ☆ and ✕ buttons are
@@ -180,7 +167,7 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName 
         <div className="flex gap-3 border-t px-5 py-3" style={{ borderColor: C.peach, paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
           <button onClick={onClose} className="min-h-[44px] flex-1 rounded-lg text-sm font-medium" style={{ backgroundColor: C.cream, color: C.navy }}>Cancel</button>
           <button onClick={submit} disabled={!ok} className="min-h-[44px] flex-1 rounded-lg text-sm font-semibold text-white"
-            style={{ backgroundColor: C.navy, opacity: ok ? 1 : 0.4 }}>{busy ? 'Lining up the photos…' : 'Add to wardrobe'}</button>
+            style={{ backgroundColor: C.navy, opacity: ok ? 1 : 0.4 }}>{busy ? 'Adding to wardrobe…' : 'Add to wardrobe'}</button>
         </div>
       </div>
     </div>
@@ -489,7 +476,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                   <TryOn can={!match?.[viewSize] || match[viewSize].ok} size={viewSize} why={notSimText('shirt', match?.[viewSize], 'Gon Tee')} onClick={() => onCheckFit(item, viewSize)} />
                 </div>
                 <button onClick={() => setStyle(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90" style={{ backgroundColor: C.pink, color: C.navy }}>
+                  className="hidden w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90 md:flex" style={{ backgroundColor: C.pink, color: C.navy }}>
                   AI Style Suggestion (weather)
                 </button>
                 <div className="rounded-lg p-4" style={{ backgroundColor: C.cream }}>
@@ -503,6 +490,9 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
           </div>
           <div className="sticky bottom-0 z-10 -mx-5 mt-5 border-t bg-white px-5 pt-3 md:hidden" style={{ borderColor: C.peach, paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
             <TryOn can={!match?.[viewSize] || match[viewSize].ok} size={viewSize} why={notSimText('shirt', match?.[viewSize], 'Gon Tee')} onClick={() => onCheckFit(item, viewSize)} />
+            <button onClick={() => setStyle(true)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold" style={{ backgroundColor: C.pink, color: C.navy }}>
+              AI Style Suggestion (weather)
+            </button>
           </div>
         </div>
         {style && <StyleOverlay item={clothing} userProfile={profile} selectedSize={viewSize} onBack={() => setStyle(false)} />}
