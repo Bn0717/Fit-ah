@@ -4,7 +4,8 @@
 // tops use the simulated chest room (fitTier), bottoms use the simulated waistband (jeansState).
 import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, type GridMeta } from '../fit-lab/engine';
 import { jeansState, wornBody, type PantsData } from '../fit-lab/jeansFit';
-import { loadStored } from '../fit-lab/Wardrobe';
+import { syncWardrobe } from '../fit-lab/wardrobeCloud';
+import { auth } from '@/lib/firebase/config';
 
 export const GRID_DIR = '/models/fitlab/grid';
 export const RANGE = { height: [160, 190], chest: [92, 116] } as const;      // the simulated bodies
@@ -42,7 +43,7 @@ export async function loadLab(): Promise<LabData> {
   const products = await Promise.all(index.filter(p => p.id !== 'xin_check').map(p =>
     fetch(`${p.dir}/product.json`).then(r => r.json()).then(j => ({ id: p.id, name: p.name, brand: p.brand, dir: p.dir,
       sizes: j.belt, drop: j.drop, belt: j.belt, elasticStretch: j.elastic_stretch } as LabData['products'][number])).catch(() => null)));
-  const stored = (await loadStored()).sort((a, b) => a.created - b.created).map(s => ({ id: s.id, name: s.name, brand: s.brand, front: s.front, kind: s.kind ?? 'shirt' as const }));
+  const stored = (auth.currentUser ? await syncWardrobe(auth.currentUser.uid, message => console.warn(message)) : []).sort((a, b) => a.created - b.created).map(s => ({ id: s.id, name: s.name, brand: s.brand, front: s.front, kind: s.kind ?? 'shirt' as const }));
   let hidden: string[] = [];
   try { hidden = JSON.parse(localStorage.getItem('fitlab_hidden') || '[]'); } catch { /* storage blocked */ }
   return { meta, products: products.filter(Boolean) as LabData['products'], stored, hidden };

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:fit-map": "node --test tests/fit-map.test.mjs",
+    "test:shorts-surface": "node --test tests/static-surface.test.mjs tests/shorts-assets.test.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",

@@ -85,7 +85,7 @@ export interface GridMeta {
   // sizes = waistband held where buttoned; drop = nothing holds it (gravity + friction); belt = held by a belt
   jeans?: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim> };
 }
-export type JeansBody = { waistband_height_cm: number; natural_waist_height_cm: number; hem_lowest_cm: number; crotch_drop_cm: number;
+export type JeansBody = { waistband_height_cm: number; natural_waist_height_cm: number; body_girth_at_waistband_cm?: number; hem_lowest_cm: number; crotch_drop_cm: number;
     stretch_p50: number; floor_cm?: number; hem_on_floor_frac?: number; drop_cm?: number; seam_gap_mean_cm?: number;
     put_on_failed?: boolean };   // the simulation could not get them on (a leg stuck at the thigh)
 // variants = the same jeans simulated on the centre body's slim / full waist and flat / round belly versions
@@ -180,10 +180,11 @@ export async function fetchBin(url: string, metadata: WalkPackingInfo | Promise<
 }
 
 // One track per three.js mesh: Int16 positions per frame per (compacted) Blender vertex, Blender Z-up.
-export interface QInfo { n: number; min: number[]; scale: number[]; frames: number }
+export interface ElasticBandInfo { indices: number[]; relaxed_cm: number; max_stretch: number; body_girth_cm: number }
+export interface QInfo { n: number; min: number[]; scale: number[]; frames: number; fit_collision_cm?: number; elastic_band?: ElasticBandInfo }
 export interface WalkTrack {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mesh: any; vid: Int32Array; q: Int16Array; info: QInfo; strain?: Int8Array; gap?: Uint8Array; acc: Float32Array;
+  mesh: any; vid: Int32Array; q: Int16Array; info: QInfo; strain?: Int8Array; gap?: Uint8Array; elasticBand?: Uint8Array; acc: Float32Array;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -193,8 +194,10 @@ export function makeTrack(mesh: any, buf: ArrayBuffer, offset: number, info: QIn
   const vid = Int32Array.from(va.array as ArrayLike<number>, x => Math.round(x));
   g.attributes.position.setUsage(35048);            // DYNAMIC_DRAW
   mesh.frustumCulled = false;
+  const elasticBand = info.elastic_band ? new Uint8Array(info.n) : undefined;
+  for (const i of info.elastic_band?.indices ?? []) if (i >= 0 && i < info.n) elasticBand![i] = 1;
   return {
-    mesh, vid, info, q: new Int16Array(buf, offset, info.n * 3 * info.frames), acc: new Float32Array(info.n * 3),
+    mesh, vid, info, elasticBand, q: new Int16Array(buf, offset, info.n * 3 * info.frames), acc: new Float32Array(info.n * 3),
     strain: strainOffset !== undefined ? new Int8Array(buf, strainOffset, info.n * info.frames) : undefined,
     gap: gapOffset !== undefined ? new Uint8Array(buf, gapOffset, info.n * info.frames) : undefined,
   };
@@ -211,10 +214,13 @@ export function applyFrame(t: WalkTrack, f: number, fit: boolean, fabric: keyof 
   if (adjust) adjust(a);                      // e.g. layering: the shirt pushed out over the jeans
   pos.needsUpdate = true;
   refreshWalkNormals(t);
-  if (fit && t.strain && g.attributes.color) {
+  if (fit && g.attributes.color) {
     const col = g.attributes.color, sb = f * t.info.n;
     for (let i = 0; i < pos.count; i++) {
-      const c = fitColor(t.strain[sb + vid[i]] * 0.001, t.gap ? t.gap[sb + vid[i]] * 0.1 : 2, fabric);   // same rule as the static fit map
+      const gap = t.gap ? t.gap[sb + vid[i]] * 0.1 : NaN, band = t.info.elastic_band;
+      const c = band && t.elasticBand?.[vid[i]]
+        ? elasticBandColor(band.body_girth_cm / band.relaxed_cm - 1, gap, band.max_stretch - 1, t.info.fit_collision_cm ?? 0.35)
+        : fitColor(t.strain ? t.strain[sb + vid[i]] * 0.001 : NaN, gap, fabric, t.info.fit_collision_cm ?? 0.35);
       col.setXYZ(i, c[0], c[1], c[2]);
     }
     col.needsUpdate = true;
@@ -240,6 +246,94 @@ export function refreshWalkNormals(t: WalkTrack) {
     nrm.setXYZ(i, acc[v] / l, acc[v + 1] / l, acc[v + 2] / l);
   }
   nrm.needsUpdate = true;
+}
+
+// Static CPU layering changes positions, but must not split lighting at texture seams.
+// Groups are derived once from the untouched mesh: same position, authored normal and
+// every morph position. The morph check keeps coincident but independently moving panels apart.
+// No vertices, UVs, indices, measurements or animation data are welded or modified.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function prepareStaticSurface(parts: any[]) {
+  const groups = new Map<string, { part: any; vertex: number; group: number }[]>();
+  let count = 0;
+  for (const part of parts) {
+    const g = part.mesh.geometry;
+    part.basePos ||= (g.attributes.position.array as Float32Array).slice();
+    part.baseNormal ||= (g.attributes.normal.array as Float32Array).slice();
+    part.morphOrder = JSON.stringify(Object.entries(part.mesh.morphTargetDictionary ?? {}).sort((a, b) => Number(a[1]) - Number(b[1])));
+    part.smoothGroups = new Uint32Array(g.attributes.position.count);
+    for (let i = 0; i < part.smoothGroups.length; i++) {
+      const o = i * 3;
+      const key = `${part.basePos[o]},${part.basePos[o + 1]},${part.basePos[o + 2]}|${part.baseNormal[o]},${part.baseNormal[o + 1]},${part.baseNormal[o + 2]}`;
+      const candidates = groups.get(key) ?? [];
+      const morphs = g.morphAttributes.position ?? [];
+      const same = candidates.find(c => {
+        const other = c.part.mesh.geometry.morphAttributes.position ?? [];
+        const normals = g.morphAttributes.normal ?? [], otherNormals = c.part.mesh.geometry.morphAttributes.normal ?? [];
+        const equalTargets = (left: { array: ArrayLike<number> }[], right: { array: ArrayLike<number> }[]) =>
+          left.length === right.length && left.every((a, k) => [0, 1, 2].every(axis => a.array[o + axis] === right[k].array[c.vertex * 3 + axis]));
+        return part.morphOrder === c.part.morphOrder && g.morphTargetsRelative === c.part.mesh.geometry.morphTargetsRelative
+          && equalTargets(morphs, other) && equalTargets(normals, otherNormals);
+      });
+      const group = same?.group ?? count++;
+      part.smoothGroups[i] = group;
+      if (!same) { candidates.push({ part, vertex: i, group }); groups.set(key, candidates); }
+    }
+  }
+  const surface = { parts, acc: new Float32Array(count * 3) };
+  for (const part of parts) part.staticSurface = surface;
+  return surface;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function refreshStaticNormals(parts: any[]) {
+  if (!parts.length) return;
+  const surface = parts[0].staticSurface ?? prepareStaticSurface(parts);
+  const acc = surface.acc as Float32Array; acc.fill(0);
+  for (const part of parts) {
+    const g = part.mesh.geometry, a = g.attributes.position.array, idx = g.index?.array;
+    const vertexCount = g.attributes.position.count;
+    for (let k = 0, end = idx?.length ?? vertexCount; k < end; k += 3) {
+      const ia = idx ? idx[k] : k, ib = idx ? idx[k + 1] : k + 1, ic = idx ? idx[k + 2] : k + 2;
+      const A = ia * 3, B = ib * 3, C = ic * 3;
+      const ux = a[B] - a[A], uy = a[B + 1] - a[A + 1], uz = a[B + 2] - a[A + 2];
+      const vx = a[C] - a[A], vy = a[C + 1] - a[A + 1], vz = a[C + 2] - a[A + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      for (const i of [ia, ib, ic]) {
+        const v = part.smoothGroups[i] * 3; acc[v] += nx; acc[v + 1] += ny; acc[v + 2] += nz;
+      }
+    }
+  }
+  for (const part of parts) {
+    const normal = part.mesh.geometry.attributes.normal;
+    for (let i = 0; i < normal.count; i++) {
+      const v = part.smoothGroups[i] * 3, len = Math.hypot(acc[v], acc[v + 1], acc[v + 2]);
+      if (len > 1e-12) normal.setXYZ(i, acc[v] / len, acc[v + 1] / len, acc[v + 2] / len);
+      else normal.setXYZ(i, part.baseNormal[i * 3], part.baseNormal[i * 3 + 1], part.baseNormal[i * 3 + 2]);
+    }
+    normal.needsUpdate = true;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyStaticLayers(shirts: any[], pants: any[], shirtVisible: boolean) {
+  for (const parts of [shirts, pants]) if (parts.length && !parts[0].staticSurface) prepareStaticSurface(parts);
+  if (!shirtVisible || !shirts.length || !pants.length) {
+    for (const p of [...shirts, ...pants]) if (p.layered) {
+      const g = p.mesh.geometry;
+      g.attributes.position.array.set(p.basePos); g.attributes.position.needsUpdate = true;
+      g.attributes.normal.array.set(p.baseNormal); g.attributes.normal.needsUpdate = true;
+      p.layered = false;
+    }
+    return;
+  }
+  const all = [...shirts, ...pants], positions = all.map(p => cpuMorphed(p.mesh, p.basePos));
+  layerShirtOverPants(positions.slice(0, shirts.length), positions.slice(shirts.length));
+  all.forEach((p, i) => {
+    const pos = p.mesh.geometry.attributes.position; pos.array.set(positions[i]); pos.needsUpdate = true;
+    p.mesh.morphTargetInfluences?.fill(0); p.layered = true;
+  });
+  refreshStaticNormals(shirts); refreshStaticNormals(pants);
 }
 
 // Smoothed walking path of the body and heading: the curved recorded walk plays on the spot.
@@ -351,22 +445,87 @@ export function fitTier(easeCm: number, bodyCm: number, droppedShoulder = true) 
   return { tier: t.name, label, color: t.color, pct };
 }
 
-// Fit map colour for one point: tightness from fabric stretch relative to the fabric's own range (the
-// fallback the research recommends until a pressure model is calibrated), looseness from the room to the body
-// in bands. Neutral white = touching / skimming.
+// Estimated fit, not contact pressure. These legacy strain bands are display heuristics,
+// not measured comfort limits. Warm colours require BOTH stretch and proximity to the body.
+// G is unsigned surface distance in cm. Subtract the baked collider envelope before
+// classifying clearance; 1.5 mm contact tolerance accommodates mm-quantized walk gaps.
+// This remains a proxy: unsigned distances cannot detect penetration or prove pressure.
+export const FIT_CONTACT_CM = 0.15;
+export const FIT_COLLISION_CM = { jersey: 0.7, denim: 0.35 } as const;
 export const FABRIC = {
-  jersey: { snug: 0.02, tight: 0.04, tooTight: 0.08 },            // cotton jersey tee
-  denim: { snug: 0.03, tight: 0.045, tooTight: 0.06 },            // rigid denim (sims sag ~1.7 % under their own weight)
+  jersey: { snug: 0.02, tight: 0.04, tooTight: 0.08 },
+  denim: { snug: 0.03, tight: 0.045, tooTight: 0.06 },
 };
-export function fitColor(strain: number, gap: number, fabric: keyof typeof FABRIC = 'jersey'): [number, number, number] {
-  const f = FABRIC[fabric];
-  if (strain > f.tooTight) return [0.93, 0.18, 0.18];             // red: too tight
-  if (strain > f.tight) return [1.0, 0.55, 0.15];                 // orange: tight
-  if (strain > f.snug) return [1.0, 0.86, 0.3];                   // yellow: snug
-  if (gap < 0.5) return [1, 1, 1];                                // white: touching / skimming
-  if (gap < 1.5) return [0.86, 0.92, 1.0];                        // pale blue: regular room
-  if (gap < 2.5) return [0.62, 0.78, 1.0];                        // mid blue: loose
-  return [0.3, 0.52, 0.98];                                       // deep blue: very loose (2.5 cm +)
+export function fitColor(strain: number, gap: number, fabric: keyof typeof FABRIC = 'jersey',
+  collisionCm: number = FIT_COLLISION_CM[fabric]): [number, number, number] {
+  // Missing/invalid clearance must never manufacture either tightness or room.
+  if (!Number.isFinite(gap) || gap < 0 || !Number.isFinite(collisionCm) || collisionCm < 0) return [1, 1, 1];
+  const clearance = Math.max(0, gap - collisionCm);
+  if (clearance <= FIT_CONTACT_CM + 1e-6) {
+    const f = FABRIC[fabric];
+    if (Number.isFinite(strain)) {
+      if (strain > f.tooTight) return [0.93, 0.18, 0.18];
+      if (strain > f.tight) return [1.0, 0.55, 0.15];
+      if (strain > f.snug) return [1.0, 0.86, 0.3];
+    }
+    return [1, 1, 1];
+  }
+  // Clearance wins outside the contact band, even if a hanging fold/seam is stretched.
+  if (clearance < 1.5) return [0.86, 0.92, 1.0];
+  if (clearance < 2.5) return [0.62, 0.78, 1.0];
+  return [0.3, 0.52, 0.98];
+}
+
+// Elastic is a separate material region: its gathered cloth is not an elastic strain gauge.
+// Provisional bands relative to the product's configured extension range, not measured pressure.
+export function elasticFit(extension: number, limit: number): 'comfortable' | 'snug' | 'tight' | 'too tight' | 'unknown' {
+  if (!Number.isFinite(extension) || !Number.isFinite(limit) || limit <= 0) return 'unknown';
+  if (extension >= limit * 0.95 - 1e-6) return 'too tight';
+  if (extension >= limit * 0.8 - 1e-6) return 'tight';
+  if (extension >= limit * 0.5 - 1e-6) return 'snug';
+  return 'comfortable';
+}
+export function elasticBandColor(extension: number, gap: number, limit: number, collisionCm = 0.35): [number, number, number] {
+  // Retain the contact requirement; never paint a hanging waistband tight from body size alone.
+  if (!Number.isFinite(gap) || gap < 0 || Math.max(0, gap - collisionCm) > FIT_CONTACT_CM + 1e-6) return fitColor(0, gap, 'denim', collisionCm);
+  const grade = elasticFit(extension, limit);
+  return grade === 'too tight' ? [0.93, 0.18, 0.18] : grade === 'tight' ? [1, 0.55, 0.15]
+    : grade === 'snug' ? [1, 0.86, 0.3] : [1, 1, 1];
+}
+
+// Blend cached measurements with the same body/shape weights as the static geometry.
+// A missing contributor invalidates the reading instead of silently contributing zero.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function blendFitAttribute(attributes: Record<string, any>, pre: 'S' | 'D' | 'G', n: number,
+  w: Record<string, number>, vw: Record<Variant, number>, centre: string, pants: boolean, morphTargets?: Record<string, number>): Float32Array {
+  const out = new Float32Array(n);
+  const attr = (name: string) => attributes[`_${pre}_${name}`] || attributes[`_${pre.toLowerCase()}_${name}`];
+  const hasShape = (name: string) => morphTargets ? name in morphTargets : !!attr(name);
+  const valid = (at: { array: ArrayLike<number> } | undefined) => at && at.array.length === n;
+  const unknown = () => { out.fill(NaN); return out; };
+  const weights = Object.entries(w).filter(([, weight]) => weight !== 0);
+  if (!weights.length) return unknown();
+  for (const [key, weight] of weights) {
+    const at = attr(key);
+    if (!valid(at)) return unknown();
+    for (let i = 0; i < n; i++) out[i] += weight * at.array[i];
+  }
+  const variants: [string, number][] = pants
+    ? Object.entries(jeansVarWeights(vw, hasShape))
+    : VARIANTS.map(v => [v, vw[v]]);
+  for (const [variant, weight] of variants) {
+    if (!weight) continue;
+    const perGrid = weights.every(([key]) => hasShape(`${key}_${variant}`));
+    const pairs: [string, string, number][] = perGrid
+      ? weights.map(([key, x]) => [`${key}_${variant}`, key, x * weight])
+      : [[variant, centre, weight]];
+    for (const [name, baseName, x] of pairs) {
+      const at = attr(name), base = attr(baseName);
+      if (!valid(at) || !valid(base)) return unknown();
+      for (let i = 0; i < n; i++) out[i] += x * (at.array[i] - base.array[i]);
+    }
+  }
+  return out;
 }
 export const FIT_LEGEND: [string, string][] = [
   ['#ee2e2e', 'too tight'], ['#ff8c26', 'tight'], ['#ffdb4d', 'snug'], ['#ffffff', 'touching'],

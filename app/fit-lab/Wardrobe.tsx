@@ -2,7 +2,7 @@
 // Fit Lab wardrobe, in the style of /items (ItemDetailsModal): item cards, an item window with a 2D photo
 // view and a 3D view of the simulated shirt, the size chart, "Try it on" (opens the fitting room wearing it)
 // and the weather-based AI style suggestions (StyleOverlay from the wardrobe's fit window).
-// Items are colourways of the same cut (see colourway.ts); added ones are kept in this browser (IndexedDB).
+// Items are colourways of the same cut (see colourway.ts); added ones are saved to the account, with a browser cache (IndexedDB).
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -12,6 +12,8 @@ import type { ClothingItem } from '@/lib/types/clothing';
 import type { ParametricAvatar } from '@/lib/types/avatar';
 import { StyleOverlay } from '@/components/items/FitRecommendationModal';
 import { SizeChartEditor, notSimText, type SizeChartData, type SizeMatch } from './WardrobeExtras';
+import { SavedSizeControl } from './SavedSizeControl';
+import { initialSize } from './sizePreferences';
 import { loadPacked } from './engine';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC', red: '#ef4444' };
@@ -27,31 +29,18 @@ export interface LabItem {
 }
 export type SizeFit = Record<Size, { verdict: string; color: string; ease: number } | null>;
 
-// ─── browser storage for added items (photos are re-aligned on load) ───────────────
-interface StoredItem { id: string; brand: string; name: string; front: Blob; back: Blob; created: number; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }
-const openDb = () => new Promise<IDBDatabase>((res, rej) => {
-  const r = indexedDB.open('fitlab', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
-  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-});
-const tx = async <T,>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>) => {
-  const db = await openDb();
-  return new Promise<T>((res, rej) => { const q = f(db.transaction('items', mode).objectStore('items')); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
-};
-export const storeItem = (it: StoredItem) => tx('readwrite', s => s.put(it)).catch(() => undefined);
-export const unstoreItem = (id: string) => tx('readwrite', s => s.delete(id)).catch(() => undefined);
-export const loadStored = () => tx<StoredItem[]>('readonly', s => s.getAll() as IDBRequest<StoredItem[]>).catch(() => [] as StoredItem[]);
+export { storeItem, unstoreItem, loadStored } from './wardrobeStorage';
 
 // ─── item cards ──────────────────────────────────────────────────────────────────
 // one wardrobe section (Tops, Bottoms): its own cards and its own add button. Touch first: the ☆ and ✕ buttons are
 // always visible (no hover on a phone) and 36 px+ to tap; 2 cards a row on a phone, up to 5 on a wide screen.
 export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loadingIds, title = 'TOPS', subtitle = 'Same cut as the TNT CO Gon Tee · every size cloth-simulated',
-  addLabel = 'Add Top', info = () => 'Short Sleeve Shirt · 4 sizes', badge = 'Wearing', hiddenCount = 0, onRestore, favs = [], onFav, warn = () => null, empty }: {
+  addLabel = 'Add Top', info = () => 'Short Sleeve Shirt · 4 sizes', badge = 'Wearing', hiddenCount = 0, onRestore, favs = [], onFav, warn = () => null, empty, sizeSummary }: {
   items: LabItem[]; activeId: string; onOpen: (it: LabItem) => void; onAdd?: () => void; onDelete: (it: LabItem) => void; loadingIds: string[];
   title?: string; subtitle?: string; addLabel?: string; info?: (it: LabItem) => string; badge?: string;
   hiddenCount?: number; onRestore?: () => void; favs?: string[]; onFav?: (it: LabItem) => void;
   warn?: (it: LabItem) => string | null;   // e.g. "Not simulated" for an item with a different size chart
-  empty?: string;
+  empty?: string; sizeSummary?: (item: LabItem) => { recommended: string | null; saved?: string | null };
 }) {
   if (!items.length && !loadingIds.length && !onAdd && !hiddenCount) return null;
   return (
@@ -95,6 +84,7 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
                 )}
               </div>
               <div className="border-t bg-white px-2 py-1.5 md:border-t-0 md:p-3" style={{ borderColor: C.peach + '80' }}>
+                {sizeSummary && <p className="mb-1 text-[9px] leading-snug sm:text-[10px]" style={{ color: C.navy }}>Recommended: {sizeSummary(it).recommended ?? 'Unavailable'}<br />Your size: {sizeSummary(it).saved ?? 'Not set'}</p>}
                 <p className="truncate text-[10px] font-bold uppercase tracking-wide md:hidden" style={{ color: C.navy, opacity: 0.55 }}>{it.brand}</p>
                 <span className="mb-1 hidden max-w-full truncate rounded-full px-3 py-0.5 text-xs font-bold md:inline-block" style={{ backgroundColor: C.pink, color: C.navy }}>{it.brand}</span>
                 <h3 className="truncate text-xs font-semibold leading-snug md:text-sm" style={{ color: C.navy }}>{it.name}</h3>
@@ -115,18 +105,20 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
 }
 
 // ─── add item ────────────────────────────────────────────────────────────────────
-export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName }: {
+export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName, recommendSize }: {
   open: boolean; onClose: () => void; kind: 'shirt' | 'pants'; refChart: SizeChartData; refName: string;
-  onSubmit: (d: { brand: string; name: string; front: File; back: File; kind: 'shirt' | 'pants'; chart?: SizeChartData; chartMode: string }) => Promise<string | null>;
+  recommendSize: (kind: 'shirt' | 'pants', chart: SizeChartData) => string | null;
+  onSubmit: (d: { brand: string; name: string; front: File; back: File; kind: 'shirt' | 'pants'; chart?: SizeChartData; chartMode: string; savedSize?: string }) => Promise<string | null>;
 }) {
   const [brand, setBrand] = useState('TNT CO');
+  const [savedSize, setSavedSize] = useState('');
   const [name, setName] = useState('');
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
   const [chart, setChart] = useState<{ mode: 'default' | 'scan' | 'manual'; chart: SizeChartData }>({ mode: 'default', chart: refChart });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { if (open) setChart({ mode: 'default', chart: refChart }); }, [open, kind]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) { setChart({ mode: 'default', chart: refChart }); setSavedSize(''); } }, [open, kind]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!open) return null;
   const chartOk = chart.mode === 'default' || Object.keys(chart.chart).length > 0;
   const ok = brand.trim() && name.trim() && front && back && chartOk && !busy;
@@ -134,7 +126,7 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName 
     if (!front || !back) return;
     setBusy(true); setErr(null);
     const e = await onSubmit({ brand: brand.trim(), name: name.trim(), front, back, kind,
-      chart: chart.mode === 'default' ? undefined : chart.chart, chartMode: chart.mode });
+      chart: chart.mode === 'default' ? undefined : chart.chart, chartMode: chart.mode, savedSize: Object.keys(chart.mode === 'default' ? refChart : chart.chart).includes(savedSize) ? savedSize : undefined });
     setBusy(false);
     if (e) setErr(e); else { setName(''); setFront(null); setBack(null); onClose(); }
   };
@@ -175,12 +167,14 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName 
             {photo('Back photo', back, setBack, 'back')}
           </div>
           <SizeChartEditor kind={kind} refChart={refChart} refName={refName} value={chart} onChange={setChart} />
+          <p className="text-xs" style={{ color: C.navy }}>Recommended: <strong>{recommendSize(kind, chart.mode === 'default' ? refChart : chart.chart) ?? 'No supported size recommendation'}</strong></p>
+          <label className="block space-y-2 text-xs font-semibold" style={{ color: C.navy }}><span>Your size (optional)</span><select aria-label="Your size for new clothing" value={Object.keys(chart.mode === 'default' ? refChart : chart.chart).includes(savedSize) ? savedSize : ''} onChange={e => setSavedSize(e.target.value)} className={field} style={{ borderColor: C.peach, backgroundColor: C.cream }}><option value="">Not set</option>{Object.keys(chart.mode === 'default' ? refChart : chart.chart).map(size => <option key={size} value={size}>{size}</option>)}</select><span className="block font-normal opacity-60">Record the size you own or plan to buy. You can change it later.</span></label>
           {err && <p className="text-xs" style={{ color: C.red }}>{err}</p>}
         </div>
         <div className="flex gap-3 border-t px-5 py-3" style={{ borderColor: C.peach, paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
           <button onClick={onClose} className="min-h-[44px] flex-1 rounded-lg text-sm font-medium" style={{ backgroundColor: C.cream, color: C.navy }}>Cancel</button>
           <button onClick={submit} disabled={!ok} className="min-h-[44px] flex-1 rounded-lg text-sm font-semibold text-white"
-            style={{ backgroundColor: C.navy, opacity: ok ? 1 : 0.4 }}>{busy ? 'Lining up the photos…' : 'Add to wardrobe'}</button>
+            style={{ backgroundColor: C.navy, opacity: ok ? 1 : 0.4 }}>{busy ? 'Adding to wardrobe…' : 'Add to wardrobe'}</button>
         </div>
       </div>
     </div>
@@ -384,17 +378,22 @@ function GarmentSizeChart({ headers, rows, selected, onSelect }: {
   );
 }
 
-export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, onCheckFit, fav, onFav, match }: {
+type SizeRecordProps = {
+  recommended: string | null; savedSize?: string | null;
+  onSaveSize: (id: string, size: string | null) => Promise<void>; sizeSyncError?: string | null;
+};
+
+export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError }: {
   item: LabItem | null; onClose: () => void; chart: Partial<Chart>; sizeFit: SizeFit; size: Size; gridDir: string;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;   // sizes of its own chart that match the simulation
   body: { height: number; chest: number; waist: number; shoulder: number | null };
   onCheckFit: (it: LabItem, size: Size) => void;
-}) {
+} & SizeRecordProps) {
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [viewSize, setViewSize] = useState<Size>(size);
   const [style, setStyle] = useState(false);
-  useEffect(() => { setViewSize(size); setStyle(false); }, [item, size]);
+  useEffect(() => { setViewSize(initialSize(savedSize, recommended, SIZES) as Size); setStyle(false); }, [item, savedSize, recommended]);
   if (!item) return null;
   const clothing: ClothingItem = {
     id: item.id, userId: 'fitlab', brand: item.brand, name: item.name, category: 'Short Sleeve Shirt',
@@ -465,6 +464,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
 
             <div>
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
+              <SavedSizeControl itemId={item.id} name={item.name} sizes={Object.keys(item.chart ?? chart)} recommended={recommended} savedSize={savedSize} previewSize={viewSize} onSave={onSaveSize} syncError={sizeSyncError} />
               <GarmentSizeChart
                 headers={['Chest (width)', 'Length', 'Shoulder', 'Sleeve']}
                 selected={viewSize}
@@ -489,7 +489,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                   <TryOn can={!match?.[viewSize] || match[viewSize].ok} size={viewSize} why={notSimText('shirt', match?.[viewSize], 'Gon Tee')} onClick={() => onCheckFit(item, viewSize)} />
                 </div>
                 <button onClick={() => setStyle(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90" style={{ backgroundColor: C.pink, color: C.navy }}>
+                  className="hidden w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90 md:flex" style={{ backgroundColor: C.pink, color: C.navy }}>
                   AI Style Suggestion (weather)
                 </button>
                 <div className="rounded-lg p-4" style={{ backgroundColor: C.cream }}>
@@ -503,6 +503,9 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
           </div>
           <div className="sticky bottom-0 z-10 -mx-5 mt-5 border-t bg-white px-5 pt-3 md:hidden" style={{ borderColor: C.peach, paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
             <TryOn can={!match?.[viewSize] || match[viewSize].ok} size={viewSize} why={notSimText('shirt', match?.[viewSize], 'Gon Tee')} onClick={() => onCheckFit(item, viewSize)} />
+            <button onClick={() => setStyle(true)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold" style={{ backgroundColor: C.pink, color: C.navy }}>
+              AI Style Suggestion (weather)
+            </button>
           </div>
         </div>
         {style && <StyleOverlay item={clothing} userProfile={profile} selectedSize={viewSize} onBack={() => setStyle(false)} />}
@@ -526,17 +529,17 @@ function TryOn({ can, size, why, onClick }: { can: boolean; size: string; why: s
 
 // ─── pants window: 2D photos, 3D of each simulated size, size chart with the fit on your body, Try it on ───
 export type PantsChart = { waist: number; hip: number; length: number; opening: number; rise?: number };
-export type PantsSizeFit = { verdict: string; color: string; ease: number } | null;
-export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match }: {
+export type PantsSizeFit = { verdict: string; color: string; ease: number; detail?: string } | null;
+export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError }: {
   item: LabItem | null; onClose: () => void; sizes: string[]; chart: Record<string, PantsChart>; fits: Record<string, PantsSizeFit>;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;
   glb: (size: string) => string; size: string; body: { height: number; chest: number; waist: number }; note: string;
   onCheckFit: (it: LabItem, size: string) => void;
-}) {
+} & SizeRecordProps) {
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [viewSize, setViewSize] = useState(size);
-  useEffect(() => { setViewSize(sizes.includes(size) ? size : sizes[Math.min(1, sizes.length - 1)]); }, [item, size, sizes]);
+  useEffect(() => { setViewSize(initialSize(savedSize, recommended, sizes)); }, [item, savedSize, recommended, sizes.join(',')]); // sizes are labels, not array identity
   if (!item) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -597,6 +600,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
 
             <div>
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
+              <SavedSizeControl itemId={item.id} name={item.name} sizes={Object.keys(item.chart ?? chart)} recommended={recommended} savedSize={savedSize} previewSize={viewSize} onSave={onSaveSize} syncError={sizeSyncError} />
               <GarmentSizeChart
                 headers={['Waist (flat)', 'Hip (flat)', 'Length', 'Leg opening']}
                 selected={viewSize}
@@ -606,7 +610,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                   return {
                     size: s,
                     measurements: [c?.waist, c?.hip, c?.length, c?.opening],
-                    fit: match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm)` : '—',
+                    fit: match?.[s] && !match[s].ok ? 'Not simulated' : f ? `${f.verdict} (${f.detail ?? `${f.ease >= 0 ? '+' : ''}${f.ease.toFixed(0)} cm`})` : '—',
                     color: match?.[s] && !match[s].ok ? '#b45309' : f?.color ?? C.navy,
                   };
                 })}

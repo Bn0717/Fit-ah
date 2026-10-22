@@ -4,12 +4,15 @@
 // The scene code is the same as in app/fit-lab/page.tsx.
 'use client';
 
+import { ModelSkeleton } from '@/components/ui/Skeleton';
 import React, { useEffect, useRef, useState } from 'react';
-import { selectWalk, fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody, jeansVarWeights,
+import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody, jeansVarWeights,
   pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type ProductWalk, type WalkTrack } from './engine';
 import type { Result } from './colourway';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
+import { xinWalkAssets } from './xinAssets';
+
 const GRID_DIR = '/models/fitlab/grid';
 
 export interface FitViewerProps {
@@ -23,7 +26,7 @@ export interface FitViewerProps {
   // jeans being worn: glb of the chosen simulation (drop / belt), size for the catwalk, hidden = cannot be worn or
   // not simulated for this body (the basic pants are shown instead), skin = pants photo swap textures
   // walk: false = no walking simulation of these pants (the catwalk then shows the basic pants)
-  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; belt?: boolean; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
+  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; builtinXin?: boolean; belt?: boolean; elastic?: { extension: number; limit: number }; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
   onWalking: (on: boolean) => void; onWalkStatus: (msg: string | null) => void;
   background?: string; className?: string; style?: React.CSSProperties;
 }
@@ -188,9 +191,10 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     if (!W.added) { S.scene.add(W.group); W.added = true; }
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
     const jz = jOn && !jeans?.productWalk && jeans!.belt && meta.walk?.jeans?.[jeans!.size + 'belt'] ? jeans!.size + 'belt' : jeans?.size;
-    const selected = selectWalk(meta, size, jOn ? jz : null, jeans?.walk !== false, jeans?.productWalk);
+    const originalWalk = selectWalk(meta, size, jOn ? jz : null, jeans?.walk !== false, jeans?.productWalk);
+    const selected = xinWalkAssets(originalWalk, !!jeans?.builtinXin);
     const { js, sk } = selected;
-    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = selected.packedPants;
+    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
     const has = !!meta.walk?.sizes[size];
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
@@ -246,7 +250,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
             o.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
             o.userData.fabric = fabric; o.userData.fit = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
             o.material = fabric;
-            tracks.push(makeTrack(o, buf, 0, { n: info.n, min: info.min, scale: info.scale, frames: info.frames }, info.strain_offset, info.gap_offset));
+            tracks.push(makeTrack(o, buf, 0, info, info.strain_offset, info.gap_offset));
           });
           W.group.add(g.scene); W.shirts[sk] = { root: g.scene, tracks }; applyColourway(S);
         });
@@ -267,7 +271,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
             o.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
             o.userData.fabric = fabric; o.userData.fit = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
             o.material = fabric;
-            tracks.push(makeTrack(o, buf, 0, { n: info.n, min: info.min, scale: info.scale, frames: info.frames }, info.strain_offset, info.gap_offset));
+            tracks.push(makeTrack(o, buf, 0, info, info.strain_offset, info.gap_offset));
           });
           W.group.add(g.scene); W.jeans[js] = { root: g.scene, tracks }; applyPantsSkin(S);
         });
@@ -282,7 +286,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }).catch(() => { if (!stale) { setWalking(false); setWalkStatus('Could not load the catwalk.'); } });
     return () => { stale = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walking, size, mode, meta, loading, jOn, jeans?.size, jeans?.walk, jeans?.belt, jeans?.productWalk, showShirt]);
+  }, [walking, size, mode, meta, loading, jOn, jeans?.size, jeans?.walk, jeans?.belt, jeans?.productWalk, jeans?.builtinXin, showShirt]);
 
   // ── jeans: load the chosen simulation on demand; the basic pants are swapped for them ───────────
   useEffect(() => {
@@ -371,53 +375,22 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       if (mode !== 'fit') continue;
       const geo = p.mesh.geometry, col = geo.attributes.color, n = col.count;
       // per-point stretch (_S_) and room to the body (_G_, cm), blended like the shapes
-      const blendAttr = (pre: string) => {
-        const out = new Float32Array(n);
-        const attr = (nm: string) => geo.attributes[`_${pre}_${nm}`] || geo.attributes[`_${pre.toLowerCase()}_${nm}`];
-        for (const [k, v] of Object.entries(w)) {
-          const at = attr(k);
-          if (!at) continue;
-          for (let i = 0; i < n; i++) out[i] += v * at.array[i];
-        }
-        const vlist: [string, number][] = p.isJeans ? Object.entries(jeansVarWeights(vw, n => !!attr(n))) : VARIANTS.map(v => [v, vw[v]]);
-        for (const [v, vx] of vlist) {
-          if (!vx) continue;
-          const perGrid = Object.keys(w).every(k => attr(`${k}_${v}`));
-          const pairs: [string, string, number][] = perGrid ? Object.entries(w).map(([k, x]) => [`${k}_${v}`, k, x * vx]) : [[v, meta.centre, vx]];
-          for (const [vn, bn, x] of pairs) {
-            const at = attr(vn), base = attr(bn);
-            if (!at || !base) continue;
-            for (let i = 0; i < n; i++) out[i] += x * (at.array[i] - base.array[i]);
-          }
-        }
-        return out;
-      };
-      const strain = blendAttr('S'), gap = blendAttr('G');
+      const strainKind = Object.keys(geo.attributes).some(name => /^_d_/i.test(name)) ? 'D' : 'S';
+      const strain = blendFitAttribute(geo.attributes, strainKind, n, w, vw, meta.centre, !!p.isJeans, p.mesh.morphTargetDictionary);
+      const gap = blendFitAttribute(geo.attributes, 'G', n, w, vw, meta.centre, !!p.isJeans, p.mesh.morphTargetDictionary);
       const fab = p.isJeans ? 'denim' : 'jersey';
-      for (let i = 0; i < n; i++) { const c = fitColor(strain[i], gap[i], fab); col.setXYZ(i, c[0], c[1], c[2]); }
+      const band = geo.attributes._band || geo.attributes._BAND;
+      const extension = jeans?.elastic?.extension, limit = jeans?.elastic?.limit;
+      for (let i = 0; i < n; i++) {
+        const c = p.isJeans && band?.array[i] > 0 && extension != null && limit != null
+          ? elasticBandColor(extension, gap[i], limit) : fitColor(strain[i], gap[i], fab);
+        col.setXYZ(i, c[0], c[1], c[2]);
+      }
       col.needsUpdate = true;
     }
-    // layering: the shirt is always the outer layer (engine.layerShirtOverPants): both CPU-morphed, the shirt moved
-    // out over the pants as one sheet, denim spikes pressed in under the shirt; the positions then include the morphs
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const layerParts: any[] = [...shirtParts, ...jeansParts];
-    for (const p of layerParts) p.basePos ||= (p.mesh.geometry.attributes.position.array as Float32Array).slice();
-    if (!shirtParts.length || !jeansParts.length) {
-      for (const p of layerParts) if (p.layered) {
-        const pos = p.mesh.geometry.attributes.position; (pos.array as Float32Array).set(p.basePos); pos.needsUpdate = true;
-        p.mesh.geometry.computeVertexNormals(); p.layered = false;
-      }
-    } else {
-      const lay = layerParts.map(p => cpuMorphed(p.mesh, p.basePos));
-      layerShirtOverPants(lay.slice(0, shirtParts.length), lay.slice(shirtParts.length));
-      layerParts.forEach((p, i) => {
-        const pos = p.mesh.geometry.attributes.position; (pos.array as Float32Array).set(lay[i]); pos.needsUpdate = true;
-        p.mesh.morphTargetInfluences?.fill(0);          // positions already include the morphs
-        p.mesh.geometry.computeVertexNormals(); p.layered = true;
-      });
-    }
+    applyStaticLayers(shirtParts, jeansParts, showShirt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, height, chest, shoulder, waist, belly, size, mode, ready, jeans?.url, jOn]);
+  }, [meta, height, chest, shoulder, waist, belly, size, mode, ready, jeans?.url, jeans?.elastic?.extension, jeans?.elastic?.limit, jOn, showShirt]);
 
 
   useEffect(() => {
@@ -447,8 +420,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       {(loading || error) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-xs font-bold" style={{ color: error ? C.red : C.navy, background }}>
-          {!error && <div className="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />}
-          {error || 'Loading 3D body…'}
+          {error || <ModelSkeleton />}
         </div>
       )}
       {!loading && showShirt && !walking && shirtProg?.size === size && (
