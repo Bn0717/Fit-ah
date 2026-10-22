@@ -33,26 +33,42 @@
   100% { opacity: 0; transform: translateY(0); }
 }
 
-/* 05 wardrobe: the photo background is wiped away, leaving the cut-out */
-.photoBg { animation: wipe 5s cubic-bezier(.65, 0, .35, 1) infinite; }
+/* One shared eight-second timeline: remove background, transfer, reveal. */
+.mappingCard { isolation: isolate; }
+.mappingWaiting * { animation-play-state: paused !important; }
+.photoBg { animation: wipe 8s ease-in-out infinite; }
 @keyframes wipe {
-  0%, 25% { clip-path: inset(0 0 0 0); }
-  60%, 88% { clip-path: inset(0 0 0 100%); }
-  100% { clip-path: inset(0 0 0 0); }
+  0%, 12% { clip-path: inset(0); }
+  38%, 91% { clip-path: inset(0 0 0 100%); }
+  100% { clip-path: inset(0); }
 }
-.wipeEdge { animation: edge 5s cubic-bezier(.65, 0, .35, 1) infinite; }
+.wipeEdge { background: #fa9ebc; box-shadow: 0 0 16px 3px #fa9ebc88; animation: edge 8s ease-in-out infinite; }
 @keyframes edge {
-  0%, 25% { left: 0%; opacity: 0; }
-  28% { opacity: 1; }
-  60% { left: 100%; opacity: 1; }
-  62%, 100% { left: 100%; opacity: 0; }
+  0%, 12% { left: 0; opacity: 0; }
+  16% { opacity: 1; }
+  38% { left: 100%; opacity: 1; }
+  42%, 100% { left: 100%; opacity: 0; }
 }
-.tagBefore { animation: before 5s infinite; }
-.tagAfter { animation: after 5s infinite; }
-@keyframes before { 0%, 40% { opacity: 1; } 45%, 95% { opacity: 0; } 100% { opacity: 1; } }
-@keyframes after { 0%, 40% { opacity: 0; } 45%, 95% { opacity: 1; } 100% { opacity: 0; } }
+.tagBefore { animation: before 8s infinite; }
+.tagAfter { animation: after 8s infinite; }
+@keyframes before { 0%, 28% { opacity: 1; } 35%, 91% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes after { 0%, 30% { opacity: 0; } 38%, 91% { opacity: 1; } 100% { opacity: 0; } }
+.transferArrow { color: #0b195733; }
+.arrowLight { stroke-dasharray: 24 100; stroke-dashoffset: 24; opacity: 0; filter: drop-shadow(0 0 5px #fa9ebc); animation: transfer 8s ease-in-out infinite; }
+@keyframes transfer {
+  0%, 39% { stroke-dashoffset: 24; opacity: 0; }
+  43% { opacity: 1; }
+  61% { stroke-dashoffset: -90; opacity: 1; }
+  67%, 100% { stroke-dashoffset: -90; opacity: 0; }
+}
+.previewReveal { animation: reveal 8s ease-in-out infinite; }
+@keyframes reveal {
+  0%, 42% { opacity: .2; transform: translateX(-4px); }
+  64%, 91% { opacity: 1; transform: translateX(0); }
+  100% { opacity: .2; transform: translateX(-4px); }
+}
 
-/* 06 stylist: typing dots, then the suggestion */
+/* 07 stylist: typing dots, then the suggestion */
 .typing span { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 9999px; background: #0B1957; opacity: .3;
   animation: blink 1.2s infinite; }
 .typing span:nth-child(2) { animation-delay: .2s; }
@@ -67,8 +83,11 @@
 .loadBar { transition: width .3s ease, opacity .6s ease; }
 
 @media (prefers-reduced-motion: reduce) {
-  .scanLine, .dot, .bone, .chip, .photoBg, .wipeEdge, .tagBefore, .tagAfter, .typing span { animation: none; }
+  .scanLine, .dot, .bone, .chip, .photoBg, .wipeEdge, .tagBefore, .tagAfter, .arrowLight, .previewReveal, .typing span { animation: none; }
   .dot, .bone, .chip { opacity: 1; stroke-dashoffset: 0; transform: none; }
   .photoBg { clip-path: inset(0 0 0 100%); }
+  .arrowLight { opacity: 1; stroke-dasharray: none; }
+  .previewReveal, .tagAfter { opacity: 1; transform: none; }
+  .wipeEdge { opacity: 0; }
   .tagBefore { opacity: 0; }
 }

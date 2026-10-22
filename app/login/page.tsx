@@ -234,10 +234,10 @@ export default function LoginPage() {
             text="Every piece is simulated with cloth physics, so you see it fold, swing and drape as you walk, not a flat sticker on a mannequin."
             chips={['Multiple Animations', 'Real Physic Simulation']}
             media={<VideoCard src={`${M}/catwalk.mp4`} poster={`${M}/catwalk.jpg`} ratio="540 / 646" narrow />} />
-          <Feature n="05" title="Your wardrobe, cut out automatically"
-            text="Snap a photo of any piece you own. The background is removed in your browser and the item is saved with its brand size chart."
-            chips={['Background removal', 'Size chart saved']}
-            media={<CutoutCard />} />
+          <Feature n="05" title="From garment photo to 3D preview"
+            text="Snap a photo of any piece you own. We remove the background of the garment, align its image to the matching 3D pattern, and apply it as a UV-mapped texture. The result is a nice 3d textured garment preview."
+            chips={['Background removal', 'UV texture mapping', '3D preview']}
+            media={<UvMappingCard />} />
           <Feature n="06" flip title="Outfit ideas for today's weather"
             text="Fit-Ah checks the live weather where you are, then our AI stylist suggests 3 outfits for your shirt: bottoms, shoes and why they work. Tap a city to see real answers."
             chips={['Local weather', 'AI stylist']}
@@ -438,27 +438,102 @@ function ScanCard() {
   );
 }
 
-// 05: a photo's background is wiped away, leaving the cut-out
-function CutoutCard() {
+// One synchronized photo → cut-out → UV-mapped preview demonstration.
+function UvMappingCard() {
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false, raf = 0, renderer: { dispose: () => void } | null = null;
+    let observer: ResizeObserver | null = null;
+    let disposeScene = () => {};
+    Promise.all([
+      import('three'),
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/loaders/DRACOLoader.js'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ]).then(([THREE, { GLTFLoader }, { DRACOLoader }]: any[]) => {
+      if (cancelled || !canvas) return;
+      const draw = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      renderer = draw;
+      draw.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      draw.outputColorSpace = THREE.SRGBColorSpace;
+      draw.toneMapping = THREE.ACESFilmicToneMapping;
+      draw.toneMappingExposure = 1;
+      const scene = new THREE.Scene();
+      const disposeObject = (obj: any) => obj.traverse((o: any) => {
+        o.geometry?.dispose();
+        for (const m of o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []) {
+          for (const value of Object.values(m)) if ((value as any)?.isTexture) (value as any).dispose();
+          m.dispose();
+        }
+      });
+      disposeScene = () => { draco.dispose(); disposeObject(scene); };
+      const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 20);
+      camera.position.set(0, 0, 2.45);
+      const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-1.5, 2.5, 3);
+      scene.add(key, new THREE.HemisphereLight(0xffffff, 0xe7dccb, 1.2));
+      const root = new THREE.Group(); scene.add(root);
+      const loader = new GLTFLoader();
+      const draco = new DRACOLoader(); draco.setDecoderPath('/draco/'); loader.setDRACOLoader(draco);
+      loader.load('/models/login/tee.glb', (g: { scene: any }) => {
+        if (cancelled) { disposeObject(g.scene); return; }
+        g.scene.traverse((o: any) => {
+          if (!o.isMesh) return;
+          o.castShadow = true;
+          for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.side = THREE.DoubleSide;
+        });
+        const bounds = new THREE.Box3().setFromObject(g.scene);
+        g.scene.position.sub(bounds.getCenter(new THREE.Vector3()));
+        root.add(g.scene);
+        setPreviewReady(true);
+      }, undefined, () => { if (!cancelled) setPreviewFailed(true); });
+      const resize = () => {
+        if (!canvas.clientWidth || !canvas.clientHeight) return;
+        draw.setSize(canvas.clientWidth, canvas.clientHeight, false);
+        camera.aspect = canvas.clientWidth / canvas.clientHeight;
+        camera.updateProjectionMatrix();
+      };
+      resize(); observer = new ResizeObserver(resize); observer.observe(canvas);
+      const tick = () => {
+        raf = requestAnimationFrame(tick);
+        root.rotation.y = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : Math.sin(performance.now() * 0.00045) * 0.28;
+        draw.render(scene, camera);
+      };
+      tick();
+    }).catch(() => { if (!cancelled) setPreviewFailed(true); });
+    return () => { cancelled = true; cancelAnimationFrame(raf); observer?.disconnect(); disposeScene(); renderer?.dispose(); };
+  }, []);
   return (
-    <div className="relative max-w-[560px] mx-auto aspect-[4/3] rounded-2xl overflow-hidden border-2" style={{ borderColor: peach, backgroundColor: 'white' }}>
-      {/* stand-in "phone photo" background: bed sheet + window light */}
-      <div className={`absolute inset-0 ${css.photoBg}`}
-        style={{ background: 'radial-gradient(120% 90% at 25% 15%, #f4efe6 0%, #cfc6b8 45%, #8f8577 100%)' }}>
-        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(115deg, transparent 0 18px, rgba(255,255,255,.5) 18px 20px)' }} />
+    <div className={`relative mx-auto aspect-[4/3] max-w-[560px] overflow-hidden rounded-2xl border-2 bg-white shadow-[0_20px_60px_-30px_rgba(11,25,87,0.5)] ${css.mappingCard} ${previewReady ? '' : css.mappingWaiting}`} style={{ borderColor: peach }}>
+      <div className="absolute inset-0 grid grid-cols-[1fr_48px_1fr] items-center gap-1 p-3 sm:grid-cols-[1fr_64px_1fr] sm:gap-2 sm:p-5">
+        <div className="relative h-[85%] overflow-hidden rounded-xl bg-white">
+          <div className={css.photoBg} style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(115deg, transparent 0 24px, #ffffff33 24px 26px), radial-gradient(ellipse at 20% 10%, #eee7db, #b9ad9c)' }} />
+          <Image src={`${M}/gon-tee.png`} alt="Garment photo with its background being removed" fill sizes="(max-width: 767px) 40vw, 250px" className="object-contain px-2 py-8" />
+          <div className={`absolute inset-y-0 w-px ${css.wipeEdge}`} />
+          <span className={`absolute left-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[9px] font-semibold sm:text-[11px] ${css.tagBefore}`}>Your photo</span>
+          <span className={`absolute left-2 top-2 rounded-full px-2 py-1 text-[9px] font-semibold text-white sm:text-[11px] ${css.tagAfter}`} style={{ backgroundColor: navy }}>Background removed ✓</span>
+        </div>
+        <div className={css.transferArrow} aria-hidden="true">
+          <svg viewBox="0 0 64 32" className="w-full overflow-visible" fill="none">
+            <path d="M4 16H54M43 5L55 16L43 27" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path className={css.arrowLight} d="M4 16H54M43 5L55 16L43 27" stroke="#fa9ebc" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <div className={`relative h-[92%] min-w-0 overflow-hidden rounded-xl ${css.previewReveal}`} style={{ background: `radial-gradient(ellipse at center, white 10%, ${cream} 75%)` }}>
+          {!previewReady && <Image src={`${M}/gon-tee.png`} alt="Garment preview loading" fill sizes="200px" className="object-contain px-2 py-8 opacity-60" />}
+          <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="Rotating UV-mapped 3D garment preview" />
+          {!previewReady && <span role="status" className="absolute inset-x-1 bottom-9 text-center text-[10px]">{previewFailed ? '3D preview unavailable' : 'Preparing 3D preview…'}</span>}
+          <span className="absolute bottom-2 inset-x-0 text-center text-[9px] font-semibold tracking-wide sm:text-[11px]">3D garment preview</span>
+        </div>
       </div>
-      <div className={`absolute top-0 bottom-0 w-[3px] -ml-[1.5px] ${css.wipeEdge}`} style={{ backgroundColor: pink, boxShadow: `0 0 20px 4px ${pink}` }} />
-      <Image src={`${M}/gon-tee.png`} alt="Gon Tee, cut out" fill sizes="560px" className="object-contain p-8" />
-      <span className={`absolute top-4 left-4 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white/90 ${css.tagBefore}`}>Your photo</span>
-      <span className={`absolute top-4 left-4 px-3 py-1.5 rounded-full text-[12px] font-semibold text-white ${css.tagAfter}`} style={{ backgroundColor: navy }}>Background removed ✓</span>
-      <span className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-white" style={{ borderColor: peach }}>
-        Size chart: chest 57 cm · length 73 cm (M)
-      </span>
     </div>
   );
 }
 
-// 06: real answers from Fit-Ah's AI stylist (scripts/login-stylist-samples.mjs ran the app's own prompt
+// 07: real answers from Fit-Ah's AI stylist (scripts/login-stylist-samples.mjs ran the app's own prompt
 // through /api/gemini with live weather; saved in stylist.json, not written by hand)
 const BOTTOM_IMG: Record<string, string> = {
   'Baggy Wide-Leg Jeans': '/bottoms/baggy-wide-leg-jeans-black.jpg', 'Casual Sweatpants': '/bottoms/casual-sweatpants-white.jpg',
