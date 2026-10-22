@@ -10,15 +10,22 @@
 // Blender computed it. Only the 175 cm / chest 101 cm body was walked (each walk is a ~1 h simulation).
 'use client';
 
+import { ModelSkeleton } from '@/components/ui/Skeleton';
+import { WardrobeSkeleton } from '@/components/ui/PageSkeletons';
+import { getAvatar } from '@/lib/firebase/firestore';
+import { SavedSizeControl } from './SavedSizeControl';
+import { useSizePreferences } from './useSizePreferences';
+import { initialSize, recommendedTop, recommendedBottom } from './sizePreferences';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveWardrobeItem, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { loadRef, makeTexture, type Ref } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
-import { selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
+import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
   type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
+import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/products/<id>/product.json)
@@ -58,11 +65,7 @@ export default function FitLabPage() {
   const router = useRouter();
   useEffect(() => { if (!loading && !user) router.push('/login'); }, [user, loading, router]);
   if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: C.cream }}>
-        <div className="h-16 w-16 animate-spin rounded-full border-4" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
-      </div>
-    );
+    return <WardrobeSkeleton />;
   }
   return <FitLab key={user.uid} />;
 }
@@ -70,6 +73,7 @@ export default function FitLabPage() {
 function FitLab() {
   const { user } = useAuth();
   const userId = user!.uid;
+  const sizeRecords = useSizePreferences(userId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sceneRef = useRef<any>({});
@@ -89,6 +93,14 @@ function FitLab() {
   const xinOn = !!jeansSize && pantsId === 'xin' && !pantsSkin;
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [product, setProduct] = useState<PantsProduct | null>(null);
+  const [sizeCatalog, setSizeCatalog] = useState<Record<string, PantsProduct>>({});
+  useEffect(() => {
+    let alive = true;
+    Promise.all(products.map(async p => {
+      try { const response = await fetch(`${p.dir}/product.json`); if (!response.ok) return null; return [p.id, await response.json()] as const; } catch { return null; }
+    })).then(entries => { if (alive) setSizeCatalog(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => !!entry))); });
+    return () => { alive = false; };
+  }, [products]);
   // products flagged "hidden" in products/index.json (not ready for shoppers yet, e.g. simulated on one body only) are left out
   useEffect(() => { fetch('/models/fitlab/products/index.json').then(r => r.ok ? r.json() : []).then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => {}); }, []);
   useEffect(() => {
@@ -102,7 +114,7 @@ function FitLab() {
     fetch(`${it.dir}/product.json`).then(r => r.json()).then(setProduct).catch(() => setProduct(null));
   }, [pantsId, products]);
   const pants: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>; dir: string } | null =
-    pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: GRID_DIR } : null)
+    pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: xinOn ? XIN_GRID_DIR : GRID_DIR } : null)
       : product && product.id === pantsId ? { name: `${product.brand} ${product.name}`, sizes: product.belt, drop: product.drop, belt: product.belt, dir: product.dir } : null;
   const belly = 0; // Belly adjustment is temporarily disabled; always use the natural shape.
   // "My exact fit": a real simulation on this exact body (blender/exact_fit.sh via /api/fitlab/exact)
@@ -110,6 +122,7 @@ function FitLab() {
     body?: Record<string, number>; shirt?: Record<string, number | null>; size?: string; showing?: boolean; error?: string } | null>(null);
 
   const [height, setHeight] = useState(175);
+  const [hasProfile, setHasProfile] = useState(false);
   const [chest, setChest] = useState(101);
   const [shoulder, setShoulder] = useState<number | null>(null);   // null = this body's natural value
   const [waist, setWaist] = useState<number | null>(null);
@@ -163,6 +176,16 @@ function FitLab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomOpen]);
   const seen = (id: string) => setRecent(r => [id, ...r.filter(x => x !== id)].slice(0, 30));
+  useEffect(() => {
+    let alive = true;
+    getAvatar(userId).then(profile => {
+      if (!alive || !profile) return;
+      setHeight(profile.height); setChest(profile.chest * 2); setWaist(profile.waist * 2); setShoulder(profile.shoulder);
+      setHasProfile(true);
+    });
+    return () => { alive = false; };
+  }, [userId]);
+
   // the pants rules are shared with /fit-lab-profile (jeansFit.ts), so both pages show the same thing:
   // wornBody = the body used while these pants are worn (natural waist / belly for pants simulated only there),
   // jeansState = which simulation to show, whether they can be worn / were simulated for this body, and the label
@@ -175,9 +198,9 @@ function FitLab() {
   const jeansLock = wb.lock, waistNow = wb.waist, bellyNow = wb.belly;
   const jst = meta ? jeansState(meta, pantsData, jeansSize, belt, height, chest, shoulderNow, waistNow, bellyNow) : null;
   const elasticW = jeansSize ? pants?.sizes[jeansSize]?.chart.elastic_waist : undefined;
-  const tooSmall = !!jst?.tooSmall, cantPullOn = !!jst?.cantPullOn, noSim = !!jst?.noSim;
+  const noSim = !!jst?.noSim;
   const jeansVariant: 'held' | 'drop' | 'belt' = jst?.variant ?? 'held';
-  const jeansKey = jeansSize && pants ? `${pantsId}/${jeansVariant}/${jeansSize}` : null;
+  const jeansKey = jeansSize && pants ? `${xinOn ? 'xin-smooth' : pantsId}/${jeansVariant}/${jeansSize}` : null;
   // jeans that cannot be worn on this body, or were not simulated for it, are not drawn: only the verdict
   // (an honest "can't" is better than a broken-looking simulation)
   const jeansHide = !!jst?.hide;
@@ -343,9 +366,10 @@ function FitLab() {
     W.jeans ||= {};
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
     const jz = pantsId === 'xin' && jeansSize && belt && meta.walk?.jeans?.[jeansSize + 'belt'] ? jeansSize + 'belt' : jeansSize;
-    const selected = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined);
+    const originalWalk = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined);
+    const selected = xinWalkAssets(originalWalk, xinOn);
     const { js, sk } = selected;
-    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = selected.packedPants;
+    W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
     const has = !!meta.walk?.sizes[size];
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
@@ -402,7 +426,7 @@ function FitLab() {
             o.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
             o.userData.fabric = fabric; o.userData.fit = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
             o.material = fabric;
-            tracks.push(makeTrack(o, buf, 0, { n: info.n, min: info.min, scale: info.scale, frames: info.frames }, info.strain_offset, info.gap_offset));
+            tracks.push(makeTrack(o, buf, 0, info, info.strain_offset, info.gap_offset));
           });
           W.group.add(g.scene); W.shirts[sk] = { root: g.scene, tracks }; applyColourway(S);
         });
@@ -423,7 +447,7 @@ function FitLab() {
             o.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
             o.userData.fabric = fabric; o.userData.fit = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
             o.material = fabric;
-            tracks.push(makeTrack(o, buf, 0, { n: info.n, min: info.min, scale: info.scale, frames: info.frames }, info.strain_offset, info.gap_offset));
+            tracks.push(makeTrack(o, buf, 0, info, info.strain_offset, info.gap_offset));
           });
           W.group.add(g.scene); W.jeans[js] = { root: g.scene, tracks }; applyPantsSkin(S);
         });
@@ -437,7 +461,7 @@ function FitLab() {
       W.last = -1; show(true); setWalkStatus(null);
     }).catch(() => { if (!stale) { setWalking(false); setWalkStatus('Could not load the catwalk.'); } });
     return () => { stale = true; };
-  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt, pantsId, product?.walk, product?.id]);
+  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt, pantsId, xinOn, product?.walk, product?.id]);
 
   // ── jeans: load the selected size on demand, swap with the basic pants ───────────────
   // drop = nothing holds the waistband (gravity + friction decide where it ends up), belt = a belt holds it at the
@@ -585,63 +609,32 @@ function FitLab() {
       if (mode !== 'fit') continue;
       const geo = p.mesh.geometry, col = geo.attributes.color, n = col.count;
       // per-point stretch (_S_) and room to the body (_G_, cm), blended like the shapes
-      const blendAttr = (pre: string) => {
-        const out = new Float32Array(n);
-        const attr = (nm: string) => geo.attributes[`_${pre}_${nm}`] || geo.attributes[`_${pre.toLowerCase()}_${nm}`];
-        for (const [k, v] of Object.entries(w)) {
-          const at = attr(k);
-          if (!at) continue;
-          for (let i = 0; i < n; i++) out[i] += v * at.array[i];
-        }
-        const vlist: [string, number][] = p.isJeans ? Object.entries(jeansVarWeights(vw, n => !!attr(n))) : VARIANTS.map(v => [v, vw[v]]);
-        for (const [v, vx] of vlist) {
-          if (!vx) continue;
-          const perGrid = Object.keys(w).every(k => attr(`${k}_${v}`));
-          const pairs: [string, string, number][] = perGrid ? Object.entries(w).map(([k, x]) => [`${k}_${v}`, k, x * vx]) : [[v, meta.centre, vx]];
-          for (const [vn, bn, x] of pairs) {
-            const at = attr(vn), base = attr(bn);
-            if (!at || !base) continue;
-            for (let i = 0; i < n; i++) out[i] += x * (at.array[i] - base.array[i]);
-          }
-        }
-        return out;
-      };
-      const strain = blendAttr('S'), gap = blendAttr('G');
+      const strainKind = Object.keys(geo.attributes).some(name => /^_d_/i.test(name)) ? 'D' : 'S';
+      const strain = blendFitAttribute(geo.attributes, strainKind, n, w, vw, meta.centre, !!p.isJeans, p.mesh.morphTargetDictionary);
+      const gap = blendFitAttribute(geo.attributes, 'G', n, w, vw, meta.centre, !!p.isJeans, p.mesh.morphTargetDictionary);
       const fab = p.isJeans ? 'denim' : 'jersey';
-      for (let i = 0; i < n; i++) { const c = fitColor(strain[i], gap[i], fab); col.setXYZ(i, c[0], c[1], c[2]); }
+      const band = geo.attributes._band || geo.attributes._BAND;
+      const extension = jst?.now?.elasticExtension, limit = jst?.now?.elasticLimit;
+      for (let i = 0; i < n; i++) {
+        const c = p.isJeans && band?.array[i] > 0 && extension != null && limit != null
+          ? elasticBandColor(extension, gap[i], limit) : fitColor(strain[i], gap[i], fab);
+        col.setXYZ(i, c[0], c[1], c[2]);
+      }
       col.needsUpdate = true;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shirtParts: any[] = grp && typeof grp !== 'string' ? grp.userData.parts : [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jeansParts: any[] = jg && typeof jg !== 'string' ? jg.userData.parts : [];
-    // layering: the shirt is always the outer layer (engine.layerShirtOverPants): both CPU-morphed, the shirt moved
-    // out over the pants as one sheet, denim spikes pressed in under the shirt; the positions then include the morphs
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const layerParts: any[] = [...shirtParts, ...jeansParts];
-    for (const p of layerParts) p.basePos ||= (p.mesh.geometry.attributes.position.array as Float32Array).slice();
-    if (!shirtParts.length || !jeansParts.length) {
-      for (const p of layerParts) if (p.layered) {
-        const pos = p.mesh.geometry.attributes.position; (pos.array as Float32Array).set(p.basePos); pos.needsUpdate = true;
-        p.mesh.geometry.computeVertexNormals(); p.layered = false;
-      }
-    } else {
-      const lay = layerParts.map(p => cpuMorphed(p.mesh, p.basePos));
-      layerShirtOverPants(lay.slice(0, shirtParts.length), lay.slice(shirtParts.length));
-      layerParts.forEach((p, i) => {
-        const pos = p.mesh.geometry.attributes.position; (pos.array as Float32Array).set(lay[i]); pos.needsUpdate = true;
-        p.mesh.morphTargetInfluences?.fill(0);          // positions already include the morphs
-        p.mesh.geometry.computeVertexNormals(); p.layered = true;
-      });
-    }
-  }, [meta, height, chest, shoulderNow, waistNow, size, mode, ready, jeansKey, bellyNow, jeansHide]);
+    applyStaticLayers(shirtParts, jeansParts, shirtOn);
+  }, [meta, height, chest, shoulderNow, waistNow, size, mode, ready, jeansKey, bellyNow, jeansHide, shirtOn]);
 
   // ── numbers for the panel (blended from the simulated grid points) ───────────────
   const sb = meta ? solveBody(meta, height, chest, shoulderNow, waistNow, bellyNow) : null;
   // jeans fit on this body (blended from the simulated grid bodies)
   const TONE = { red: C.red, amber: C.amber, green: C.green, blue: C.blue };
   // shown ease = waistband minus waist (for elastic waists too: the panel prints the numbers)
-  const jeansNow = jst?.now ? { ...jst.now, waistEase: 2 * jst.now.chart.waist - jst.now.bodyWaist, color: TONE[jst.now.tone] } : null;
+  const jeansNow = jst?.now ? { ...jst.now, color: TONE[jst.now.tone] } : null;
   const w = sb?.w ?? {};
   // tape measure on the body now = grid blend + what the applied shoulder/waist offsets add
   const tape = (m: keyof Tape) => blend(w, k => meta!.body[k][m] ?? 0)
@@ -692,7 +685,7 @@ function FitLab() {
     if (CHECK_SAME_CUT && worst > SAME_CUT_MAX) return `These pants differ from the Xin cut by ${(worst * 100).toFixed(0)} % in shape (leg width / crotch height), so the sizes would be wrong. They need their own simulation (a new style), not a photo swap.`;
     return { id, brand, name, frontUrl: URL.createObjectURL(front), backUrl: URL.createObjectURL(back), tex: { front: tf, back: tb } };
   };
-  const addItem = async (d: { brand: string; name: string; front: File; back: File; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }) => {
+  const addItem = async (d: { brand: string; name: string; front: File; back: File; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string; savedSize?: string }) => {
     const id = `item_${crypto.randomUUID()}`;
     if (d.kind === 'pants') {
       try {
@@ -700,9 +693,11 @@ function FitLab() {
         if (typeof it === 'string') return it;
         const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'pants' as const, chart: d.chart, chartMode: d.chartMode };
         await saveWardrobeItem(userId, record);
+        let sizeWarning = '';
+        if (d.savedSize) { try { await sizeRecords.saveSize(id, d.savedSize); } catch { sizeWarning = ' Its size could not sync. Open the item to retry.'; } }
         await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
         setPantsItems(x => [...x, { ...it, chart: d.chart }]);
-        setToast(`Added "${d.name}". Tap it to try it on.`);
+        setToast(`Added "${d.name}". Tap it to try it on.${sizeWarning}`);
         return null;
       } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
     }
@@ -711,9 +706,11 @@ function FitLab() {
       if (typeof it === 'string') return it;
       const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode };
       await saveWardrobeItem(userId, record);
+      let sizeWarning = '';
+      if (d.savedSize) { try { await sizeRecords.saveSize(id, d.savedSize); } catch { sizeWarning = ' Its size could not sync. Open the item to retry.'; } }
       await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
       setItems(x => [...x, { ...it, chart: d.chart }]);
-      setToast(`Added "${d.name}". Tap it to try it on.`);
+      setToast(`Added "${d.name}". Tap it to try it on.${sizeWarning}`);
       return null;
     } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
   };
@@ -830,7 +827,7 @@ function FitLab() {
   // ── size charts: an added item with its own chart reuses the simulation only for sizes that match it ──
   const shirtRef: SizeChartData = meta ? Object.fromEntries(SIZES.map(z => [z, { ...meta.chart[z] }])) : {};
   const pantsRef: SizeChartData = meta?.jeans ? Object.fromEntries(Object.entries(meta.jeans.sizes).map(([z, J]) =>
-    [z, { waist: J.chart.waist, hip: J.chart.hip, length: J.chart.length, opening: J.chart.opening }])) : {};
+    [z, { waist: J.chart.elastic_waist ?? J.chart.waist, hip: J.chart.hip, length: J.chart.length, opening: J.chart.opening }])) : {};
   const topMatch = (it: LabItem | null | undefined) => it?.chart ? matchChart('shirt', it.chart, shirtRef) : null;
   const pantsMatch = (it: LabItem | null | undefined) => it?.chart ? matchChart('pants', it.chart, pantsRef) : null;
   const canWear = (m: Record<string, SizeMatch> | null, z: string | null) => !m || !z || !!m[z]?.ok;
@@ -851,14 +848,15 @@ function FitLab() {
   // fitting room "Change clothes": tap to wear (in a size simulated for its chart), tap the worn one to take it off
   const tapTop = (it: LabItem) => {
     if (activeTop?.id === it.id) { setShirtOn(false); return; }
-    const m = topMatch(it), z = canWear(m, size) ? size : SIZES.find(q => canWear(m, q));
+    const m = topMatch(it), z = initialSize(sizeRecords.sizes[it.id], recommendTop(it), SIZES.filter(q => canWear(m, q))) as Size;
     if (!z) { setToast(`${it.name}: ${notSimText('shirt', m?.[size], 'Gon Tee')}`); return; }
     wear(it); setSize(z); setShirtOn(true); seen(it.id);
   };
   const tapBottom = (it: LabItem) => {
     if (activeBottom?.id === it.id) { setJeansSize(null); return; }
-    const m = pantsMatch(it), want = jeansSize ?? 'L';
-    const z = canWear(m, want) ? want : Object.keys(pantsRef).find(q => canWear(m, q));
+    const m = pantsMatch(it), want = sizeRecords.sizes[it.id] ?? recommendBottom(it) ?? '';
+    const available = Object.keys(sizeCatalog[it.id]?.belt ?? pantsRef).filter(q => canWear(m, q));
+    const z = initialSize(want, recommendBottom(it), available);
     if (!z) { setToast(`${it.name}: ${notSimText('pants', m?.[want], 'Xin jeans')}`); return; }
     putOnBottom(it, z); seen(it.id);
   };
@@ -935,20 +933,31 @@ function FitLab() {
   };
   // the open bottom's simulation: Xin (and its photo swaps) from the grid, other cuts from their product folder
   const pm = openPants && (openPants.id === 'xin' || pantsItems.some(p => p.id === openPants.id))
-    ? (meta?.jeans ? { sims: meta.jeans.belt ?? meta.jeans.sizes, glb: (z: string) => meta.jeans?.belt ? `${GRID_DIR}/belt/jeans_${z}.glb.gz` : `${GRID_DIR}/jeans_${z}.glb.gz`,
+    ? (meta?.jeans ? { sims: meta.jeans.belt ?? meta.jeans.sizes, glb: (z: string) => meta.jeans?.belt ? `${openPants.id === 'xin' ? XIN_GRID_DIR : GRID_DIR}/belt/jeans_${z}.glb.gz` : `${openPants.id === 'xin' ? XIN_GRID_DIR : GRID_DIR}/jeans_${z}.glb.gz`,
         note: openPants.id === 'xin' ? 'Chart from the brand. Every size was cloth-simulated on real body shapes, so "Check My Fit" shows where the waistband sits, how the legs hang and where the hem lands on your body.'
           : 'Same cut as the Xin jeans: your photos are wrapped on the Xin simulation, so sizes, drape and fit are those of the Xin jeans.' } : null)
     : openProduct && openProduct.id === openPants?.id ? { sims: openProduct.belt, glb: (z: string) => `${openProduct.dir}/belt/jeans_${z}.glb.gz`,
         note: 'Its own cloth simulation, built automatically from the brand size chart and photos; so far on the 175 cm / chest 101 cm body only.' } : null;
-  const pantsFits = Object.fromEntries(Object.entries(pm?.sims ?? {}).map(([z, J]) => {
-    const jw = Object.entries(w).filter(([, v]) => v > 1e-6);
-    if (!bodyNow || !jw.length || !jw.every(([k]) => J.bodies[k])) return [z, null];
-    const tot = jw.reduce((a, [, v]) => a + v, 0), bl = (f: (k: string) => number) => jw.reduce((a, [k, v]) => a + v * f(k), 0) / tot;
-    const e = 2 * J.chart.waist - bodyNow.waist;
-    const torn = bl(k => J.bodies[k].seam_gap_mean_cm ?? 0) > 0.25 || bl(k => J.bodies[k].put_on_failed ? 1 : 0) > 0.5;
-    const f = torn ? ['Can\'t be pulled on', C.red] : e < -2 ? ['Too small', C.red] : e < 2 ? ['Snug', C.amber] : e < 6 ? ['Comfortable', C.green] : ['Loose, needs a belt', C.blue];
-    return [z, { verdict: f[0], color: f[1], ease: e }];
+  const pantsFits = Object.fromEntries(Object.entries(pm?.sims ?? {}).map(([z]) => {
+    if (!meta || !pm) return [z, null];
+    const state = jeansState(meta, { name: openPants?.name ?? 'Pants', sizes: pm.sims, belt: pm.sims,
+      elasticStretch: openProduct?.id === openPants?.id ? openProduct?.elastic_stretch : null },
+      z, true, height, chest, shoulderNow, null, 0);
+    if (!state?.now) return [z, null];
+    return [z, { verdict: state.hide ? 'Preview unavailable' : state.now.label, color: TONE[state.now.tone], ease: state.now.waistEase, detail: state.now.elasticExtension != null ? `${(state.now.elasticExtension * 100).toFixed(0)}% elastic stretch` : undefined }];
   })) as Record<string, PantsSizeFit>;
+
+  const recommendTop = (it: LabItem | null) => !it || !hasProfile || !sb?.ok ? null : recommendedTop(SIZES,
+    z => sizeFit[z as Size] ? fitTier(sizeFit[z as Size]!.ease, bodyNow?.chest ?? chest) : null,
+    z => canWear(topMatch(it), z));
+  const recommendBottom = (it: LabItem | null) => {
+    if (!it || !meta || !hasProfile || !sb?.ok) return null;
+    const data = sizeCatalog[it.id];
+    const sims = data?.belt ?? ((it.id === 'xin' || pantsItems.some(p => p.id === it.id)) ? meta.jeans?.belt ?? meta.jeans?.sizes : null);
+    if (!sims) return null;
+    return recommendedBottom(Object.keys(sims), z => jeansState(meta, { name: it.name, sizes: sims, belt: sims, elasticStretch: data?.elastic_stretch }, z, false, height, chest, shoulderNow, null, 0),
+      z => canWear(pantsMatch(it), z));
+  };
 
   // wardrobe lists for the current tab: Favourite = starred, Recent = last tried on (newest first)
   const listFor = (list: LabItem[]) => tab === 'fav' ? list.filter(i => favs.includes(i.id))
@@ -1015,14 +1024,14 @@ function FitLab() {
             </div>
           ) : <>
             {kindFilter !== 'bottoms' && (
-              <WardrobeGrid items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
+              <WardrobeGrid sizeSummary={it => ({ recommended: recommendTop(it), saved: sizeRecords.sizes[it.id] })} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
                 onAdd={tab === 'all' ? () => setAddKind('shirt') : undefined} onDelete={it => it.builtin ? hideBuiltin(it, true) : removeItem(it)}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={topWarn}
                 subtitle=""
                 hiddenCount={tab === 'all' ? items.filter(it => hidden.includes(it.id)).length : 0} onRestore={() => saveHidden(hidden.filter(id => !items.some(it => it.id === id)))} />
             )}
             {meta?.jeans && kindFilter !== 'tops' && (
-              <WardrobeGrid title="BOTTOMS" subtitle=""
+              <WardrobeGrid sizeSummary={it => ({ recommended: recommendBottom(it), saved: sizeRecords.sizes[it.id] })} title="BOTTOMS" subtitle=""
                 addLabel="Add Bottom" onAdd={tab === 'all' ? () => setAddKind('pants') : undefined} items={shownBots} activeId={bottomOn} loadingIds={tab === 'all' ? pantsLoading : []} onOpen={setOpenPants}
                 onDelete={it => { const p = pantsItems.find(x => x.id === it.id); if (p) removePants(p); else hideBuiltin(it, false); }}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={botWarn}
@@ -1056,7 +1065,7 @@ function FitLab() {
         {DEV_PANELS && meta?.videos?.beauty && (
           <section className="mt-6 rounded-2xl p-5 shadow-sm" style={{ background: '#fff' }}>
             <h2 className="font-semibold">Walking videos: sizes side by side{meta.walk ? ` (${SIZES.filter(z => meta.walk!.sizes[z]).join(' vs ')})` : ''}</h2>
-            <p className="mt-1 text-sm" style={{ opacity: 0.75 }}>Same body (175 cm, chest 101 cm), same walk, cloth simulated separately for each size{meta.walk?.layered && Object.keys(meta.walk.layered).length ? `, the shirt walking over the jeans (${Object.entries(meta.walk.layered).map(([s, j]) => `shirt ${s} + jeans ${j}`).join(', ')}): the shirt hem rests on and swings over the denim` : ''}. The second video is the fit map of the shirt and the jeans (red = pulled tight, white = touching, blue = hanging loose; denim counts as tight sooner, as it does not stretch).</p>
+            <p className="mt-1 text-sm" style={{ opacity: 0.75 }}>Same body (175 cm, chest 101 cm), same walk, cloth simulated separately for each size{meta.walk?.layered && Object.keys(meta.walk.layered).length ? `, the shirt walking over the jeans (${Object.entries(meta.walk.layered).map(([s, j]) => `shirt ${s} + jeans ${j}`).join(', ')}): the shirt hem rests on and swings over the denim` : ''}. The second video is the fit map of the shirt and the jeans (red = pulled tight, white = touching, blue = hanging loose; denim counts as tight sooner, as it has limited stretch).</p>
             <video src={meta.videos.beauty} controls loop muted playsInline className="mt-3 w-full rounded-xl" />
             {meta.videos.fit && <video src={meta.videos.fit} controls loop muted playsInline className="mt-3 w-full rounded-xl" />}
           </section>
@@ -1105,7 +1114,7 @@ function FitLab() {
           <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full touch-none" />
             {(loading || error) && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm" style={{ color: error ? C.red : C.navy }}>
-                  {error || 'Loading 3D model…'}
+                  {error || <ModelSkeleton />}
                 </div>
               )}
               <div className="absolute left-3 top-3 flex rounded-full p-1 text-sm shadow" style={{ background: '#fff' }}>
@@ -1145,17 +1154,14 @@ function FitLab() {
               )}
               {jeansNow && jeansHide && !walking && (
                 <div className="absolute inset-x-3 top-14 mx-auto max-w-md rounded-xl px-4 py-2 text-xs font-semibold shadow" style={{ background: '#fef2f2', color: C.red }}>
-                  {cantPullOn
-                    ? <>Size {jeansSize} cannot be pulled on: the cloth simulation could not get these over this body (legs and {(2 * jeansNow.chart.waist).toFixed(0)} cm waistband too small). Try a bigger size.</>
-                    : tooSmall || jeansNow.waistEase < -2
-                      ? <>Size {jeansSize} can&apos;t be worn on this body: the {(2 * jeansNow.chart.waist).toFixed(0)} cm waistband cannot close on a {jeansNow.bodyWaist.toFixed(0)} cm waist. Try a bigger size.</>
-                      : <>Not simulated yet: jeans with a slimmer / fuller waist have only been simulated around the 175 cm / chest 101 cm body. Set the waist back to natural, or choose a body near 175 cm / 101 cm.</>}
+                  {jst?.reason}
                 </div>
               )}
               {mode === 'fit' && (
                 <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-white/90 px-2.5 py-1.5 text-[11px] shadow backdrop-blur lg:bottom-3 lg:left-3 lg:right-auto lg:max-w-[360px] lg:px-3 lg:py-2 lg:text-xs landscape:sm:right-auto">
                   <div className="mb-1 hidden font-semibold lg:block">Fit map</div>
                   <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-0.5 lg:justify-start lg:gap-y-1">
+                    <span className="w-full text-center text-[10px] opacity-60">Estimated fit</span>
                     {FIT_LEGEND.map(([c, l]) => (
                       <span key={l} className="flex items-center gap-1 whitespace-nowrap"><span className="inline-block h-2.5 w-2.5 rounded-sm border lg:h-3 lg:w-3" style={{ background: c, borderColor: '#ddd' }} />{l}</span>
                     ))}
@@ -1189,6 +1195,7 @@ function FitLab() {
           </section>
               <section className="rounded-2xl p-5 shadow-sm" style={{ background: '#fff' }}>
                 <h2 className="font-semibold">Tops</h2>
+                {activeTop && <SavedSizeControl itemId={activeTop.id} name={activeTop.name} sizes={Object.keys(activeTop.chart ?? shirtRef)} recommended={recommendTop(activeTop)} savedSize={sizeRecords.sizes[activeTop.id]} previewSize={size} onSave={sizeRecords.saveSize} syncError={sizeRecords.error} />}
                 <div className="mt-2 grid grid-cols-5 gap-2">
                   <button onClick={() => setShirtOn(false)} className="rounded-lg py-2 text-xs font-semibold transition"
                     style={!shirtOn ? { background: C.navy, color: '#fff' } : { background: C.cream }}>None</button>
@@ -1214,6 +1221,7 @@ function FitLab() {
 
               <section className="rounded-2xl p-5 shadow-sm space-y-3" style={{ background: '#fff' }}>
                 <h2 className="font-semibold">Bottoms</h2>
+                {activeBottom && <SavedSizeControl itemId={activeBottom.id} name={activeBottom.name} sizes={Object.keys(activeBottom.chart ?? sizeCatalog[activeBottom.id]?.belt ?? pantsRef)} recommended={recommendBottom(activeBottom)} savedSize={sizeRecords.sizes[activeBottom.id]} previewSize={jeansSize ?? undefined} onSave={sizeRecords.saveSize} syncError={sizeRecords.error} />}
                 {products.length > 0 && (
                   <select value={pantsId} onChange={e => { setPantsId(e.target.value); setJeansSize(null); }} className="w-full rounded-lg px-2 py-2 text-xs font-semibold" style={{ background: C.cream }}>
                     <option value="xin">TNT CO &quot;Xin&quot; Denim Biker Pants</option>
@@ -1234,22 +1242,23 @@ function FitLab() {
                     {belt ? 'Belt on: the belt pulls the waistband in at the waist' : 'Add a belt'}
                   </button>
                 )}
-                {pants && <p className="text-xs" style={{ opacity: 0.6 }}>{pants.name}, {pantsId === 'xin' ? 'rigid 100 % cotton denim' : product?.fabric.replace('_', ' ')}, cloth-simulated{pantsId === 'xin' || Object.keys(pants.drop?.[jeansSize ?? ''] ?.bodies ?? pants.sizes[jeansSize ?? '']?.bodies ?? {}).length > 1 ? ' on every body' : ' (preview: simulated on the 175 cm / chest 101 cm body only so far)'}{elasticW ? ', elastic waist (it holds them up)' : jeansVariant !== 'held' && (belt ? ', held by a belt' : jeansHide ? '' : ', nothing holding them up but the body')}</p>}
+                {pants && <p className="text-xs" style={{ opacity: 0.6 }}>{pants.name}, {pantsId === 'xin' ? 'rigid 100 % cotton denim' : product?.fabric.replace('_', ' ')}, estimated{pantsId === 'xin' || Object.keys(pants.drop?.[jeansSize ?? ''] ?.bodies ?? pants.sizes[jeansSize ?? '']?.bodies ?? {}).length > 1 ? ' fit preview' : ' (preview: 175 cm / chest 101 cm body only)'}{elasticW ? ', elastic waist' : jeansVariant !== 'held' && (belt ? ', held by a belt' : jeansHide ? '' : ', nothing holding them up but the body')}</p>}
                 {jeansNow && (
                   <div className="text-sm space-y-1">
                     <div>Fit: <span className="font-semibold" style={{ color: jeansNow.color }}>{jeansNow.label}</span></div>
                     <div className="text-xs" style={{ opacity: 0.75 }}>
-                      Waistband {(2 * jeansNow.chart.waist).toFixed(0)} cm on a {jeansNow.bodyWaist.toFixed(0)} cm waist ({jeansNow.waistEase >= 0 ? '+' : ''}{jeansNow.waistEase.toFixed(1)}) ·
+                      {elasticW ? <>Elastic waist {jeansNow.relaxedWaist.toFixed(0)} → {jeansNow.bodyWaist.toFixed(0)} cm ({((jeansNow.elasticExtension ?? 0) * 100).toFixed(0)}% stretch)</>
+                        : <>Waistband {jeansNow.relaxedWaist.toFixed(0)} cm on a {jeansNow.bodyWaist.toFixed(0)} cm waist ({jeansNow.waistEase >= 0 ? '+' : ''}{jeansNow.waistEase.toFixed(1)})</>} ·
                       hip {(2 * jeansNow.chart.hip).toFixed(0)} cm on {jeansNow.bodyHip.toFixed(0)} cm ({jeansNow.hipEase >= 0 ? '+' : ''}{jeansNow.hipEase.toFixed(1)})
                       {!jeansHide && ' · '}{jeansHide ? '' : jeansNow.hem <= 0.5 ? 'hem resting on the floor / shoes' : `hem ${jeansNow.hem.toFixed(0)} cm above the floor`}
-                      {jeansNow.extra > 4 && !jeansHide && <> · <b>too long</b>: about {jeansNow.extra.toFixed(0)} cm of leg piles up on the shoes (needs hemming)</>}
-                      {jeansNow.hem > 6 && !jeansHide && !elasticW && <> · <b>too short</b>: the ankle shows</>}
+                      {jeansNow.lengthFit === 'pooling' && !jeansHide && <> · <b>too long</b>: about {jeansNow.extra.toFixed(0)} cm of leg piles up on the shoes (needs hemming)</>}
+                      {jeansNow.lengthFit === 'short' && !jeansHide && <> · <b>too short</b>: the ankle shows</>}
                     </div>
                     <div className="text-xs" style={{ opacity: 0.55 }}>Rise ({jeansNow.chart.rise} cm) is not in TNT&apos;s size chart: estimated.</div>
                   </div>
                 )}
                 {jeansSize && walking && <p className="text-xs" style={{ opacity: 0.6 }}>{pantsId !== 'xin' && product?.id === pantsId && product.walk?.sizes.includes(jeansSize)
-                  ? `Walking in shorts ${jeansSize}: the mesh fabric was cloth-simulated through the whole walk (elastic waist holds them up).${shirtOn && product.walk.layered[size] === jeansSize ? ` The ${size} shirt was simulated over these shorts.` : ' The shirt uses its separate walk.'}`
+                  ? `Walking in shorts ${jeansSize}: the mesh fabric was cloth-simulated through the whole walk.${shirtOn && product.walk.layered[size] === jeansSize ? ` The ${size} shirt was simulated over these shorts.` : ' The shirt uses its separate walk.'}`
                   : pantsId !== 'xin'
                   ? `The catwalk shows the basic pants: ${pants?.name ?? 'these pants'} have not been walked yet (each walk is a full one-hour cloth simulation).`
                   : meta?.walk?.jeans?.[jeansSize]
@@ -1336,16 +1345,19 @@ function FitLab() {
       </div>
     </div>
 
-      <AddItemModal open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
+      <AddItemModal recommendSize={(kind, chart) => {
+        const item = { id: kind === 'shirt' ? 'gon' : 'xin', brand: '', name: '', frontUrl: '', backUrl: '', chart };
+        return kind === 'shirt' ? recommendTop(item) : recommendBottom(item);
+      }} open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
       refChart={addKind === 'pants' ? pantsRef : shirtRef} refName={addKind === 'pants' ? 'Xin jeans' : 'Gon Tee'} />
     {meta && bodyNow && (
-      <ItemModal item={openItem} onClose={() => setOpenItem(null)} chart={(openItem?.chart as unknown as Partial<typeof meta.chart>) ?? meta.chart} sizeFit={sizeFit} size={size} gridDir={GRID_DIR}
+      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(openItem?.chart as unknown as Partial<typeof meta.chart>) ?? meta.chart} sizeFit={sizeFit} size={size} gridDir={GRID_DIR}
         fav={!!openItem && favs.includes(openItem.id)} onFav={() => openItem && toggleFav(openItem.id)} match={topMatch(openItem)}
         body={{ height, chest: bodyNow.chest, waist: bodyNow.waist, shoulder: bodyNow.shoulder }} onCheckFit={checkFit} />
     )}
     {openPants && pm && bodyNow && (
-      <PantsModal item={openPants} onClose={() => setOpenPants(null)} sizes={Object.keys(pm.sims)}
-        chart={Object.fromEntries(Object.entries(pm.sims).map(([z, J]) => [z, (openPants.chart?.[z] ? { ...J.chart, ...openPants.chart[z] } : J.chart) as PantsChart]))} fits={pantsFits} glb={pm.glb}
+      <PantsModal recommended={recommendBottom(openPants)} savedSize={sizeRecords.sizes[openPants.id]} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openPants} onClose={() => setOpenPants(null)} sizes={Object.keys(pm.sims)}
+        chart={Object.fromEntries(Object.entries(pm.sims).map(([z, J]) => [z, ({ ...J.chart, waist: J.chart.elastic_waist ?? J.chart.waist, ...openPants.chart?.[z] }) as PantsChart]))} fits={pantsFits} glb={pm.glb}
         fav={favs.includes(openPants.id)} onFav={() => toggleFav(openPants.id)} match={pantsMatch(openPants)}
         size={jeansSize ?? 'L'} body={{ height, chest: bodyNow.chest, waist: bodyNow.waist }} note={pm.note} onCheckFit={wearBottom} />
     )}

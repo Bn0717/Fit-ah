@@ -12,9 +12,16 @@
 // edits them around the body and converts when loading / saving.
 'use client';
 
+import { ModelSkeleton } from '@/components/ui/Skeleton';
+import { FittingRoomSkeleton } from '@/components/ui/PageSkeletons';
+import { useSizePreferences } from '../fit-lab/useSizePreferences';
+import { SavedSizeControl } from '../fit-lab/SavedSizeControl';
+import { initialSize, recommendedTop, recommendedBottom } from '../fit-lab/sizePreferences';
+import { matchChart, type SizeChartData } from '../fit-lab/WardrobeExtras';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
+import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
 import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, FIT_LEGEND, type Size, type ViewMode, type GridMeta } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
@@ -42,6 +49,7 @@ type WItem = {
   kind: 'gon' | 'shirt' | 'xin' | 'swap' | 'product' | 'unsim';
   file?: { front: Blob; back: Blob };     // pants photo swap source photos
   dir?: string;                           // product folder
+  chart?: SizeChartData;
   wearing?: string | null;                // size the user owns (from the wardrobe)
 };
 type Worn = { id: string; size: string } | null;
@@ -51,6 +59,7 @@ const toneOfTier = (tier: string) => tier === 'Regular' ? C.green : tier === 'Sl
 export default function MyFittingRoom() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const sizeRecords = useSizePreferences(user?.uid);
   useEffect(() => { if (!authLoading && !user) router.push('/login'); }, [user, authLoading, router]);
 
   // ── profile + body ─────────────────────────────────────────────────────────────
@@ -93,7 +102,7 @@ export default function MyFittingRoom() {
 
   // ── Fit Lab data ───────────────────────────────────────────────────────────────
   const [meta, setMeta] = useState<GridMeta | null>(null);
-  const [stored, setStored] = useState<{ id: string; name: string; brand: string; front: Blob; back: Blob; kind: 'shirt' | 'pants' }[]>([]);
+  const [stored, setStored] = useState<{ id: string; name: string; brand: string; front: Blob; back: Blob; kind: 'shirt' | 'pants'; chart?: SizeChartData }[]>([]);
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   useEffect(() => {
@@ -107,7 +116,7 @@ export default function MyFittingRoom() {
     if (!user) return;
     let cancelled = false;
     syncWardrobe(user.uid, message => { if (!cancelled) setToast(message); }).then(rs => {
-      if (!cancelled) setStored(rs.sort((a, b) => a.created - b.created).map(r => ({ id: r.id, name: r.name, brand: r.brand, front: r.front, back: r.back, kind: r.kind ?? 'shirt' })));
+      if (!cancelled) setStored(rs.sort((a, b) => a.created - b.created).map(r => ({ id: r.id, name: r.name, brand: r.brand, front: r.front, back: r.back, kind: r.kind ?? 'shirt', chart: r.chart })));
     });
     return () => { cancelled = true; };
   }, [user?.uid]);
@@ -119,7 +128,7 @@ export default function MyFittingRoom() {
       { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: '/models/fitlab/items/gon_front.png', back: '/models/fitlab/items/gon_back.png', group: 'tops', kind: 'gon' },
       { id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: '/models/fitlab/items/xin_front.jpg', back: '/models/fitlab/items/xin_back.jpg', group: 'bottoms', kind: 'xin' },
       ...stored.map(s => ({ id: s.id, name: s.name, brand: s.brand, img: urls[s.id]?.front, back: urls[s.id]?.back, group: (s.kind === 'pants' ? 'bottoms' : 'tops') as WItem['group'],
-        kind: (s.kind === 'pants' ? 'swap' : 'shirt') as WItem['kind'], file: { front: s.front, back: s.back } })),
+        kind: (s.kind === 'pants' ? 'swap' : 'shirt') as WItem['kind'], chart: s.chart, file: { front: s.front, back: s.back } })),
       ...products.filter(p => p.id !== 'xin_check').map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, back: `${p.dir}/back.png`, group: 'bottoms' as const, kind: 'product' as const, dir: p.dir })),
     ];
     return list.filter(i => !hidden.includes(i.id) && i.img);
@@ -175,13 +184,19 @@ export default function MyFittingRoom() {
   // products (other pants cuts): their own simulation data
   const [productData, setProductData] = useState<Record<string, PantsData & { dir: string }>>({});
   useEffect(() => {
-    const it = bottomItem;
-    if (!it || it.kind !== 'product' || !it.dir || productData[it.id]) return;
-    fetch(`${it.dir}/product.json`).then(r => r.json()).then(p => setProductData(x => ({ ...x, [it.id]: { name: `${p.brand} ${p.name}`, sizes: p.belt, drop: p.drop, belt: p.belt, dir: p.dir, elasticStretch: p.elastic_stretch, walk: p.walk } })));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bottomItem?.id]);
+    let alive = true;
+    Promise.all(products.map(async it => {
+      try {
+        const response = await fetch(`${it.dir}/product.json`);
+        if (!response.ok) return null;
+        const p = await response.json();
+        return [it.id, { name: `${p.brand} ${p.name}`, sizes: p.belt, drop: p.drop, belt: p.belt, dir: it.dir, elasticStretch: p.elastic_stretch, walk: p.walk }] as const;
+      } catch { return null; }
+    })).then(entries => { if (alive) setProductData(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => !!entry))); });
+    return () => { alive = false; };
+  }, [products]);
   const pantsOf = (it: WItem | null): (PantsData & { dir: string }) | null =>
-    !it || !meta ? null : it.kind === 'xin' || it.kind === 'swap' ? (meta.jeans ? { ...meta.jeans, dir: GRID_DIR } : null) : it.kind === 'product' ? productData[it.id] ?? null : null;
+    !it || !meta ? null : it.kind === 'xin' || it.kind === 'swap' ? (meta.jeans ? { ...meta.jeans, dir: it.kind === 'xin' ? XIN_GRID_DIR : GRID_DIR } : null) : it.kind === 'product' ? productData[it.id] ?? null : null;
 
   // ── the body on screen ─────────────────────────────────────────────────────────
   const simH = clamp(body.height, RANGE.height[0], RANGE.height[1]), simC = clamp(body.chest, RANGE.chest[0], RANGE.chest[1]);
@@ -200,6 +215,10 @@ export default function MyFittingRoom() {
       shirtLock ? null : clamp(body.waist, wRange[0], wRange[1]), 0)
     : { waist: body.waist, belly: 0, lock: false, snap: false };
   const simW = wb.waist, simB = 0; // Natural belly only; simW null means natural waist.
+  const walkCentre = meta?.body[meta.centre];
+  const walkAvailable = !!walkCentre && Math.abs(simH - walkCentre.height) < 0.01 && Math.abs(simC - walkCentre.chest) < 0.01
+    && (simS === null || Math.abs(simS - (walkCentre.shoulder ?? 45)) < 0.1) && simW === null;
+  useEffect(() => { if (walking && !walkAvailable) setWalking(false); }, [walking, walkAvailable]);
   const sb = meta ? solveBody(meta, simH, simC, simS, simW, simB) : null;
   const outside = [
     body.height < RANGE.height[0] || body.height > RANGE.height[1] ? `height (${RANGE.height[0]}–${RANGE.height[1]} cm)` : null,
@@ -218,7 +237,9 @@ export default function MyFittingRoom() {
       return [sz, { label: t.label, tier: t.tier, ease: e, color: toneOfTier(t.tier) }];
     }));
   }, [meta, sb]);
-  const topBest = SIZES.find(sz => topFits[sz] && topFits[sz]!.tier !== 'Compression' && topFits[sz]!.tier !== 'Slim') ?? 'XL';
+  const topMatch = (it: WItem | null) => it?.chart && meta ? matchChart('shirt', it.chart, meta.chart) : null;
+  const topSupported = (it: WItem | null, size: string) => { const match = topMatch(it); return !match || !!match[size]?.ok; };
+  const topBest = (it: WItem | null) => !saved || outside.length ? null : recommendedTop(SIZES, size => topFits[size], size => topSupported(it, size));
   const jeansAt = useCallback((it: WItem | null, sz: string, withBelt: boolean): JeansState | null => {
     const P = pantsOf(it);
     return meta && P ? jeansState(meta, P, sz, withBelt, simH, simC, simS, null, 0) : null;
@@ -226,11 +247,17 @@ export default function MyFittingRoom() {
   }, [meta, productData, simH, simC, simS]);
   const bottomSizes = (it: WItem | null) => it?.kind === 'product' ? Object.keys(productData[it.id]?.sizes ?? {}) : JEANS_SIZES;
   // the smallest size whose waistband closes and that was simulated for this body (null: none fits / none simulated)
-  const bottomBest = (it: WItem | null) =>
-    bottomSizes(it).find(sz => { const s = jeansAt(it, sz, false); return s && !s.hide && s.now && s.now.waistEase >= 0; }) ?? null;
+  const bottomSupported = (it: WItem | null, size: string) => {
+    if (!it?.chart || !meta?.jeans) return true;
+    const ref = Object.fromEntries(Object.entries(meta.jeans.sizes).map(([z, j]) => [z, { ...j.chart, waist: j.chart.elastic_waist ?? j.chart.waist }]));
+    return !!matchChart('pants', it.chart, ref)[size]?.ok;
+  };
+  const bottomBest = (it: WItem | null) => !saved || outside.length || it?.kind === 'unsim' ? null : recommendedBottom(bottomSizes(it), size => jeansAt(it, size, false), size => bottomSupported(it, size));
+  const recordSizes = (it: WItem) => it.chart ? Object.keys(it.chart) : it.group === 'tops' ? [...SIZES] : bottomSizes(it);
+  const sizeRecord = (it: WItem, previewSize?: string) => ({ itemId: it.id, name: it.name, sizes: recordSizes(it), savedSize: sizeRecords.sizes[it.id], recommended: it.group === 'tops' ? topBest(it) : bottomBest(it), previewSize, onSave: sizeRecords.saveSize, syncError: sizeRecords.error });
   const js = bottom ? jeansAt(bottomItem, bottom.size, belt) : null;
   const P = pantsOf(bottomItem);
-  const jeansUrl = bottom && js && P ? (js.variant === 'held' ? `${P.dir}/jeans_${bottom.size}.glb` : `${P.dir}/${js.variant}/jeans_${bottom.size}.glb`) : null;
+  const jeansUrl = bottom && js && P && bottomSupported(bottomItem, bottom.size) ? (js.variant === 'held' ? `${P.dir}/jeans_${bottom.size}.glb` : `${P.dir}/${js.variant}/jeans_${bottom.size}.glb`) : null;
   const topFit = top ? topFits[top.size] : null;
   const shirtNow = meta && sb && top && SIZES.includes(top.size as Size) ? fitNumbers(meta, sb, top.size as Size) : null;
 
@@ -239,18 +266,20 @@ export default function MyFittingRoom() {
   const wear = (it: WItem, toggle = true) => {
     if (it.group === 'tops') {
       if (top?.id === it.id) { if (toggle) { setTop(null); setWalking(false); } return; }
-      setTop({ id: it.id, size: it.wearing && SIZES.includes(it.wearing as Size) ? it.wearing : topBest });
+      const supported = SIZES.filter(size => topSupported(it, size));
+      if (!supported.length) { flash('This item’s chart has no simulated sizes yet.'); setTop({ id: it.id, size: '' }); return; }
+      setTop({ id: it.id, size: initialSize(sizeRecords.sizes[it.id], topBest(it), supported) });
     } else {
       if (bottom?.id === it.id) { if (toggle) { setBottom(null); setWalking(false); } return; }
       if (it.kind === 'unsim') { setBottom({ id: it.id, size: '' }); return; }
-      const sizes = bottomSizes(it);
-      setBottom({ id: it.id, size: bottomBest(it) ?? sizes[Math.min(1, sizes.length - 1)] ?? 'L' }); setBelt(false);
+      const sizes = bottomSizes(it).filter(size => bottomSupported(it, size));
+      setBottom({ id: it.id, size: initialSize(sizeRecords.sizes[it.id], bottomBest(it), sizes) }); setBelt(false);
     }
     setWalking(false);
   };
   // product sizes arrive after the item is chosen: pick its best size then
   useEffect(() => {
-    if (bottomItem?.kind === 'product' && productData[bottomItem.id] && bottom && !productData[bottomItem.id].sizes[bottom.size]) setBottom({ id: bottomItem.id, size: bottomBest(bottomItem) ?? Object.keys(productData[bottomItem.id].sizes)[1] ?? 'M' });
+    if (bottomItem?.kind === 'product' && productData[bottomItem.id] && bottom && !productData[bottomItem.id].sizes[bottom.size]) setBottom({ id: bottomItem.id, size: initialSize(sizeRecords.sizes[bottomItem.id], bottomBest(bottomItem), bottomSizes(bottomItem).filter(size => bottomSupported(bottomItem, size))) });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productData, bottomItem?.id]);
 
@@ -327,8 +356,8 @@ export default function MyFittingRoom() {
     window.history.replaceState(null, '', window.location.pathname);   // a reload starts clean
   }, [wardrobe, meta]);
 
-  if (authLoading || !user) {
-    return <div className="flex min-h-screen items-center justify-center" style={{ background: C.cream }}><Spinner /></div>;
+  if (authLoading || !user || loadingData) {
+    return <FittingRoomSkeleton layout={layout} navHeight={navH} />;
   }
 
   // the body has never been set (or the saved numbers are outside the simulated bodies): invite to set it first
@@ -338,26 +367,26 @@ export default function MyFittingRoom() {
   const nowWearing = (top || bottom) ? (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       {top && topItem && (
-        <WornRow compact={compact} title={topItem.name} img={topItem.img} onRemove={() => { setTop(null); setWalking(false); }}
-          sizes={SIZES.map(sz => ({ size: sz, color: topFits[sz]?.color ?? '#d1d5db', hint: topFits[sz]?.label ?? 'not simulated', best: sz === topBest }))}
+        <WornRow sizeRecord={sizeRecord(topItem, top.size)} compact={compact} title={topItem.name} img={topItem.img} onRemove={() => { setTop(null); setWalking(false); }}
+          sizes={SIZES.filter(sz => topSupported(topItem, sz)).map(sz => ({ size: sz, color: topFits[sz]?.color ?? '#d1d5db', hint: topFits[sz]?.label ?? 'not simulated', best: sz === topBest(topItem) }))}
           size={top.size} onSize={sz => setTop({ ...top, size: sz })}
           verdict={topFit ? { text: `${topFit.label} · ${topFit.ease >= 0 ? '+' : ''}${topFit.ease.toFixed(0)} cm room at the chest`, color: topFit.color } : null}
           note={topItem.kind === 'shirt' && topPhotos === 'busy' ? 'Lining the photos up with the 3D pattern…'
             : topItem.kind === 'shirt' && outlineMatch < 0.8 ? 'This looks like a different cut from the Gon Tee, so the 3D shape and sizes are the Gon Tee\'s.' : null} />
       )}
       {bottom && bottomItem && (bottomItem.kind === 'unsim' ? (
-        <WornRow compact={compact} title={bottomItem.name} img={bottomItem.img} onRemove={() => setBottom(null)} sizes={[]} size="" onSize={() => {}} verdict={null}
+        <WornRow sizeRecord={sizeRecord(bottomItem, bottom.size)} compact={compact} title={bottomItem.name} img={bottomItem.img} onRemove={() => setBottom(null)} sizes={[]} size="" onSize={() => {}} verdict={null}
           note="Not simulated yet, so it is not shown on the body." alert />
       ) : (
-        <WornRow compact={compact} title={bottomItem.name} img={bottomItem.img} onRemove={() => { setBottom(null); setWalking(false); }}
-          sizes={bottomSizes(bottomItem).map(sz => { const s = jeansAt(bottomItem, sz, false); return {
+        <WornRow sizeRecord={sizeRecord(bottomItem, bottom.size)} compact={compact} title={bottomItem.name} img={bottomItem.img} onRemove={() => { setBottom(null); setWalking(false); }}
+          sizes={bottomSizes(bottomItem).filter(sz => bottomSupported(bottomItem, sz)).map(sz => { const s = jeansAt(bottomItem, sz, false); return {
             size: sz, color: !s || (s.noSim && !s.tooSmall && !s.cantPullOn) ? '#d1d5db' : s.hide ? C.red : TONE[s.now?.tone ?? 'green'], hint: s?.now?.label ?? 'not simulated', best: sz === bottomBest(bottomItem) }; })}
           size={bottom.size} onSize={sz => setBottom({ ...bottom, size: sz })}
           verdict={js?.now && !js.hide ? { text: js.now.label, color: TONE[js.now.tone] } : null}
-          note={js?.hide ? js.reason : js?.now && js.now.extra > 4 ? `About ${js.now.extra.toFixed(0)} cm too long (piles up on the shoes).`
-            : js?.now && js.now.hem > 6 && !js.elastic ? `Too short: the hem ends ${js.now.hem.toFixed(0)} cm above the floor (the ankle shows).` : null}
+          note={js?.hide ? js.reason : js?.now && js.now.lengthFit === 'pooling' ? `About ${js.now.extra.toFixed(0)} cm too long (piles up on the shoes).`
+            : js?.now && js.now.lengthFit === 'short' ? `Too short: the hem ends ${js.now.hem.toFixed(0)} cm above the floor (the ankle shows).` : null}
           alert={!!js?.hide}
-          extra={js?.hide && js.noSim && !js.tooSmall && !js.cantPullOn && js.now && natW !== null ? (
+          extra={js?.hide && js.noSim && !js.elastic && !js.tooSmall && !js.cantPullOn && js.now && natW !== null ? (
             <button onClick={() => setBody({ ...body, waist: Math.round(natW), belly: 0 })} className="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
               style={{ borderColor: C.navy, color: C.navy }}>See them with a natural waist</button>
           ) : js && !js.hide && !js.elastic && js.variant !== 'held' ? (
@@ -369,7 +398,7 @@ export default function MyFittingRoom() {
       ))}
       {/* compact rows show the colours as a line under each size; the key is only on roomy screens */}
       {!compact && <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]" style={{ color: C.mute }}>
-        {([[C.green, 'good fit'], [C.amber, 'snug'], [C.blue, 'loose'], [C.red, "can't wear"], ['#d1d5db', 'not available yet']] as const).map(([c, l]) => <span key={l} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
+        {([[C.green, 'good fit'], [C.amber, 'snug / tight'], [C.blue, 'loose'], [C.red, 'tight / unavailable'], ['#d1d5db', 'not available yet']] as const).map(([c, l]) => <span key={l} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
       </p>}
     </div>
   ) : null;
@@ -417,7 +446,8 @@ export default function MyFittingRoom() {
             className="group relative aspect-[4/5] overflow-hidden rounded-xl border-2 bg-white p-1.5 transition hover:shadow-md" style={{ borderColor: on ? C.navy : C.line }}>
             <img src={it.img} alt={it.name} className="h-full w-full object-contain transition group-hover:scale-105" crossOrigin="anonymous" />
             {on && <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: C.navy }}>✓</span>}
-            {it.kind === 'unsim' && <span className="absolute inset-x-1 bottom-1 rounded-md bg-white/90 py-0.5 text-[9px] font-semibold" style={{ color: C.mute }}>not simulated</span>}
+            <span className="absolute inset-x-1 bottom-1 rounded-md bg-white/95 px-1 py-0.5 text-[9px] leading-snug" style={{ color: C.navy }}>Recommended: {(it.group === 'tops' ? topBest(it) : bottomBest(it)) ?? 'Unavailable'} · Yours: {sizeRecords.sizes[it.id] ?? 'Not set'}</span>
+
           </button>
         );
       })}
@@ -446,11 +476,11 @@ export default function MyFittingRoom() {
     <div className="relative h-full w-full" style={{ background: C.cream }}>
       {meta ? (
         <FitViewer meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
-          size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top}
-          jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, productWalk: P?.walk, walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
+          size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
+          jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
           onWalking={setWalking} onWalkStatus={setWalkStatus} className="h-full w-full" />
-      ) : <div className="absolute inset-0 flex items-center justify-center"><Spinner label="Loading your 3D body…" /></div>}
+      ) : <ModelSkeleton />}
       {/* top left: my body (the big-screen layout shows it docked on the left instead) */}
       {layout !== 'three' && <button onClick={() => setDrawer(true)} className="absolute left-3 top-3 flex max-w-[calc(100%-9.5rem)] items-center gap-2 rounded-full bg-white/95 py-1.5 pl-1.5 pr-3 text-xs shadow transition hover:shadow-md" style={{ color: C.navy }}>
         <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full" style={{ background: C.peach }}>
@@ -463,7 +493,7 @@ export default function MyFittingRoom() {
       {/* top right: views */}
       {(top || bottom) && meta && (
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-          <ViewControls mode={mode} setMode={setMode} walking={walking} setWalking={w => { setWalkStatus(null); setWalking(w); }} compact={!wide} />
+          <ViewControls walkAvailable={walkAvailable} mode={mode} setMode={setMode} walking={walking} setWalking={w => { setWalkStatus(null); setWalking(w); }} compact={!wide} />
           {mode === 'fit' && <Legend />}
         </div>
       )}
@@ -665,9 +695,10 @@ function Measure({ label, value, min, max, typeMin, typeMax, onChange, pm, disab
 }
 
 // ─── what you are wearing: one row per item ─────────────────────────────────────────
-function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, extra, alert, compact }: {
+function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, extra, alert, compact, sizeRecord }: {
   title: string; img: string; sizes: { size: string; color: string; hint: string; best: boolean }[]; size: string; onSize: (s: string) => void;
   verdict: { text: string; color: string } | null; note: string | null; onRemove: () => void; extra?: React.ReactNode; alert?: boolean;
+  sizeRecord?: React.ComponentProps<typeof SavedSizeControl>;
   compact?: boolean;   // phones: picture, name and sizes on one line, the verdict (or a warning) on one line below
 }) {
   if (compact) return (
@@ -678,10 +709,11 @@ function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, ext
         {sizes.length > 0 && (
           <div className="flex shrink-0 gap-1" role="group" aria-label={`Sizes of ${title}`}>
             {sizes.map(s => (
-              <button key={s.size} onClick={() => onSize(s.size)} title={s.hint} aria-pressed={size === s.size}
+              <button key={s.size} onClick={() => onSize(s.size)} title={`${s.hint}${sizeRecord?.savedSize === s.size ? ' · Your saved size' : ''}`} aria-pressed={size === s.size}
                 className="relative flex h-7 min-w-[30px] items-center justify-center rounded-md border px-1 text-[11px] font-bold"
                 style={size === s.size ? { background: C.navy, borderColor: C.navy, color: '#fff' } : { borderColor: C.line, color: C.navy, background: '#fff', boxShadow: `inset 0 -2px 0 ${s.color}` }}>
                 {s.size}
+                {sizeRecord?.savedSize === s.size && <span className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full border border-white" style={{ background: C.pink }} title="Your saved size" />}
                 {s.best && <span className="absolute -top-1.5 right-[-3px] h-2.5 w-2.5 rounded-full border-2 border-white" style={{ background: C.green }} title="Best size" />}
               </button>
             ))}
@@ -697,6 +729,7 @@ function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, ext
           {extra && <div className="shrink-0">{extra}</div>}
         </div>
       )}
+      {sizeRecord && <details className="mt-2 pl-10 text-[10px]" style={{ color: C.navy }}><summary className="cursor-pointer py-1">Recommended: {sizeRecord.recommended ?? 'Unavailable'} · Your size: {sizeRecord.savedSize ?? 'Not set'} · Edit</summary><SavedSizeControl {...sizeRecord} /></details>}
     </div>
   );
   return (
@@ -710,27 +743,29 @@ function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, ext
       {sizes.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {sizes.map(s => (
-            <button key={s.size} onClick={() => onSize(s.size)} title={s.hint}
+            <button key={s.size} onClick={() => onSize(s.size)} title={`${s.hint}${sizeRecord?.savedSize === s.size ? ' · Your saved size' : ''}`}
               className="relative flex min-w-[46px] items-center justify-center gap-1 rounded-lg border-2 px-2 py-1 text-xs font-bold transition"
               style={size === s.size ? { background: C.navy, borderColor: C.navy, color: '#fff' } : { borderColor: C.line, color: C.navy, background: '#fff' }}>
               <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />{s.size}
-              {s.best && <span className="absolute -top-2 right-[-4px] rounded-full px-1 text-[8px] font-bold text-white" style={{ background: C.green }}>BEST</span>}
+              {sizeRecord?.savedSize === s.size && <span className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full border border-white" style={{ background: C.pink }} title="Your saved size" />}
+                {s.best && <span className="absolute -top-2 right-[-4px] rounded-full px-1 text-[8px] font-bold text-white" style={{ background: C.green }}>BEST</span>}
             </button>
           ))}
         </div>
       )}
       {verdict && <p className="text-xs font-semibold" style={{ color: verdict.color }}>{verdict.text}</p>}
       {note && <p className={`text-[11px] leading-snug ${alert ? 'rounded-lg px-2 py-1.5' : ''}`} style={alert ? { background: '#fef2f2', color: '#991b1b' } : { color: C.mute }}>{note}</p>}
+      {sizeRecord && <SavedSizeControl {...sizeRecord} />}
     </div>
   );
 }
 
-function ViewControls({ mode, setMode, walking, setWalking, compact }: { mode: ViewMode; setMode: (m: ViewMode) => void; walking: boolean; setWalking: (w: boolean) => void; compact?: boolean }) {
+function ViewControls({ mode, setMode, walking, setWalking, compact, walkAvailable }: { walkAvailable: boolean; mode: ViewMode; setMode: (m: ViewMode) => void; walking: boolean; setWalking: (w: boolean) => void; compact?: boolean }) {
   return (
     <div className={`flex items-center gap-2 ${compact ? 'flex-col items-end' : ''}`}>
       <Segmented value={mode} onChange={setMode} options={[['fabric', 'Fabric'], ['fit', 'Fit map']]} />
-      <button onClick={() => setWalking(!walking)} className="rounded-full px-4 py-1.5 text-xs font-bold shadow"
-        style={walking ? { background: C.pink, color: C.navy } : { background: C.navy, color: '#fff' }}>{walking ? '■ Stop' : '▶ Catwalk'}</button>
+      <button disabled={!walking && !walkAvailable} title={walkAvailable ? undefined : "Catwalk is available on the 175 cm / chest 101 cm body"} onClick={() => setWalking(!walking)} className="rounded-full px-4 py-1.5 text-xs font-bold shadow disabled:opacity-50"
+        style={walking ? { background: C.pink, color: C.navy } : { background: C.navy, color: '#fff' }}>{walking ? '■ Stop' : walkAvailable ? '▶ Catwalk' : 'Catwalk · 175 cm only'}</button>
     </div>
   );
 }
@@ -738,6 +773,7 @@ function ViewControls({ mode, setMode, walking, setWalking, compact }: { mode: V
 function Legend() {
   return (
     <div className="flex w-56 flex-wrap gap-x-2 gap-y-1 rounded-xl bg-white px-3 py-2 text-[10px] shadow" style={{ color: C.navy }}>
+      <span className="w-full opacity-60">Estimated fit</span>
       {FIT_LEGEND.map(([c, l]) => <span key={l} className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm border" style={{ background: c, borderColor: '#ddd' }} />{l}</span>)}
     </div>
   );

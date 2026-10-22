@@ -178,12 +178,10 @@ export function SizeChartEditor({ kind, refChart, refName, value, onChange }: {
               <tr style={{ background: C.cream }}>
                 <th className="px-1.5 py-2 text-left font-bold">Size</th>
                 {CHART_FIELDS[kind].map(([f, l]) => <th key={f} className="px-1 py-2 text-left font-bold">{l}</th>)}
-                <th className="px-1 py-2 text-left font-bold">3D</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(s => {
-                const m = match[s];
                 return (
                   <tr key={s} className="border-b" style={{ borderColor: C.peach }}>
                     <td className="px-1.5 py-1.5 font-bold">{s}</td>
@@ -195,10 +193,6 @@ export function SizeChartEditor({ kind, refChart, refName, value, onChange }: {
                         )}
                       </td>
                     ))}
-                    <td className="px-1 py-1 text-[11px] font-semibold" title={m && !m.ok ? notSimText(kind, m, refName) : ''}
-                      style={{ color: !m ? C.navy : m.ok ? C.green : C.amber }}>
-                      {!m ? '—' : m.ok ? '✓' : m.diff === Infinity ? '—' : `±${m.diff.toFixed(0)}`}
-                    </td>
                   </tr>
                 );
               })}

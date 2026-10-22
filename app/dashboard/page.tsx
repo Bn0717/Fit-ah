@@ -6,6 +6,7 @@
 // The verdicts come from the cloth simulations, with the same rules as My fitting room (labFit.ts).
 'use client';
 
+import { DashboardSkeleton } from '@/components/ui/PageSkeletons';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inter_Tight, Archivo } from 'next/font/google';
@@ -83,23 +84,11 @@ export default function DashboardPage() {
   }, [pieces]);
 
   const updated = toDate(profile?.updatedAt) ?? toDate(profile?.createdAt);
-  const todo: { text: string; href: string }[] = [];
-  if (!loading) {
-    if (!profile) todo.push({ text: 'Set up your body to see how every piece fits you', href: FITTING_ROOM });
-    else if (outside.length) todo.push({ text: `Your body is outside what has been simulated so far (${outside.join(', ')}). Check your measurements`, href: FITTING_ROOM });
-    pieces.filter(p => !p.best).forEach(p => todo.push({ text: `${p.name}: ${p.verdict.text.replace(/\.$/, '')}`, href: FITTING_ROOM }));
-    if (updated && daysAgo(updated) > 30) todo.push({ text: `Your body was last updated ${daysAgo(updated)} days ago. Scan again if it changed`, href: FITTING_ROOM });
-  }
-
   const tryOn = (p: LabPiece, size: string) => router.push(`${FITTING_ROOM}?wear=${encodeURIComponent(p.id)}&size=${encodeURIComponent(size)}`);
   const name = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
 
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: C.cream }}>
-        <div className="w-10 h-10 border-4 rounded-full animate-spin" style={{ borderColor: C.navy, borderTopColor: 'transparent' }} />
-      </div>
-    );
+  if (authLoading || !user || loading) {
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -182,9 +171,9 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* ── size by brand + to do ────────────────────────── */}
+        {/* ── size by brand ────────────────────────── */}
         {!loading && me && !outside.length && (
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 items-start">
+          <section className="grid grid-cols-1 gap-5 sm:gap-6 items-start">
             <div className="rounded-2xl bg-white border p-4 sm:p-6 min-w-0" style={{ borderColor: C.peach }}>
               <h2 className={`${brand.className} font-extrabold uppercase text-[18px] sm:text-[22px]`} style={wide}>Your size by brand</h2>
               <p className="text-[13px] opacity-60 mb-4">The size that fits you best, from the simulations.</p>
@@ -204,20 +193,7 @@ export default function DashboardPage() {
               ) : <p className="text-[13px] opacity-60 py-4">No pieces yet.</p>}
             </div>
 
-            <div className="rounded-2xl p-4 sm:p-6 min-w-0" style={{ backgroundColor: C.peach }}>
-              <h2 className={`${brand.className} font-extrabold uppercase text-[18px] sm:text-[22px] mb-3`} style={wide}>To do</h2>
-              {todo.length ? (
-                <ul className="space-y-2">
-                  {todo.map(t => (
-                    <li key={t.text}>
-                      <button onClick={() => router.push(t.href)} className="w-full text-left flex items-center justify-between gap-3 rounded-xl bg-white/70 hover:bg-white px-4 py-3 text-[13px] sm:text-[14px] transition-colors">
-                        <span className="min-w-0">{t.text}</span><span className="shrink-0 opacity-50" aria-hidden="true">→</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-[14px] opacity-70">Nothing to do. Every piece has a size that fits you.</p>}
-            </div>
+
           </section>
         )}
       </div>
@@ -242,7 +218,7 @@ function PieceRow({ p, onTry }: { p: LabPiece; onTry: (p: LabPiece, size: string
   const tone = s ? s.tone : p.verdict.tone, text = s ? s.label : p.verdict.text;
   const canTry = !!s && s.tone !== 'grey' && s.tone !== 'red';      // the fitting room only shows what was simulated and can be worn
   return (
-    <li className="rounded-xl p-3 grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,17rem)] gap-x-3 md:gap-x-4 gap-y-2 items-center" style={{ backgroundColor: C.cream }}>
+    <li className="rounded-xl p-3 grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.3fr)_max-content] gap-x-3 md:gap-x-4 gap-y-2 items-center" style={{ backgroundColor: C.cream }}>
       <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-white overflow-hidden flex items-center justify-center row-span-4 md:row-span-1 self-start md:self-center">
         <img src={p.img} alt="" className="w-full h-full object-contain p-1 mix-blend-multiply" loading="lazy" />
       </div>
@@ -254,7 +230,7 @@ function PieceRow({ p, onTry }: { p: LabPiece; onTry: (p: LabPiece, size: string
         <span className="w-2 h-2 rounded-full mt-[5px] shrink-0" style={{ backgroundColor: TONE[tone].dot }} />
         <span className="opacity-80">{s ? <b className="font-semibold">{s.size}{s.best ? ' (best)' : ''}: </b> : null}{text}</span>
       </p>
-      <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
+      <div className="flex flex-wrap items-center gap-1.5 md:flex-nowrap md:justify-end">
         <div className="flex gap-1" role="group" aria-label={`Sizes of ${p.name}`}>
           {p.sizes.map(z => (
             <button key={z.size} onClick={() => setSel(z.size)} aria-pressed={z.size === sel} title={`${z.size}: ${z.label}`}
@@ -266,7 +242,7 @@ function PieceRow({ p, onTry }: { p: LabPiece; onTry: (p: LabPiece, size: string
           ))}
         </div>
         <button onClick={() => s && onTry(p, s.size)} disabled={!canTry}
-          className="h-[28px] px-3 rounded-full text-[11px] sm:text-[12px] font-semibold text-white whitespace-nowrap transition-opacity disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90"
+          className="h-[28px] shrink-0 px-3 rounded-full text-[11px] sm:text-[12px] font-semibold text-white whitespace-nowrap transition-opacity disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90"
           style={{ backgroundColor: C.navy }}
           title={canTry ? `Put ${p.name} on in ${s!.size} in your fitting room` : 'This size can\'t be shown on your body'}>
           {s ? `Try ${s.size} on →` : 'Try it on →'}

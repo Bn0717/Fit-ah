@@ -14,11 +14,11 @@ interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   className?: string;
 }
 
-export function Skeleton({ className = '', ...props }: SkeletonProps) {
+export function Skeleton({ className = '', style, ...props }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded-lg ${className}`}
-      style={{ backgroundColor: colors.peach, opacity: 0.3 }}
+      className={`skeleton-shimmer rounded-lg ${className}`}
+      style={style}
       {...props}
     />
   );
@@ -55,6 +55,19 @@ export function DashboardCardSkeleton() {
       <Skeleton className="h-6 w-32 mb-4" />
       <Skeleton className="h-16 w-full mb-2" />
       <Skeleton className="h-4 w-full" />
+    </div>
+  );
+}
+
+export function ModelSkeleton() {
+  return (
+    <div role="status" aria-label="Loading 3D model" aria-busy="true" className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
+      <div aria-hidden="true" className="flex w-full max-w-48 flex-col items-center gap-2 motion-reduce:animate-none">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <Skeleton className="h-36 w-28 rounded-[2rem]" />
+        <div className="flex gap-2"><Skeleton className="h-36 w-10" /><Skeleton className="h-36 w-10" /></div>
+      </div>
+      <span className="text-xs font-medium" style={{ color: colors.navy }}>Loading 3D model…</span>
     </div>
   );
 }
