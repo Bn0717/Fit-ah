@@ -142,6 +142,7 @@ export default function MyFittingRoom() {
   const [mode, setMode] = useState<ViewMode>('fabric');
   const [walking, setWalking] = useState(false);
   const [walkStatus, setWalkStatus] = useState<string | null>(null);
+  const preWalkBody = useRef<Body | null>(null);
   const topItem = byId(top?.id), bottomItem = byId(bottom?.id);
 
   // shirt photos lined up with the 3D pattern (once per item)
@@ -216,9 +217,25 @@ export default function MyFittingRoom() {
     : { waist: body.waist, belly: 0, lock: false, snap: false };
   const simW = wb.waist, simB = 0; // Natural belly only; simW null means natural waist.
   const walkCentre = meta?.body[meta.centre];
-  const walkAvailable = !!walkCentre && Math.abs(simH - walkCentre.height) < 0.01 && Math.abs(simC - walkCentre.chest) < 0.01
-    && (simS === null || Math.abs(simS - (walkCentre.shoulder ?? 45)) < 0.1) && simW === null;
+  const walkAvailable = !!meta?.walk && !!walkCentre;
   useEffect(() => { if (walking && !walkAvailable) setWalking(false); }, [walking, walkAvailable]);
+  const toggleCatwalk = () => {
+    if (walking) {
+      setWalking(false);
+      setBody(saved ?? preWalkBody.current ?? body);
+      preWalkBody.current = null;
+      setWalkStatus(null);
+      return;
+    }
+    if (!meta || !walkCentre) return;
+    preWalkBody.current = { ...body };
+    const natural = solveBody(meta, walkCentre.height, walkCentre.chest, null, null, 0);
+    setBody({ ...body, height: walkCentre.height, chest: walkCentre.chest,
+      shoulder: walkCentre.shoulder ?? (natural.ok ? natural.natural.shoulder : body.shoulder),
+      waist: natural.ok ? natural.natural.waist : body.waist, belly: 0 });
+    setWalkStatus(null);
+    setWalking(true);
+  };
   const sb = meta ? solveBody(meta, simH, simC, simS, simW, simB) : null;
   const outside = [
     body.height < RANGE.height[0] || body.height > RANGE.height[1] ? `height (${RANGE.height[0]}–${RANGE.height[1]} cm)` : null,
@@ -397,8 +414,8 @@ export default function MyFittingRoom() {
           ) : null} />
       ))}
       {/* compact rows show the colours as a line under each size; the key is only on roomy screens */}
-      {!compact && <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]" style={{ color: C.mute }}>
-        {([[C.green, 'good fit'], [C.amber, 'snug / tight'], [C.blue, 'loose'], [C.red, 'tight / unavailable'], ['#d1d5db', 'not available yet']] as const).map(([c, l]) => <span key={l} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
+      {!compact && <p className="flex w-full flex-nowrap gap-x-3 overflow-x-auto whitespace-nowrap text-[10px]" style={{ color: C.mute }}>
+        {([[C.green, 'good fit'], [C.amber, 'snug / tight'], [C.blue, 'loose'], [C.red, 'tight / unavailable'], ['#d1d5db', 'not available yet']] as const).map(([c, l]) => <span key={l} className="flex shrink-0 items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
       </p>}
     </div>
   ) : null;
@@ -473,14 +490,14 @@ export default function MyFittingRoom() {
 
   // ── the 3D stage: only the body, plus small controls in the corners ──────────────
   const stage = (
-    <div className="relative h-full w-full" style={{ background: C.cream }}>
+    <div className="relative flex h-full w-full flex-col" style={{ background: C.cream }}>
       {meta ? (
         <FitViewer meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
           jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
-          onWalking={setWalking} onWalkStatus={setWalkStatus} className="h-full w-full" />
-      ) : <ModelSkeleton />}
+          onWalking={w => { if (!w && walking) toggleCatwalk(); else if (w && !walking) toggleCatwalk(); }} onWalkStatus={setWalkStatus} className="min-h-0 w-full flex-1" />
+      ) : <div className="min-h-0 flex-1"><ModelSkeleton /></div>}
       {/* top left: my body (the big-screen layout shows it docked on the left instead) */}
       {layout !== 'three' && <button onClick={() => setDrawer(true)} className="absolute left-3 top-3 flex max-w-[calc(100%-9.5rem)] items-center gap-2 rounded-full bg-white/95 py-1.5 pl-1.5 pr-3 text-xs shadow transition hover:shadow-md" style={{ color: C.navy }}>
         <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full" style={{ background: C.peach }}>
@@ -493,8 +510,8 @@ export default function MyFittingRoom() {
       {/* top right: views */}
       {(top || bottom) && meta && (
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-          <ViewControls walkAvailable={walkAvailable} mode={mode} setMode={setMode} walking={walking} setWalking={w => { setWalkStatus(null); setWalking(w); }} compact={!wide} />
-          {mode === 'fit' && <Legend />}
+          <ViewControls walkAvailable={walkAvailable} mode={mode} setMode={setMode} walking={walking} setWalking={toggleCatwalk} compact={!wide} />
+          {mode === 'fit' && wide && <Legend />}
         </div>
       )}
       {/* first visit: set your body first */}
@@ -514,11 +531,12 @@ export default function MyFittingRoom() {
           <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium shadow" style={{ color: C.navy }}>{wide ? 'Pick something from your wardrobe →' : 'Tap Tops or Bottoms (or pull up) to try something on'}</span>
         </div>
       )}
-      {walking && <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] shadow" style={{ color: C.mute }}>{walkStatus || (bottom && P?.walk?.sizes.includes(bottom.size)
+      {walking && <p className={`absolute left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] shadow ${!wide && mode === 'fit' ? 'bottom-14' : 'bottom-3'}`} style={{ color: C.mute }}>{walkStatus || (bottom && P?.walk?.sizes.includes(bottom.size)
         ? `Walking in shorts ${bottom.size} on the 175 cm / chest 101 cm body${top && P.walk.layered[top.size as Size] === bottom.size ? ' · shirt simulated over the shorts' : ' · shirt uses its separate walk'}`
         : bottom && bottomItem && bottomItem.kind !== 'xin' && bottomItem.kind !== 'swap'
         ? `Catwalk replayed on the 175 cm body · ${bottomItem.name} not walked yet: basic pants shown`   // only the Xin jeans were walked
         : 'Catwalk replayed on the 175 cm body')}</p>}
+      {mode === 'fit' && !wide && <div className="relative z-10 shrink-0 border-t bg-white px-2 py-1.5" style={{ borderColor: C.line }}><Legend below /></div>}
       {toast && <div className="absolute left-1/2 top-14 -translate-x-1/2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-lg" style={{ background: C.green }}>{toast}</div>}
     </div>
   );
@@ -770,11 +788,13 @@ function ViewControls({ mode, setMode, walking, setWalking, compact, walkAvailab
   );
 }
 
-function Legend() {
+function Legend({ below = false }: { below?: boolean } = {}) {
   return (
-    <div className="flex w-56 flex-wrap gap-x-2 gap-y-1 rounded-xl bg-white px-3 py-2 text-[10px] shadow" style={{ color: C.navy }}>
-      <span className="w-full opacity-60">Estimated fit</span>
-      {FIT_LEGEND.map(([c, l]) => <span key={l} className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm border" style={{ background: c, borderColor: '#ddd' }} />{l}</span>)}
+    <div className={`${below ? 'w-full overflow-hidden' : 'w-56 max-w-[calc(100vw-1.5rem)] overflow-x-auto'} rounded-xl bg-white px-3 py-2 text-[10px] shadow`} style={{ color: C.navy }}>
+      <span className={`${below ? 'sr-only' : 'mb-1 block'} opacity-60`}>Estimated fit</span>
+      <div className={below ? 'flex w-full flex-nowrap justify-between gap-x-0.5 whitespace-nowrap text-[clamp(8px,2vw,12px)]' : 'flex w-max flex-nowrap gap-x-3 whitespace-nowrap'}>
+        {FIT_LEGEND.map(([c, l]) => <span key={l} title={l} className={`flex items-center ${below ? 'min-w-0 gap-0.5' : 'shrink-0 gap-1'}`}><span className={`inline-block shrink-0 rounded-sm border ${below ? 'h-2 w-2' : 'h-2.5 w-2.5'}`} style={{ background: c, borderColor: '#ddd' }} /><span className={below ? 'truncate' : ''}>{l}</span></span>)}
+      </div>
     </div>
   );
 }

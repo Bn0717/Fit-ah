@@ -18,19 +18,20 @@ import { useSizePreferences } from './useSizePreferences';
 import { initialSize, recommendedTop, recommendedBottom } from './sizePreferences';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { saveWardrobeItem, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
+import { saveWardrobeItem, saveWardrobeUvMap, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
+import type { StoredItem, StoredUvMap } from './wardrobeStorage';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { loadRef, makeTexture, type Ref } from './colourway';
+import { loadImage, loadRef, makeTexture, type Ref, type Result } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
 import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
   type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
-import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
+import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/products/<id>/product.json)
 // a pants photo swap: new photos on the simulated Xin jeans (pantsSwap.ts)
-type PantsItem = { id: string; brand: string; name: string; frontUrl: string; backUrl: string; tex: { front: PantsResult; back: PantsResult }; chart?: SizeChartData };
+type PantsItem = { id: string; brand: string; name: string; frontUrl: string; backUrl: string; tex?: { front: PantsResult; back: PantsResult }; chart?: SizeChartData };
 const PANTS_REF = '/models/fitlab/pants_xin/outline.json';
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
@@ -126,6 +127,8 @@ function FitLab() {
   const [chest, setChest] = useState(101);
   const [shoulder, setShoulder] = useState<number | null>(null);   // null = this body's natural value
   const [waist, setWaist] = useState<number | null>(null);
+  const preWalkBody = useRef<{ height: number; chest: number; shoulder: number | null; waist: number | null } | null>(null);
+  const savedBody = useRef<{ height: number; chest: number; shoulder: number; waist: number } | null>(null);
   const [walking, setWalking] = useState(false);
   const [walkStatus, setWalkStatus] = useState<string | null>(null);
   const GON: LabItem = { id: 'gon', brand: 'TNT CO', name: 'Gon Tee (green)', frontUrl: '/models/fitlab/items/gon_front.png', backUrl: '/models/fitlab/items/gon_back.png', builtin: true };
@@ -180,7 +183,9 @@ function FitLab() {
     let alive = true;
     getAvatar(userId).then(profile => {
       if (!alive || !profile) return;
-      setHeight(profile.height); setChest(profile.chest * 2); setWaist(profile.waist * 2); setShoulder(profile.shoulder);
+      const saved = { height: profile.height, chest: profile.chest * 2, shoulder: profile.shoulder, waist: profile.waist * 2 };
+      savedBody.current = saved;
+      setHeight(saved.height); setChest(saved.chest); setWaist(saved.waist); setShoulder(saved.shoulder);
       setHasProfile(true);
     });
     return () => { alive = false; };
@@ -511,13 +516,13 @@ function FitLab() {
     if (!S.THREE) return;
     const it = pantsId === 'xin' ? pantsItems.find(p => p.id === pantsSkin) : undefined;
     S.pantsTex ||= {};
-    if (it && !S.pantsTex[it.id]) {
+    if (it?.tex && !S.pantsTex[it.id]) {
       const tex = (c: HTMLCanvasElement) => {
         const t = new S.THREE.CanvasTexture(c); t.flipY = false; t.colorSpace = S.THREE.SRGBColorSpace; t.anisotropy = 8; return t;
       };
       S.pantsTex[it.id] = { front: tex(it.tex.front.canvas), back: tex(it.tex.back.canvas) };
     }
-    S.pantsSkin = it ? S.pantsTex[it.id] : null;
+    S.pantsSkin = it?.tex ? S.pantsTex[it.id] : null;
     applyPantsSkin(S);
   }, [pantsSkin, pantsItems, pantsId, ready, jeansKey]);
 
@@ -665,6 +670,25 @@ function FitLab() {
     }
     return S.cwRefs;
   };
+  const saveUvMap = async (front: import('./colourway').Result, back: import('./colourway').Result): Promise<StoredUvMap> => {
+    const jpeg = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not save the prepared clothing texture.')), 'image/jpeg', 0.92));
+    const [frontBlob, backBlob] = await Promise.all([jpeg(front.canvas), jpeg(back.canvas)]);
+    return { front: frontBlob, back: backBlob, frontIou: front.iou, backIou: back.iou, frontFabric: front.fabric, backFabric: back.fabric };
+  };
+  const restoreUvMap = async (item: StoredItem) => {
+    if (!item.uv) return null;
+    const restore = async (blob: Blob, iou: number, fabric: [number, number, number]): Promise<Result> => {
+      const image = await loadImage(blob), canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      canvas.getContext('2d')!.drawImage(image, 0, 0);
+      return { canvas, iou, fabric, place: { s: 1, th: 0, tx: 0, ty: 0 }, refCentre: [0, 0], photoPxPerCm: 0 };
+    };
+    const [front, back] = await Promise.all([
+      restore(item.uv.front, item.uv.frontIou, item.uv.frontFabric),
+      restore(item.uv.back, item.uv.backIou, item.uv.backFabric),
+    ]);
+    return { front, back };
+  };
   const buildItem = async (id: string, brand: string, name: string, front: Blob, back: Blob): Promise<LabItem | string> => {
     const R = await refs();
     const tf = await makeTexture(front, R.front), tb = await makeTexture(back, R.back);
@@ -704,7 +728,8 @@ function FitLab() {
     try {
       const it = await buildItem(id, d.brand, d.name, d.front, d.back);
       if (typeof it === 'string') return it;
-      const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode };
+      if (!it.tex) return 'Could not prepare this shirt for the fitting room.';
+      const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, uv: await saveUvMap(it.tex.front, it.tex.back), created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode };
       await saveWardrobeItem(userId, record);
       let sizeWarning = '';
       if (d.savedSize) { try { await sizeRecords.saveSize(id, d.savedSize); } catch { sizeWarning = ' Its size could not sync. Open the item to retry.'; } }
@@ -718,19 +743,54 @@ function FitLab() {
   useEffect(() => {
     if (!meta) return;
     let stop = false;
+    // Show the original loading tile while a saved garment's prepared UV texture is being restored.
+    // A browser-cached UV map bypasses the alignment work and goes straight to the garment card.
+    loadStored(userId).then(async local => {
+      if (stop || !local.length) return;
+      const tops = local.filter(r => r.kind !== 'pants'), bottoms = local.filter(r => r.kind === 'pants');
+      setLoadingIds(current => [...new Set([...current, ...tops.map(r => r.id)])]);
+      setPantsLoading(current => [...new Set([...current, ...bottoms.map(r => r.id)])]);
+      for (const r of tops) if (r.uv) {
+        try {
+          const tex = await restoreUvMap(r);
+          if (!stop && tex) {
+            setItems(current => current.some(it => it.id === r.id)
+              ? current.map(it => it.id === r.id ? { ...it, tex } : it)
+              : [...current, { id: r.id, brand: r.brand, name: r.name, frontUrl: URL.createObjectURL(r.front), backUrl: URL.createObjectURL(r.back), tex, chart: r.chart }]);
+            setLoadingIds(current => current.filter(id => id !== r.id));
+          }
+        } catch { /* Cloud sync below retries if this local texture cache is damaged. */ }
+      }
+    }).catch(() => undefined);
     syncWardrobe(userId, message => { if (!stop) setToast(message); }).then(async recs => {
       recs.sort((a, b) => a.created - b.created);
-      setLoadingIds(recs.filter(r => r.kind !== 'pants').map(r => r.id)); setPantsLoading(recs.filter(r => r.kind === 'pants').map(r => r.id));
+      const shirtRecords = recs.filter(r => r.kind !== 'pants');
+      const pantsRecords = recs.filter(r => r.kind === 'pants');
+      setLoadingIds(current => [...new Set([...current, ...shirtRecords.map(r => r.id)])]);
+      setPantsLoading(current => [...new Set([...current, ...pantsRecords.map(r => r.id)])]);
       for (const r of recs) {
         try {
           if (r.kind === 'pants') {
             const it = await buildPants(r.id, r.brand, r.name, r.front, r.back);
             if (typeof it === 'string') throw new Error(it);
-            if (!stop) setPantsItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
+            if (!stop) setPantsItems(x => x.some(y => y.id === it.id)
+              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart } : y)
+              : [...x, { ...it, chart: r.chart }]);
           } else {
-            const it = await buildItem(r.id, r.brand, r.name, r.front, r.back);
+            const cached = await restoreUvMap(r);
+            const it = cached
+              ? { id: r.id, brand: r.brand, name: r.name, frontUrl: URL.createObjectURL(r.front), backUrl: URL.createObjectURL(r.back), tex: cached }
+              : await buildItem(r.id, r.brand, r.name, r.front, r.back);
             if (typeof it === 'string') throw new Error(it);
-            if (!stop) setItems(x => x.some(y => y.id === it.id) ? x : [...x, { ...it, chart: r.chart }]);
+            if (!stop) setItems(x => x.some(y => y.id === it.id)
+              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart } : y)
+              : [...x, { ...it, chart: r.chart }]);
+            if (!cached && it.tex) {
+              const uv = await saveUvMap(it.tex.front, it.tex.back);
+              const updated = { ...r, uv };
+              await storeItem(updated).catch(() => undefined);
+              await saveWardrobeUvMap(userId, r.id, uv).catch(() => undefined);
+            }
           }
         } catch { if (!stop) setToast(`Could not restore "${r.name}". Its saved photos have been kept; refresh to retry.`); }
         if (!stop) { setLoadingIds(x => x.filter(y => y !== r.id)); setPantsLoading(x => x.filter(y => y !== r.id)); }
@@ -757,6 +817,12 @@ function FitLab() {
     S.colourway = it.tex ? S.itemTex[it.id] : null;
     applyColourway(S); setActiveId(it.id);
   };
+  // If a card is tapped before its background texture alignment finishes, apply that texture as soon as ready.
+  useEffect(() => {
+    const it = items.find(item => item.id === activeId);
+    if (it?.tex) wear(it);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, activeId, ready]);
   const removeItem = async (it: LabItem) => {
     if (!confirm(`Remove "${it.name}" from the Fit Lab wardrobe?`)) return;
     try { await deleteWardrobeItem(userId, it.id); await unstoreItem(it.id); } catch { setToast('Could not remove this item. Please try again.'); return; }
@@ -788,7 +854,20 @@ function FitLab() {
     wear(it); setSize(sz); setShirtOn(true); setOpenItem(null); seen(it.id); openRoom();
   };
   const toggleWalk = () => {
-    if (!walking && walkBody) { setHeight(walkBody.height); setChest(walkBody.chest); setShoulder(null); setWaist(null); }
+    if (!walking && walkBody) {
+      preWalkBody.current = { height, chest, shoulder, waist };
+      setHeight(walkBody.height); setChest(walkBody.chest); setShoulder(null); setWaist(null);
+    } else if (walking) {
+      const previous = preWalkBody.current;
+      if (hasProfile && savedBody.current) {
+        // The catwalk body is temporary. Restore the user's saved profile values when it stops.
+        const saved = savedBody.current;
+        setHeight(saved.height); setChest(saved.chest); setShoulder(saved.shoulder); setWaist(saved.waist);
+      } else if (previous) {
+        setHeight(previous.height); setChest(previous.chest); setShoulder(previous.shoulder); setWaist(previous.waist);
+      }
+      preWalkBody.current = null;
+    }
     setWalkStatus(null); setWalking(w => !w);
   };
   const shRange = sb?.ok ? [Math.ceil(sb.range.shoulder[0] * 2) / 2, Math.floor(sb.range.shoulder[1] * 2) / 2] : null;
@@ -812,7 +891,7 @@ function FitLab() {
   // ── bottoms section of the wardrobe: Xin, its photo swaps, and pants with their own simulation (products) ──
   const bottoms: LabItem[] = [
     { id: 'xin', brand: 'TNT CO', name: '"Xin" Denim Biker Pants (grey)', frontUrl: '/models/fitlab/items/xin_front.jpg', backUrl: '/models/fitlab/items/xin_back.jpg', builtin: true },
-    ...pantsItems.map(p => ({ id: p.id, brand: p.brand, name: p.name, frontUrl: p.frontUrl, backUrl: p.backUrl, pantsTex: { front: p.tex.front.canvas, back: p.tex.back.canvas } })),
+    ...pantsItems.map(p => ({ id: p.id, brand: p.brand, name: p.name, frontUrl: p.frontUrl, backUrl: p.backUrl, pantsTex: p.tex ? { front: p.tex.front.canvas, back: p.tex.back.canvas } : undefined })),
     ...products.filter(p => p.id !== 'xin_check').map(p => ({ id: p.id, brand: p.brand, name: p.name, frontUrl: `${p.dir}/front.png`, backUrl: `${p.dir}/back.png`, builtin: true })),
   ];
   const bottomOn = !jeansSize ? '' : pantsId === 'xin' ? (pantsSkin ?? 'xin') : pantsId;
@@ -1109,7 +1188,8 @@ function FitLab() {
         <span aria-hidden="true" />
       </header>
       <div className="flex min-h-0 flex-1 flex-col landscape:sm:grid landscape:sm:grid-cols-[minmax(0,1fr)_340px] lg:grid lg:grid-cols-[minmax(0,1fr)_400px] landscape:lg:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="relative h-[46dvh] shrink-0 overflow-hidden landscape:sm:h-auto lg:h-auto" style={{ background: '#fff' }}>
+        <div className="relative flex h-[46dvh] shrink-0 flex-col overflow-hidden landscape:sm:h-auto lg:h-auto" style={{ background: '#fff' }}>
+          <div className="relative min-h-0 flex-1 overflow-hidden" style={{ background: '#fff' }}>
           {/* absolute: the canvas's own pixel size never feeds back into the layout */}
           <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full touch-none" />
             {(loading || error) && (
@@ -1157,17 +1237,17 @@ function FitLab() {
                   {jst?.reason}
                 </div>
               )}
-              {mode === 'fit' && (
-                <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-white/90 px-2.5 py-1.5 text-[11px] shadow backdrop-blur lg:bottom-3 lg:left-3 lg:right-auto lg:max-w-[360px] lg:px-3 lg:py-2 lg:text-xs landscape:sm:right-auto">
-                  <div className="mb-1 hidden font-semibold lg:block">Fit map</div>
-                  <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-0.5 lg:justify-start lg:gap-y-1">
-                    <span className="w-full text-center text-[10px] opacity-60">Estimated fit</span>
-                    {FIT_LEGEND.map(([c, l]) => (
-                      <span key={l} className="flex items-center gap-1 whitespace-nowrap"><span className="inline-block h-2.5 w-2.5 rounded-sm border lg:h-3 lg:w-3" style={{ background: c, borderColor: '#ddd' }} />{l}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+          </div>
+          {mode === 'fit' && (
+            <div className="shrink-0 border-t px-3 py-2 text-[11px] lg:px-4 lg:text-xs" style={{ background: '#fff', borderColor: C.peach }}>
+              <div className="mb-1 text-center text-[10px] opacity-60 lg:text-left">Estimated fit</div>
+              <div className="flex w-full flex-nowrap justify-between gap-x-0.5 whitespace-nowrap pb-0.5 text-[clamp(8px,2vw,12px)] lg:justify-start lg:gap-x-4 lg:text-xs">
+                {FIT_LEGEND.map(([c, l]) => (
+                  <span key={l} title={l} className="flex min-w-0 items-center gap-0.5 lg:gap-1"><span className="inline-block h-2 w-2 shrink-0 rounded-sm border lg:h-3 lg:w-3" style={{ background: c, borderColor: '#ddd' }} /><span className="truncate">{l}</span></span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <aside className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-3 sm:p-4 md:space-y-5 md:p-5" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>

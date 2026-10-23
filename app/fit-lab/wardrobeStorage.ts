@@ -1,7 +1,8 @@
 import { auth } from '@/lib/firebase/config';
 import type { SizeChartData } from './WardrobeExtras';
 // ─── browser storage for added items (photos are re-aligned on load) ───────────────
-export interface StoredItem { id: string; ownerId?: string; cloudSynced?: boolean; brand: string; name: string; front: Blob; back: Blob; created: number; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }
+export interface StoredUvMap { front: Blob; back: Blob; frontIou: number; backIou: number; frontFabric: [number, number, number]; backFabric: [number, number, number] }
+export interface StoredItem { id: string; ownerId?: string; cloudSynced?: boolean; brand: string; name: string; front: Blob; back: Blob; uv?: StoredUvMap; created: number; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string }
 const openDb = () => new Promise<IDBDatabase>((res, rej) => {
   const r = indexedDB.open('fitlab', 1);
   r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });

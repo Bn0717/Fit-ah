@@ -93,7 +93,7 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
             </div>
           );
         })}
-        {loadingIds.map(id => (
+        {loadingIds.filter(id => !items.some(it => it.id === id)).map(id => (
           <div key={id} className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-200 bg-white">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Lining up…</p>
@@ -289,7 +289,7 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
           <p className="text-xs font-semibold" style={{ color: C.navy }}>Loading 3D model…</p>
         </div>
       )}
-      {ready && !compact && <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex justify-center"><span className="rounded-full bg-black/40 px-2 py-1 text-center text-[10px] text-white">{label ?? `Size ${size} as simulated on the 175 cm body · drag to rotate`}</span></div>}
+      {ready && !compact && <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex justify-center"><span className="rounded-full bg-black/40 px-2 py-1 text-center text-[10px] text-white">{label ?? `Drag to rotate`}</span></div>}
     </div>
   );
 }
@@ -490,7 +490,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                 </div>
                 <button onClick={() => setStyle(true)}
                   className="hidden w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold hover:opacity-90 md:flex" style={{ backgroundColor: C.pink, color: C.navy }}>
-                  AI Style Suggestion (weather)
+                  AI Style Suggestion (testing)
                 </button>
                 <div className="rounded-lg p-4" style={{ backgroundColor: C.cream }}>
                   <p className="text-xs" style={{ color: C.navy, opacity: 0.7 }}>
@@ -504,7 +504,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
           <div className="sticky bottom-0 z-10 -mx-5 mt-5 border-t bg-white px-5 pt-3 md:hidden" style={{ borderColor: C.peach, paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
             <TryOn can={!match?.[viewSize] || match[viewSize].ok} size={viewSize} why={notSimText('shirt', match?.[viewSize], 'Gon Tee')} onClick={() => onCheckFit(item, viewSize)} />
             <button onClick={() => setStyle(true)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold" style={{ backgroundColor: C.pink, color: C.navy }}>
-              AI Style Suggestion (weather)
+              AI Style Suggestion (testing)
             </button>
           </div>
         </div>

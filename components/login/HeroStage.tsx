@@ -1,6 +1,6 @@
 // components/login/HeroStage.tsx
-// The scroll-driven 3D scene on the login page: the Fit Lab model (shirt M over jeans M, from the
-// layered walk simulation) plus real simulated garments that float around it. The page passes the
+// The scroll-driven login scene uses the original live promotional model,
+// plus promotional garments that float around it. The page passes the
 // story progress (0..1); everything here is a function of that number, so scrolling back works too.
 'use client';
 
@@ -16,9 +16,9 @@ const FLOATERS: Floater[] = [
   // url, position (desktop), scale, spin direction; tex = another TNT CO tee's shop photos on the same tee
   // (models/login/tees/<tex>_f.jpg / _b.jpg, padded by blender/pad_tee_photo.py)
   { url: TEE, pos: [1.25, 1.42, -0.35], mpos: [0.7, 1.4, 0], scale: 0.55, spin: 1 },
-  { url: '/models/login/jeans.glb.gz', pantsPhoto: true, pos: [1.5, 0.45, 0.15], mpos: [0.72, 0.35, 0], scale: 0.42, spin: -1 },
+  { url: '/models/login/jeans-smooth.glb?v=2', pantsPhoto: true, pos: [1.5, 0.45, 0.15], mpos: [0.72, 0.35, 0], scale: 0.42, spin: -1 },
   { url: '/models/login/shorts.glb.gz', pos: [-1.35, 0.38, 0.25], mpos: [-0.72, 0.12, 0], scale: 0.5, spin: 1 },
-  { url: '/models/login/jeans.glb.gz', pos: [-0.8, 0.9, -1.5], mpos: [-0.76, 0.62, 0], scale: 0.38, spin: -1 },
+  { url: '/models/login/jeans-smooth.glb?v=2', pos: [-0.8, 0.9, -1.5], mpos: [-0.76, 0.62, 0], scale: 0.38, spin: -1 },
   { url: TEE, tex: 'maui-logo-tee-pink', pos: [-0.75, 1.98, -1.7], mpos: [-0.6, 1.72, 0], scale: 0.48, spin: -1 },
   { url: TEE, tex: 'horsehoes-tee-black', pos: [0.95, 2.05, -1.4], mpos: [0.45, 1.86, 0], scale: 0.45, spin: 1 },
   { url: TEE, tex: 'maui-logo-tee-blue', pos: [2.15, 1.05, -1.7], scale: 0.5, spin: -1, desktopOnly: true },
@@ -103,7 +103,7 @@ export default function HeroStage({ progress, onProgress, enterAt }: {
             o.castShadow = true;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mats = Array.isArray(o.material) ? o.material : [o.material];
-            for (const m of mats) if (/shirt|jeans/.test(m.name)) m.side = THREE.DoubleSide;
+            for (const m of mats) if (o.name === 'Jeans' || /shirt|jeans/.test(m.name)) m.side = THREE.DoubleSide;
             const d = o.morphTargetDictionary;
             if (d && d.arms1 !== undefined) morphs.push({ mesh: o, a1: d.arms1, a2: d.arms2 });
           });

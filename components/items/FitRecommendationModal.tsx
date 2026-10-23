@@ -86,8 +86,8 @@ function buildPrompt(
   profile:  ParametricAvatar | null,
 ): string {
   const row    = item.sizeChart.find(s => s.size === size) ?? item.sizeChart[0];
-  let fitLine  = 'Body measurements unavailable.';
-  let fitLabel = 'Unknown';
+  let fitLine  = `Recommended size ${size}; body measurements are unavailable, so use this size as the fit reference.`;
+  let fitLabel = 'Recommended size';
   if (row && profile) {
     const chestEase    = row.chest    - profile.chest;
     const shoulderEase = row.shoulder - profile.shoulder;
@@ -122,7 +122,7 @@ ${fitLine}
 STYLING RULES:
 1. Return exactly 3 outfit suggestions with distinct vibes.
 2. "reason": Write 40-60 words. Explain the visual balance between the top and bottom. Discuss how the ${fitLabel} fit of the shirt pairs with the silhouette of the bottoms and how the colors harmonize.
-3. "comfort": Write 30-50 words. Explain how the fabric and the chest ease (+${(row.chest - (profile?.chest ?? 0)).toFixed(1)}cm) will feel against the skin in ${weather.tempC}°C heat and ${weather.humidity}% humidity.
+3. "comfort": Write 30-50 words. Explain how the fabric and ${profile && row ? `the chest ease (${(row.chest - profile.chest >= 0 ? '+' : '')}${(row.chest - profile.chest).toFixed(1)}cm)` : `the recommended ${size} size`} may feel against the skin in ${weather.tempC}°C heat and ${weather.humidity}% humidity.
 4. Output ONLY a valid JSON array. No conversational text.
 
 ALLOWED LISTS:
@@ -277,7 +277,8 @@ export function StyleOverlay({
 
   const fitInfo = (() => {
     const row = item.sizeChart.find(s => s.size === selectedSize) ?? item.sizeChart[0];
-    if (!row || !userProfile) return null;
+    if (!row) return null;
+    if (!userProfile) return { label: 'Recommended size', col: C.green, eC: null as number | null };
     const eC   = parseFloat((row.chest - userProfile.chest).toFixed(1));
     const chestEase    = row.chest    - userProfile.chest;
     const shoulderEase = row.shoulder - userProfile.shoulder;
@@ -308,7 +309,7 @@ export function StyleOverlay({
       : 'Good Fit';
 
     const col = (hasTight && hasLoose) ? '#8b5cf6' : hasTight ? C.red : hasLoose ? C.orange : C.green;
-    return { label, col, eC };
+    return { label, col, eC: eC as number | null };
   })();
 
   const fetchByCoords = useCallback(async (lat: number, lon: number) => {
@@ -530,18 +531,20 @@ export function StyleOverlay({
               <div className="flex-shrink-0 text-right">
                 <span className="inline-block text-[10px] font-black px-2.5 py-1 rounded-full"
                   style={{ backgroundColor: fitInfo.col + '20', color: fitInfo.col }}>● {fitInfo.label}</span>
-                <p className="text-[9px] text-gray-400 mt-0.5">{fitInfo.eC >= 0 ? '+' : ''}{fitInfo.eC}cm chest ease</p>
+                {fitInfo.eC !== null && <p className="text-[9px] text-gray-400 mt-0.5">{fitInfo.eC >= 0 ? '+' : ''}{fitInfo.eC}cm chest ease</p>}
               </div>
             )}
           </div>
           {fitInfo && (
             <div className="mt-2 px-3 py-2 rounded-xl text-[10px] leading-relaxed"
               style={{ backgroundColor: fitInfo.col + '12', color: fitInfo.col === C.green ? '#166534' : fitInfo.col === C.orange ? '#7c2d12' : '#7f1d1d' }}>
-              {fitInfo.label === 'Tight'
+              {fitInfo.label === 'Recommended size'
+                ? '📌 Recommended size — add your measurements for a personalized fit assessment.'
+                : fitInfo.label === 'Tight'
                 ? '⚠️ Snug fit — AI will consider movement ease when picking bottoms.'
                 : fitInfo.label === 'Loose'
                 ? '🌬️ Relaxed/oversized — AI will balance proportions with fitted bottoms.'
-                : '✅ Great fit — AI has maximum flexibility in outfit choices.'}
+              : '✅ Good fit — AI can pair this shirt with a wider range of outfits.'}
             </div>
           )}
         </div>
@@ -814,9 +817,27 @@ export function StyleOverlay({
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT — FitRecommendationModal
 // ══════════════════════════════════════════════════════════════════════════════
+function recommendedSize(item: ClothingItem, profile: ParametricAvatar | null): string {
+  const chart = item.sizeChart ?? [];
+  if (!chart.length) return item.userWearingSize || 'M';
+  if (item.userWearingSize && chart.some(row => row.size === item.userWearingSize)) return item.userWearingSize;
+  if (!profile) return chart.find(row => row.size === 'M')?.size ?? chart[Math.floor((chart.length - 1) / 2)].size;
+  const waist = profile.waist ?? profile.chest * 0.78;
+  return chart.reduce((best, row) => {
+    const chestEase = row.chest - profile.chest;
+    const shoulderEase = row.shoulder - profile.shoulder;
+    const lengthEase = row.length - profile.height * 0.32;
+    const waistEase = (row.waist ?? row.chest) - waist;
+    const score = Math.abs(chestEase - 10) + Math.abs(shoulderEase - 1) * 1.5
+      + Math.max(0, 2 - chestEase) * 3 + Math.max(0, -3 - shoulderEase) * 2
+      + Math.abs(lengthEase - 15) * 0.35 + Math.max(0, -2 - waistEase) * 1.5;
+    return score < best.score ? { row, score } : best;
+  }, { row: chart[0], score: Number.POSITIVE_INFINITY }).row.size;
+}
+
 export default function FitRecommendationModal({ isOpen, onClose, item, userProfile }: Props) {
   const { user } = useAuth();
-  const [selectedSize, setSelectedSize] = useState<string>(item.userWearingSize || 'M');
+  const [selectedSize, setSelectedSize] = useState<string>(recommendedSize(item, userProfile));
   const [isRotating, setIsRotating] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<{
@@ -878,6 +899,8 @@ export default function FitRecommendationModal({ isOpen, onClose, item, userProf
     setBodyDraft(b);
     setSavedBody(b);
   }, [userProfile]);
+
+  useEffect(() => { setSelectedSize(recommendedSize(item, userProfile)); }, [item.id, userProfile?.height, userProfile?.chest, userProfile?.shoulder, userProfile?.waist]);
 
   useEffect(() => { sceneRef.current?.updateBody(bodyDraft); }, [bodyDraft]);
 
