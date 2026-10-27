@@ -10,6 +10,7 @@ export interface ParametricAvatar {
   photoUrl?: string;
   avatarUrl?: string;
   selectedAnimation?: string | null;
+  skinTone?: string | null;      // Monk Skin Tone Scale id (app/fit-lab/skinTone.ts), null = the model's own skin
   createdAt?: any;
   updatedAt?: any;
 }

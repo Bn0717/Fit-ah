@@ -24,10 +24,12 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { loadImage, loadRef, makeTexture, type Ref, type Result } from './colourway';
 import { makePantsTexture, loadPantsRef, type PantsResult, type PantsOutline } from './pantsSwap';
 import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loadPacked, fetchBin, cpuMorphed, pushOutside, layerShirtOverPants, joinParts, shirtShapeOk, fitColor, fitTier, FIT_LEGEND, applyColourway, applyPantsSkin, SIZES, VARIANTS, gridWeights, blend, clamp, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody,
-  type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
+  type Size, type ViewMode, type GridMeta, withShirt, type ShirtProduct, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
-import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
+import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
+import { applySkinTone, isSkinTone } from './skinTone';
+import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
@@ -78,7 +80,7 @@ function FitLab() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sceneRef = useRef<any>({});
-  const [meta, setMeta] = useState<GridMeta | null>(null);
+  const [baseMeta, setMeta] = useState<GridMeta | null>(null);       // the body grid (+ the TNT Gon tee's numbers)
   const [size, setSize] = useState<Size>('M');
   const [mode, setMode] = useState<ViewMode>('fabric');
   const [shirtOn, setShirtOn] = useState(true);                       // false = shirt taken off (bare body)
@@ -115,7 +117,7 @@ function FitLab() {
     fetch(`${it.dir}/product.json`).then(r => r.json()).then(setProduct).catch(() => setProduct(null));
   }, [pantsId, products]);
   const pants: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>; dir: string } | null =
-    pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: xinOn ? XIN_GRID_DIR : XIN.grid } : null)
+    pantsId === 'xin' ? (baseMeta?.jeans ? { ...baseMeta.jeans, dir: xinOn ? XIN_GRID_DIR : XIN.grid } : null)
       : product && product.id === pantsId ? { name: `${product.brand} ${product.name}`, sizes: product.belt, drop: product.drop, belt: product.belt, dir: product.dir } : null;
   const belly = 0; // Belly adjustment is temporarily disabled; always use the natural shape.
   // "My exact fit": a real simulation on this exact body (blender/exact_fit.sh via /api/fitlab/exact)
@@ -138,6 +140,30 @@ function FitLab() {
   useEffect(() => { try { setHidden(JSON.parse(localStorage.getItem('fitlab_hidden') || '[]')); } catch { /* storage blocked */ } }, []);
   const saveHidden = (h: string[]) => { setHidden(h); try { localStorage.setItem('fitlab_hidden', JSON.stringify(h)); } catch { /* storage blocked */ } };
   const [activeId, setActiveId] = useState('gon');
+  // shirt products (brands/tops.json -> <dir>/product.json, made by blender/new_shirt.sh): loaded with the wardrobe.
+  // The worn one's sizes and simulated numbers replace the Gon tee's in `meta`, so every fit calculation reads the
+  // shirt that is on; topFitOf() does the same for any other top (cards, recommendations).
+  const [topProducts, setTopProducts] = useState<Record<string, ShirtProduct>>({});
+  const topProductOf = (it?: LabItem | null) => (it?.topDir && topProducts[it.id]) || null;
+  const topProduct = topProductOf(items.find(i => i.id === activeId));
+  const meta = React.useMemo(() => baseMeta && withShirt(baseMeta, topProduct), [baseMeta, topProduct]);
+  const sizesOfTop = (it?: LabItem | null) => (topProductOf(it)?.sizes ?? SIZES) as Size[];
+  const topSizes = sizesOfTop(items.find(i => i.id === activeId));
+  const shirtKey = `${topProduct?.id ?? 'gon'}:${size}`;              // loaded shirt files: one per product and size
+  // shirt products into the wardrobe (built-in tops next to the Gon tee); hidden ones stay out until checked
+  useEffect(() => {
+    let stop = false;
+    fetch(TOPS_INDEX_URL).then(r => r.ok ? r.json() : []).then(async (list: { id: string; name: string; brand: string; dir: string; hidden?: boolean }[]) => {
+      const shown = list.filter(p => !p.hidden);
+      const loaded = await Promise.all(shown.map(p => fetch(`${p.dir}/product.json`).then(r => r.ok ? r.json() as Promise<ShirtProduct> : null).catch(() => null)));
+      if (stop) return;
+      const ok = loaded.filter((p): p is ShirtProduct => !!p);
+      setTopProducts(cur => ({ ...cur, ...Object.fromEntries(ok.map(p => [p.id, p])) }));
+      setItems(cur => [...cur, ...ok.filter(p => !cur.some(i => i.id === p.id)).map(p => ({ id: p.id, brand: p.brand, name: p.name,
+        frontUrl: `${p.dir}/front.png`, backUrl: `${p.dir}/back.png`, builtin: true, topDir: p.dir }))]);
+    }).catch(() => {});
+    return () => { stop = true; };
+  }, []);
   const [openItem, setOpenItem] = useState<LabItem | null>(null);
   const [addKind, setAddKind] = useState<'shirt' | 'pants' | null>(null);   // which wardrobe section the add window is for
   const [loadingIds, setLoadingIds] = useState<string[]>([]);
@@ -187,6 +213,9 @@ function FitLab() {
       savedBody.current = saved;
       setHeight(saved.height); setChest(saved.chest); setWaist(saved.waist); setShoulder(saved.shoulder);
       setHasProfile(true);
+      // skin tone (set on the Profile page): the static and the walking body, now and when they load later
+      const S = sceneRef.current, tone = isSkinTone(profile.skinTone) ? profile.skinTone : null;
+      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone);
     });
     return () => { alive = false; };
   }, [userId]);
@@ -216,7 +245,7 @@ function FitLab() {
 
   // ── scene setup + body ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!canvasRef.current || !meta) return;
+    if (!canvasRef.current || !baseMeta) return;
     let cancelled = false, frame = 0;
     let cleanup: () => void = () => {};
     Promise.all([
@@ -264,6 +293,7 @@ function FitLab() {
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
+          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -321,20 +351,21 @@ function FitLab() {
       };
     });
     return () => { cancelled = true; cleanup(); };
-  }, [meta]);
+  }, [baseMeta]);
 
   // ── load the selected size's shirt on demand ───────────────────────────────────
   useEffect(() => {
     const S = sceneRef.current;
     if (!S.loader || !meta) return;
     S.shirtOn = shirtOn;
-    S.shirtWant = size;                         // read by downloads that finish later (the size wanted NOW)
-    for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = shirtOn && !S.walk?.active && sz === size;
-    if (S.shirts[size]) { setReady(r => r + 1); return; }
-    S.shirts[size] = 'loading';
+    S.shirtWant = shirtKey;                     // read by downloads that finish later (the shirt + size wanted NOW)
+    for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = shirtOn && !S.walk?.active && sz === shirtKey;
+    if (S.shirts[shirtKey]) { setReady(r => r + 1); return; }
+    const key = shirtKey;
+    S.shirts[key] = 'loading';
     const gen = S.gen;
     setShirtProg({ size, pct: 0 });
-    loadPacked(S.THREE, S.loader, `${GON_FILES.grid}/shirt_${size}.glb.gz`,
+    loadPacked(S.THREE, S.loader, `${topProduct ? `${topProduct.dir}/grid` : GON_FILES.grid}/shirt_${size}.glb.gz`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (g: any) => {
         if (S.gen !== gen) return;               // a download that finishes after the scene was rebuilt (page reload / live edit): its scene is gone, drop it
@@ -353,12 +384,12 @@ function FitLab() {
           o.material = fabric; o.userData.fabric = fabric; parts.push({ mesh: o, fabric, fit });
         });
         g.scene.userData.parts = parts;
-        S.scene.add(g.scene); S.shirts[size] = g.scene; applyColourway(S);
+        S.scene.add(g.scene); S.shirts[key] = g.scene; applyColourway(S);
         for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = S.shirtOn !== false && !S.walk?.active && !S.walkOn && sz === S.shirtWant;
         setReady(r => r + 1); setShirtProg(p => p?.size === size ? null : p);
       }, e => { if (e.total) setShirtProg(p => p?.size === size ? { size, pct: Math.round(100 * e.loaded / e.total) } : p); },
       () => { setShirtProg(null); setError(`Could not load size ${size}.`); });
-  }, [size, meta, loading, shirtOn]);
+  }, [shirtKey, meta, loading, shirtOn]);
 
   // ── catwalk: load the baked walk (body once, shirt per size) and switch the scene over ───
   useEffect(() => {
@@ -375,11 +406,11 @@ function FitLab() {
     const selected = xinWalkAssets(originalWalk, xinOn);
     const { js, sk } = selected;
     W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
-    const has = !!meta.walk?.sizes[size];
+    const has = !topProduct && !!meta.walk?.sizes[size];          // shirt products: no catwalk simulated yet
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
       if (S.bodyRoot) S.bodyRoot.visible = !on;
-      for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !on && shirtOn && sz === size;
+      for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !on && shirtOn && sz === shirtKey;
       if (on) for (const g of Object.values(S.jeans || {})) if (g && typeof g !== 'string') (g as { visible: boolean }).visible = false;
       for (const [sz, sh] of Object.entries(W.shirts)) (sh as { root: { visible: boolean } }).root.visible = on && shirtOn && sz === sk;
       for (const [sz, jj] of Object.entries(W.jeans)) (jj as { root: { visible: boolean } }).root.visible = on && sz === js;
@@ -387,7 +418,7 @@ function FitLab() {
       for (const t of W.body || []) if (/pants/i.test(t.mesh.name) || /pants/i.test(t.mesh.parent?.name || '')) t.mesh.visible = !js;
     };
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
-    if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
+    if (!has) { setWalking(false); setWalkStatus(topProduct ? `The catwalk for ${topProduct.name} has not been simulated yet.` : `The ${size} catwalk is still being simulated.`); return; }
     const dir = BODY_WALK_DIR;   // the shared walking body (garment walks come from selectWalk)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
@@ -410,6 +441,7 @@ function FitLab() {
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
+          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;
@@ -466,7 +498,7 @@ function FitLab() {
       W.last = -1; show(true); setWalkStatus(null);
     }).catch(() => { if (!stale) { setWalking(false); setWalkStatus('Could not load the catwalk.'); } });
     return () => { stale = true; };
-  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt, pantsId, xinOn, product?.walk, product?.id]);
+  }, [walking, size, mode, meta, loading, jeansSize, shirtOn, belt, pantsId, xinOn, product?.walk, product?.id, topProduct]);
 
   // ── jeans: load the selected size on demand, swap with the basic pants ───────────────
   // drop = nothing holds the waistband (gravity + friction decide where it ends up), belt = a belt holds it at the
@@ -508,7 +540,7 @@ function FitLab() {
         S.scene.add(g.scene); S.jeans[key] = g.scene; applyPantsSkin(S); show(); setReady(r => r + 1);
       }, undefined, () => setError(`Could not load the jeans (${sz}).`));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jeansKey, meta, loading, walking, jeansHide]);
+  }, [jeansKey, baseMeta, loading, walking, jeansHide]);
 
   // ── pants photo swap: the worn photos become the jeans textures (static, every size, and the catwalk) ──
   useEffect(() => {
@@ -555,7 +587,7 @@ function FitLab() {
     const apply = () => {
       if (S.exactRoot) S.exactRoot.visible = on;
       if (S.bodyRoot) S.bodyRoot.visible = !on && !S.walk?.active;
-      for (const g of Object.values(S.shirts || {})) if (g && typeof g !== 'string') (g as { visible: boolean }).visible = !on && !S.walk?.active && shirtOn && g === S.shirts[size];
+      for (const g of Object.values(S.shirts || {})) if (g && typeof g !== 'string') (g as { visible: boolean }).visible = !on && !S.walk?.active && shirtOn && g === S.shirts[shirtKey];
       S.exactRoot?.traverse((o: { name: string; visible: boolean; isMesh?: boolean }) => { if (o.isMesh && /shirt/i.test(o.name)) o.visible = shirtOn; });
       for (const g of Object.values(S.jeans || {})) if (g && typeof g !== 'string') (g as { visible: boolean }).visible = !on && !S.walk?.active && !jeansHide && g === S.jeans[jeansKey ?? ''];
     };
@@ -603,7 +635,9 @@ function FitLab() {
       }
     };
     S.bodyMeshes?.forEach(setMorphs);
-    const grp = S.shirts?.[size];
+    const grp = S.shirts?.[shirtKey];
+    // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the Tops panel says why)
+    if (grp && typeof grp !== 'string' && !Object.keys(w).every(k => meta.shirt[size]?.[k])) grp.visible = false;
     const jg = jeansKey && !jeansHide ? S.jeans?.[jeansKey] : null;   // hidden jeans: the shirt hangs on the body
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allParts: any[] = [...(grp && typeof grp !== 'string' ? grp.userData.parts : []), ...(jg && typeof jg !== 'string' ? jg.userData.parts : [])];
@@ -632,7 +666,7 @@ function FitLab() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jeansParts: any[] = jg && typeof jg !== 'string' ? jg.userData.parts : [];
     applyStaticLayers(shirtParts, jeansParts, shirtOn);
-  }, [meta, height, chest, shoulderNow, waistNow, size, mode, ready, jeansKey, bellyNow, jeansHide, shirtOn]);
+  }, [meta, height, chest, shoulderNow, waistNow, shirtKey, mode, ready, jeansKey, bellyNow, jeansHide, shirtOn]);
 
   // ── numbers for the panel (blended from the simulated grid points) ───────────────
   const sb = meta ? solveBody(meta, height, chest, shoulderNow, waistNow, bellyNow) : null;
@@ -798,7 +832,7 @@ function FitLab() {
     });
     return () => { stop = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, userId]);
+  }, [baseMeta, userId]);
   // wear an item in the fitting room: its photos become the shirt textures of every size and the catwalk
   const wear = (it: LabItem) => {
     const S = sceneRef.current;
@@ -876,17 +910,21 @@ function FitLab() {
   // style tier: chest ease as % of the body chest (the Gon Tee has a dropped shoulder, so "Oversized" is allowed)
   const verdictOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).label;
   const colorOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).color;
-  const verdict = ease === null ? '—' : verdictOf(ease);
+  // a shirt product not simulated on this body is not drawn: say so instead of a blank verdict
+  const verdict = ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
   const verdictColor = ease === null ? C.navy : colorOf(ease);
   // room at the chest for every size on the current body (for the wardrobe's size chart)
-  const sizeFit = Object.fromEntries(SIZES.map(sz => {
-    const sh = meta?.shirt[sz];
-    if (!meta || !sh || !bodyNow || !Object.keys(w).every(k => sh[k])) return [sz, null];
-    const g = meta.shirt_var_grid?.[sz];
-    const vd = (v: Variant) => g && Object.keys(w).every(k => g[k]?.[v]) ? blend(w, k => g[k][v]!.chest_cm) : (meta.shirt_var?.[sz]?.[v]?.chest_cm ?? 0);
+  // fitsOf: the same for any top's data (m = the body grid with that shirt's numbers: withShirt)
+  const fitsOf = (m: GridMeta | null, sizes: readonly string[]) => Object.fromEntries(sizes.map(sz => {
+    const sh = m?.shirt[sz as Size];
+    if (!m || !sh || !bodyNow || !Object.keys(w).every(k => sh[k])) return [sz, null];
+    const g = m.shirt_var_grid?.[sz as Size];
+    const vd = (v: Variant) => g && Object.keys(w).every(k => g[k]?.[v]) ? blend(w, k => g[k][v]!.chest_cm) : (m.shirt_var?.[sz as Size]?.[v]?.chest_cm ?? 0);
     const e = blend(w, k => sh[k].chest_cm) + VARIANTS.reduce((t, v) => t + (sb?.vw[v] ?? 0) * vd(v), 0) - bodyNow.chest;
     return [sz, { ease: e, verdict: verdictOf(e), color: colorOf(e) }];
   })) as SizeFit;
+  const sizeFit = fitsOf(meta, topSizes);
+  const topFitOf = (it: LabItem | null | undefined) => it?.topDir ? fitsOf(baseMeta && withShirt(baseMeta, topProductOf(it)), sizesOfTop(it)) : fitsOf(baseMeta, SIZES);
 
   // ── bottoms section of the wardrobe: Xin, its photo swaps, and pants with their own simulation (products) ──
   const bottoms: LabItem[] = [
@@ -904,7 +942,7 @@ function FitLab() {
   const wearBottom = (it: LabItem, sz: string) => { putOnBottom(it, sz); setOpenPants(null); seen(it.id); openRoom(); };
 
   // ── size charts: an added item with its own chart reuses the simulation only for sizes that match it ──
-  const shirtRef: SizeChartData = meta ? Object.fromEntries(SIZES.map(z => [z, { ...meta.chart[z] }])) : {};
+  const shirtRef: SizeChartData = baseMeta ? Object.fromEntries(SIZES.map(z => [z, { ...baseMeta.chart[z] }])) : {};
   const pantsRef: SizeChartData = meta?.jeans ? Object.fromEntries(Object.entries(meta.jeans.sizes).map(([z, J]) =>
     [z, { waist: J.chart.elastic_waist ?? J.chart.waist, hip: J.chart.hip, length: J.chart.length, opening: J.chart.opening }])) : {};
   const topMatch = (it: LabItem | null | undefined) => it?.chart ? matchChart('shirt', it.chart, shirtRef) : null;
@@ -927,7 +965,7 @@ function FitLab() {
   // fitting room "Change clothes": tap to wear (in a size simulated for its chart), tap the worn one to take it off
   const tapTop = (it: LabItem) => {
     if (activeTop?.id === it.id) { setShirtOn(false); return; }
-    const m = topMatch(it), z = initialSize(sizeRecords.sizes[it.id], recommendTop(it), SIZES.filter(q => canWear(m, q))) as Size;
+    const m = topMatch(it), z = initialSize(sizeRecords.sizes[it.id], recommendTop(it), sizesOfTop(it).filter(q => canWear(m, q))) as Size;
     if (!z) { setToast(`${it.name}: ${notSimText('shirt', m?.[size], 'Gon Tee')}`); return; }
     wear(it); setSize(z); setShirtOn(true); seen(it.id);
   };
@@ -947,10 +985,12 @@ function FitLab() {
     const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
     // tops: the size closest to a regular fit (12 % room at the chest), never one that is too small
     const tops = visTops.flatMap(it => {
-      const m = topMatch(it);
-      const ok = SIZES.filter(z => canWear(m, z) && sizeFit[z] && sizeFit[z]!.ease >= 0);
+      const m = topMatch(it), fits = topFitOf(it);
+      const ok = sizesOfTop(it).filter(z => canWear(m, z) && fits[z] && fits[z]!.ease >= 0);
       if (!ok.length || !bodyNow) return [];
-      const z = ok.reduce((a, b) => Math.abs(100 * sizeFit[b]!.ease / bodyNow.chest - 12) < Math.abs(100 * sizeFit[a]!.ease / bodyNow.chest - 12) ? b : a);
+      // the look the shirt was designed for: oversized shirts aim at ~30 % room, others at a regular 12 %
+      const aim = topProductOf(it)?.intended_fit === 'Oversized' ? 30 : 12;
+      const z = ok.reduce((a, b) => Math.abs(100 * fits[b]!.ease / bodyNow.chest - aim) < Math.abs(100 * fits[a]!.ease / bodyNow.chest - aim) ? b : a);
       return [{ it, z }];
     });
     // bottoms: the size and belt the fit rules call best (comfortable > loose > snug; no belt needed beats a belt);
@@ -1026,9 +1066,17 @@ function FitLab() {
     return [z, { verdict: state.hide ? 'Preview unavailable' : state.now.label, color: TONE[state.now.tone], ease: state.now.waistEase, detail: state.now.elasticExtension != null ? `${(state.now.elasticExtension * 100).toFixed(0)}% elastic stretch` : undefined }];
   })) as Record<string, PantsSizeFit>;
 
-  const recommendTop = (it: LabItem | null) => !it || !hasProfile || !sb?.ok ? null : recommendedTop(SIZES,
-    z => sizeFit[z as Size] ? fitTier(sizeFit[z as Size]!.ease, bodyNow?.chest ?? chest) : null,
-    z => canWear(topMatch(it), z));
+  // the size that fits this body; a shirt product designed oversized is recommended for that look, not its smallest size
+  const recommendTop = (it: LabItem | null) => {
+    if (!it || !hasProfile || !sb?.ok) return null;
+    const fits = topFitOf(it), sizes = sizesOfTop(it), want = topProductOf(it)?.intended_fit;
+    const tier = (z: string) => fits[z as Size] ? fitTier(fits[z as Size]!.ease, bodyNow?.chest ?? chest) : null;
+    if (want) {
+      const z = sizes.find(q => tier(q)?.label === want && canWear(topMatch(it), q));
+      if (z) return z;
+    }
+    return recommendedTop(sizes, tier, z => canWear(topMatch(it), z));
+  };
   const recommendBottom = (it: LabItem | null) => {
     if (!it || !meta || !hasProfile || !sb?.ok) return null;
     const data = sizeCatalog[it.id];
@@ -1103,7 +1151,8 @@ function FitLab() {
             </div>
           ) : <>
             {kindFilter !== 'bottoms' && (
-              <WardrobeGrid sizeSummary={it => ({ recommended: recommendTop(it), saved: sizeRecords.sizes[it.id] })} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
+              <WardrobeGrid sizeSummary={it => ({ recommended: recommendTop(it), saved: sizeRecords.sizes[it.id] })}
+                info={it => { const z = sizesOfTop(it); return `${topProductOf(it)?.intended_fit === 'Oversized' ? 'Oversized T-shirt' : 'Short Sleeve Shirt'} · ${z.length} sizes (${z[0]}–${z[z.length - 1]})`; }} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
                 onAdd={tab === 'all' ? () => setAddKind('shirt') : undefined} onDelete={it => it.builtin ? hideBuiltin(it, true) : removeItem(it)}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={topWarn}
                 subtitle=""
@@ -1275,11 +1324,11 @@ function FitLab() {
           </section>
               <section className="rounded-2xl p-5 shadow-sm" style={{ background: '#fff' }}>
                 <h2 className="font-semibold">Tops</h2>
-                {activeTop && <SavedSizeControl itemId={activeTop.id} name={activeTop.name} sizes={Object.keys(activeTop.chart ?? shirtRef)} recommended={recommendTop(activeTop)} savedSize={sizeRecords.sizes[activeTop.id]} previewSize={size} onSave={sizeRecords.saveSize} syncError={sizeRecords.error} />}
+                {activeTop && <SavedSizeControl itemId={activeTop.id} name={activeTop.name} sizes={topProduct && activeTop.topDir ? topSizes : Object.keys(activeTop.chart ?? shirtRef)} recommended={recommendTop(activeTop)} savedSize={sizeRecords.sizes[activeTop.id]} previewSize={size} onSave={sizeRecords.saveSize} syncError={sizeRecords.error} />}
                 <div className="mt-2 grid grid-cols-5 gap-2">
                   <button onClick={() => setShirtOn(false)} className="rounded-lg py-2 text-xs font-semibold transition"
                     style={!shirtOn ? { background: C.navy, color: '#fff' } : { background: C.cream }}>None</button>
-                  {SIZES.map(s => (
+                  {topSizes.map(s => (
                     // clicking the size being worn again takes the shirt off
                     <button key={s} disabled={!canWear(topMatch(activeTop ?? items.find(i => i.id === activeId)), s)} title={canWear(topMatch(activeTop ?? items.find(i => i.id === activeId)), s) ? undefined : 'Not simulated for its size chart'}
                       onClick={() => { if (shirtOn && size === s) { setShirtOn(false); return; } setSize(s); setShirtOn(true); if (!walking) setWalkStatus(null); }} className="min-h-[40px] rounded-lg text-sm font-semibold transition disabled:opacity-30"
@@ -1431,7 +1480,7 @@ function FitLab() {
       }} open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
       refChart={addKind === 'pants' ? pantsRef : shirtRef} refName={addKind === 'pants' ? 'Xin jeans' : 'Gon Tee'} />
     {meta && bodyNow && (
-      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(openItem?.chart as unknown as Partial<typeof meta.chart>) ?? meta.chart} sizeFit={sizeFit} size={size} gridDir={GON_FILES.grid}
+      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(topProductOf(openItem)?.chart as unknown as Partial<typeof meta.chart>) ?? (openItem?.chart as unknown as Partial<typeof meta.chart>) ?? baseMeta!.chart} sizeFit={topFitOf(openItem)} size={size} gridDir={openItem?.topDir ? `${openItem.topDir}/grid` : GON_FILES.grid}
         fav={!!openItem && favs.includes(openItem.id)} onFav={() => openItem && toggleFav(openItem.id)} match={topMatch(openItem)}
         body={{ height, chest: bodyNow.chest, waist: bodyNow.waist, shoulder: bodyNow.shoulder }} onCheckFit={checkFit} />
     )}
