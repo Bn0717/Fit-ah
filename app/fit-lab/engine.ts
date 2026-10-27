@@ -134,6 +134,9 @@ export function gridWeights(meta: GridMeta, h: number, c: number): Record<string
   };
   add(a.i, b.i, (1 - a.t) * (1 - b.t)); add(a.i + 1, b.i, a.t * (1 - b.t));
   add(a.i, b.i + 1, (1 - a.t) * b.t);   add(a.i + 1, b.i + 1, a.t * b.t);
+  // only the bodies that contribute: a corner with zero weight changes nothing, and a shirt simulated on some bodies
+  // only (a new product) must not count as "not simulated" because of a corner it does not use
+  for (const k of Object.keys(w)) if (w[k] < 1e-9) delete w[k];
   return w;
 }
 
@@ -396,6 +399,7 @@ export interface ShirtProduct {
   shirt_var_grid?: Record<string, Record<string, Partial<Record<Variant, ShirtNums>>>>;
   intended_fit?: 'Regular' | 'Oversized' | 'Slim' | null; fabric?: string;
   colours?: { hex: string; name: string }[];
+  simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
 }
 // The body grid (meta.json) with a shirt product's numbers in place of the TNT tee's, so every fit function
 // (fitNumbers, shirtShapeOk, ...) works for that shirt unchanged.
@@ -428,7 +432,11 @@ export function solveBody(meta: GridMeta, h: number, c: number, shoulder: number
     range.shoulder = pick(shoulder, natural.shoulder, 'sh44', 'sh48', 'shoulder');
     range.waist = pick(waist, natural.waist, 'w70', 'w86', 'waist');
     const dChest = VARIANTS.reduce((s, v) => s + vw[v] * d(v, 'chest'), 0);
-    w = gridWeights(meta, h, c - dChest);
+    // the shape versions change the chest a little: re-centre on the grid, but never onto bodies whose shape
+    // versions are not calibrated yet (new grid rows, e.g. chest 84 / 124, before run_shape_drapes.sh)
+    const next = gridWeights(meta, h, c - dChest);
+    if (!Object.keys(next).every(k => sh![k] && meta.body[k].shoulder !== undefined)) break;
+    w = next;
   }
   return { w, vw, range, natural, ok };
 }

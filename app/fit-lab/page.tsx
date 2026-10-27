@@ -636,6 +636,8 @@ function FitLab() {
     };
     S.bodyMeshes?.forEach(setMorphs);
     const grp = S.shirts?.[shirtKey];
+    // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the Tops panel says why)
+    if (grp && typeof grp !== 'string' && !Object.keys(w).every(k => meta.shirt[size]?.[k])) grp.visible = false;
     const jg = jeansKey && !jeansHide ? S.jeans?.[jeansKey] : null;   // hidden jeans: the shirt hangs on the body
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allParts: any[] = [...(grp && typeof grp !== 'string' ? grp.userData.parts : []), ...(jg && typeof jg !== 'string' ? jg.userData.parts : [])];
@@ -908,7 +910,8 @@ function FitLab() {
   // style tier: chest ease as % of the body chest (the Gon Tee has a dropped shoulder, so "Oversized" is allowed)
   const verdictOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).label;
   const colorOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).color;
-  const verdict = ease === null ? '—' : verdictOf(ease);
+  // a shirt product not simulated on this body is not drawn: say so instead of a blank verdict
+  const verdict = ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
   const verdictColor = ease === null ? C.navy : colorOf(ease);
   // room at the chest for every size on the current body (for the wardrobe's size chart)
   // fitsOf: the same for any top's data (m = the body grid with that shirt's numbers: withShirt)
@@ -1148,7 +1151,8 @@ function FitLab() {
             </div>
           ) : <>
             {kindFilter !== 'bottoms' && (
-              <WardrobeGrid sizeSummary={it => ({ recommended: recommendTop(it), saved: sizeRecords.sizes[it.id] })} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
+              <WardrobeGrid sizeSummary={it => ({ recommended: recommendTop(it), saved: sizeRecords.sizes[it.id] })}
+                info={it => { const z = sizesOfTop(it); return `${topProductOf(it)?.intended_fit === 'Oversized' ? 'Oversized T-shirt' : 'Short Sleeve Shirt'} · ${z.length} sizes (${z[0]}–${z[z.length - 1]})`; }} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
                 onAdd={tab === 'all' ? () => setAddKind('shirt') : undefined} onDelete={it => it.builtin ? hideBuiltin(it, true) : removeItem(it)}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={topWarn}
                 subtitle=""
