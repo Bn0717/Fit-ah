@@ -398,7 +398,8 @@ export interface ShirtProduct {
   shirt: Record<string, Record<string, ShirtNums>>;
   shirt_var_grid?: Record<string, Record<string, Partial<Record<Variant, ShirtNums>>>>;
   intended_fit?: 'Regular' | 'Oversized' | 'Slim' | null; fabric?: string;
-  colours?: { hex: string; name: string }[];
+  colours?: { hex: string; name: string; code?: string }[];   // the brand's colours (plain fabrics: recoloured)
+  base_hex?: string | null;                                   // the colour of the simulated texture
   simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
 }
 // The body grid (meta.json) with a shirt product's numbers in place of the TNT tee's, so every fit function
