@@ -22,6 +22,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
 import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
+import { GRID_META_URL, PRODUCTS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
 import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, FIT_LEGEND, type Size, type ViewMode, type GridMeta } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
@@ -36,9 +37,8 @@ import { scanBody, type ScanResult } from '@/lib/mediapipe/bodyScan';
 const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC', ink: '#1f2a52', mute: '#6b7280',
   line: '#EDE4D8', green: '#10b981', amber: '#d97706', red: '#dc2626', blue: '#2563eb' };
 const TONE = { red: C.red, amber: C.amber, green: C.green, blue: C.blue };
-const GRID_DIR = '/models/fitlab/grid';
-const CW_DIR = '/models/fitlab/colourway';
-const PANTS_REF = '/models/fitlab/pants_xin/outline.json';
+const CW_DIR = GON.colourway;
+const PANTS_REF = XIN.outline;
 const RANGE = { height: [160, 190], chest: [92, 116] } as const;     // simulated bodies
 const JEANS_SIZES = ['M', 'L', 'XL', '2XL'];
 
@@ -106,8 +106,8 @@ export default function MyFittingRoom() {
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   useEffect(() => {
-    fetch(`${GRID_DIR}/meta.json`).then(r => r.json()).then(setMeta);
-    fetch('/models/fitlab/products/index.json').then(r => r.json())
+    fetch(GRID_META_URL).then(r => r.json()).then(setMeta);
+    fetch(PRODUCTS_INDEX_URL).then(r => r.json())
       .then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => setProducts([]));   // "hidden": not ready for shoppers yet
     try { setHidden(JSON.parse(localStorage.getItem('fitlab_hidden') || '[]')); } catch { /* storage blocked */ }
   }, []);
@@ -125,8 +125,8 @@ export default function MyFittingRoom() {
   // ── wardrobe: Tops / Bottoms ───────────────────────────────────────────────────
   const wardrobe = useMemo<WItem[]>(() => {
     const list: WItem[] = [
-      { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: '/models/fitlab/items/gon_front.png', back: '/models/fitlab/items/gon_back.png', group: 'tops', kind: 'gon' },
-      { id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: '/models/fitlab/items/xin_front.jpg', back: '/models/fitlab/items/xin_back.jpg', group: 'bottoms', kind: 'xin' },
+      { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: GON.front, back: GON.back, group: 'tops', kind: 'gon' },
+      { id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: XIN.front, back: XIN.back, group: 'bottoms', kind: 'xin' },
       ...stored.map(s => ({ id: s.id, name: s.name, brand: s.brand, img: urls[s.id]?.front, back: urls[s.id]?.back, group: (s.kind === 'pants' ? 'bottoms' : 'tops') as WItem['group'],
         kind: (s.kind === 'pants' ? 'swap' : 'shirt') as WItem['kind'], chart: s.chart, file: { front: s.front, back: s.back } })),
       ...products.filter(p => p.id !== 'xin_check').map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, back: `${p.dir}/back.png`, group: 'bottoms' as const, kind: 'product' as const, dir: p.dir })),
@@ -197,7 +197,7 @@ export default function MyFittingRoom() {
     return () => { alive = false; };
   }, [products]);
   const pantsOf = (it: WItem | null): (PantsData & { dir: string }) | null =>
-    !it || !meta ? null : it.kind === 'xin' || it.kind === 'swap' ? (meta.jeans ? { ...meta.jeans, dir: it.kind === 'xin' ? XIN_GRID_DIR : GRID_DIR } : null) : it.kind === 'product' ? productData[it.id] ?? null : null;
+    !it || !meta ? null : it.kind === 'xin' || it.kind === 'swap' ? (meta.jeans ? { ...meta.jeans, dir: it.kind === 'xin' ? XIN_GRID_DIR : XIN.grid } : null) : it.kind === 'product' ? productData[it.id] ?? null : null;
 
   // ── the body on screen ─────────────────────────────────────────────────────────
   const simH = clamp(body.height, RANGE.height[0], RANGE.height[1]), simC = clamp(body.chest, RANGE.chest[0], RANGE.chest[1]);

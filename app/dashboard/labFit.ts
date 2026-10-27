@@ -6,8 +6,8 @@ import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, type GridMe
 import { jeansState, wornBody, type PantsData } from '../fit-lab/jeansFit';
 import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { auth } from '@/lib/firebase/config';
+import { GON, GRID_META_URL, PRODUCTS_INDEX_URL, XIN } from '../fit-lab/paths';
 
-export const GRID_DIR = '/models/fitlab/grid';
 export const RANGE = { height: [160, 190], chest: [92, 116] } as const;      // the simulated bodies
 const JEANS_SIZES = ['M', 'L', 'XL', '2XL'];
 
@@ -37,8 +37,8 @@ export function bodyFromProfile(a: Record<string, number | undefined> | null): L
 }
 
 export async function loadLab(): Promise<LabData> {
-  const meta: GridMeta = await fetch(`${GRID_DIR}/meta.json`).then(r => r.json());
-  const index: { id: string; name: string; brand: string; dir: string }[] = await fetch('/models/fitlab/products/index.json').then(r => r.json())
+  const meta: GridMeta = await fetch(GRID_META_URL).then(r => r.json());
+  const index: { id: string; name: string; brand: string; dir: string }[] = await fetch(PRODUCTS_INDEX_URL).then(r => r.json())
     .then((l: { id: string; name: string; brand: string; dir: string; hidden?: boolean }[]) => l.filter(p => !p.hidden)).catch(() => []);   // "hidden": not ready for shoppers yet
   const products = await Promise.all(index.filter(p => p.id !== 'xin_check').map(p =>
     fetch(`${p.dir}/product.json`).then(r => r.json()).then(j => ({ id: p.id, name: p.name, brand: p.brand, dir: p.dir,
@@ -104,9 +104,9 @@ export function labPieces(lab: LabData, b: LabBody, img: (id: string, blob: Blob
   const xin = meta.jeans ? { ...meta.jeans } as PantsData : null;
 
   const list: LabPiece[] = [
-    { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: '/models/fitlab/items/gon_front.png', ...tops() },
+    { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: GON.front, ...tops() },
     ...lab.stored.filter(s => s.kind === 'shirt').map(s => ({ id: s.id, name: s.name, brand: s.brand, img: img(s.id, s.front), ...tops() })),
-    ...(xin ? [{ id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: '/models/fitlab/items/xin_front.jpg', ...bottoms(xin, JEANS_SIZES) }] : []),
+    ...(xin ? [{ id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: XIN.front, ...bottoms(xin, JEANS_SIZES) }] : []),
     ...(xin ? lab.stored.filter(s => s.kind === 'pants').map(s => ({ id: s.id, name: s.name, brand: s.brand, img: img(s.id, s.front), ...bottoms(xin, JEANS_SIZES) })) : []),
     ...lab.products.map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, ...bottoms(p, Object.keys(p.sizes ?? {})) })),
   ];

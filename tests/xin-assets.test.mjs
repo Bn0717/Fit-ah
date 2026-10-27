@@ -18,7 +18,7 @@ function model(path){
 }
 for(const size of ['M','L','XL','2XL'])for(const variant of ['','drop/','belt/']){
  test(`Xin ${size} ${variant||'held'} surface preserves source fabric and strain`,()=>{
-  const original=model(`grid/${variant}jeans_${size}.glb.gz`),fixed=model(`xin-smooth/grid/${variant}jeans_${size}.glb.gz`);
+  const original=model(`brands/tnt_co/xin_jeans/grid/${variant}jeans_${size}.glb.gz`),fixed=model(`brands/tnt_co/xin_jeans/smooth/grid/${variant}jeans_${size}.glb.gz`);
   assert.equal(fixed.j.asset.extras.xin_surface_repair.waist_finish_cm,variant ? 8 : 0);
   assert.equal(fixed.primitives.length,original.primitives.length);
   for(let n=0;n<original.primitives.length;n++){
@@ -35,9 +35,9 @@ for(const size of ['M','L','XL','2XL'])for(const variant of ['','drop/','belt/']
 }
 for(const size of ['M','L','XL','2XL','2XLbelt']){
  test(`Xin ${size} catwalk keeps frame timing and stable source texture identity`,()=>{
-  const fixed=model(`xin-smooth/walk/walk_jeans_${size}.glb.gz`),seen=new Map();
-  const info=JSON.parse(readFileSync(new URL(`xin-smooth/walk/walk_jeans_${size}.json`,root)));
-  const original=JSON.parse(readFileSync(new URL(`walk/walk_jeans_${size}.json`,root)));
+  const fixed=model(`brands/tnt_co/xin_jeans/smooth/walk/walk_jeans_${size}.glb.gz`),seen=new Map();
+  const info=JSON.parse(readFileSync(new URL(`brands/tnt_co/xin_jeans/smooth/walk/walk_jeans_${size}.json`,root)));
+  const original=JSON.parse(readFileSync(new URL(`brands/tnt_co/xin_jeans/walk/walk_jeans_${size}.json`,root)));
   for(const k of ['fps','first','frames','n','min','scale','strain_offset','gap_offset','packed'])assert.deepEqual(info[k],original[k]);
   for(const p of fixed.primitives){
    const ids=new Float32Array(Uint8Array.from(fixed.bytes(p.attributes._VID)).buffer),uv=new Float32Array(Uint8Array.from(fixed.bytes(p.attributes.TEXCOORD_0)).buffer);

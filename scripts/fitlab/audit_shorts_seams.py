@@ -8,7 +8,7 @@ sys.path.insert(0,str(ROOT/'blender'));sys.path.insert(0,str(ROOT/'scripts/fitla
 import garment,garment_pants as gp
 from directional_strain import directional_strain
 from seam_waist import local_waist_profile
-product=ROOT/'blender/products/ns_matrix_white'
+product=ROOT/'blender/products/tnt_co/ns_matrix_white'
 os.environ['FITAH_PANTS_SPEC']=str(product/'build/spec.json')
 cfg=json.load(open(product/'grid/cfg_2XL.json')); spec=gp.size_spec('2XL');panels,seams,info=gp.build_pants_pattern(spec);counts=garment.edge_counts(panels,seams,cfg.get('spacing',1.2))
 flat=[];faces=[];edge={};depth=[]

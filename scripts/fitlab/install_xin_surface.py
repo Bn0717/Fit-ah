@@ -6,7 +6,7 @@ import gzip,hashlib,json,shutil,struct
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 STAGE=Path('/private/tmp/xin-surface/stage')
-DEST=ROOT/'public/models/fitlab/xin-smooth'
+DEST=ROOT/'public/models/fitlab/brands/tnt_co/xin_jeans/smooth'
 expected={f'grid/{prefix}jeans_{size}.glb.gz' for size in ['M','L','XL','2XL'] for prefix in ['','drop/','belt/']}
 expected|={f'walk/walk_jeans_{size}.{suffix}' for size in ['M','L','XL','2XL','2XLbelt'] for suffix in ['glb.gz','bin.gz','json']}
 actual={str(p.relative_to(STAGE)) for p in STAGE.rglob('*') if p.is_file()}

@@ -10,9 +10,9 @@ const engineUrl=url(compile(fs.readFileSync(path.join(root,'app/fit-lab/engine.t
 const engine=await import(engineUrl);
 const sizingCode=compile(fs.readFileSync(path.join(root,'app/fit-lab/jeansFit.ts'),'utf8')).replaceAll("'./engine'",JSON.stringify(engineUrl)).replaceAll('"./engine"',JSON.stringify(engineUrl));
 const {jeansState}=await import(url(sizingCode));
-const meta=read('public/models/fitlab/grid/meta.json');
+const meta=read('public/models/fitlab/bodies/grid/meta.json');
 const sources=[{id:'xin',pants:meta.jeans}];
-for(const product of read('public/models/fitlab/products/index.json').filter(p=>!p.hidden)){
+for(const product of read('public/models/fitlab/brands/index.json').filter(p=>!p.hidden)){
  const p=read('public'+product.dir+'/product.json');
  sources.push({id:p.id,pants:{name:p.name,sizes:p.belt,belt:p.belt,drop:p.drop,elasticStretch:p.elastic_stretch}});
 }

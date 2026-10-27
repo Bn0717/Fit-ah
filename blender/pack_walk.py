@@ -1,6 +1,6 @@
 """Losslessly pack and verify catwalk integer tracks; run with Blender's Python.
 
-blender -b --python blender/pack_walk.py -- public/models/fitlab/walk
+blender -b --python blender/pack_walk.py -- public/models/fitlab/brands/tnt_co/gon_tee/walk
 Original .bin files stay untouched. Re-running is deterministic.
 """
 import gzip

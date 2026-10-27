@@ -12,8 +12,8 @@ import type { Result } from './colourway';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
 import { xinWalkAssets } from './xinAssets';
+import { BODY_GRID_DIR, BODY_WALK_DIR, GON, XIN } from './paths';
 
-const GRID_DIR = '/models/fitlab/grid';
 
 export interface FitViewerProps {
   meta: GridMeta;
@@ -85,7 +85,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       // gen: which scene this is; a shirt / jeans download that finishes for an older scene is dropped (it would
       // otherwise land in this scene untracked: never recoloured, shaped or hidden)
       Object.assign(S, { THREE, scene, loader, gen: (S.gen ?? 0) + 1, bodyMeshes: [], shirts: {} as Record<string, unknown>, jeans: {} as Record<string, unknown> });
-      loader.load(`${GRID_DIR}/body.glb`,
+      loader.load(`${BODY_GRID_DIR}/body.glb`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (g: any) => {
           if (cancelled) return;
@@ -154,7 +154,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     S.shirts[size] = 'loading';
     setShirtProg({ size, pct: 0 });
     const gen = S.gen;
-    loadPacked(S.THREE, S.loader, `${GRID_DIR}/shirt_${size}.glb.gz`,
+    loadPacked(S.THREE, S.loader, `${GON.grid}/shirt_${size}.glb.gz`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (g: any) => {
         if (S.gen !== gen) return;               // a download that finishes after the scene was rebuilt (page reload / live edit): its scene is gone, drop it
@@ -191,7 +191,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     if (!W.added) { S.scene.add(W.group); W.added = true; }
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
     const jz = jOn && !jeans?.productWalk && jeans!.belt && meta.walk?.jeans?.[jeans!.size + 'belt'] ? jeans!.size + 'belt' : jeans?.size;
-    const originalWalk = selectWalk(meta, size, jOn ? jz : null, jeans?.walk !== false, jeans?.productWalk);
+    const originalWalk = selectWalk(meta, size, jOn ? jz : null, jeans?.walk !== false, jeans?.productWalk, { shirt: GON.walk, pants: XIN.walk });
     const selected = xinWalkAssets(originalWalk, !!jeans?.builtinXin);
     const { js, sk } = selected;
     W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
@@ -207,7 +207,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     };
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
-    const dir = meta.walk!.dir;
+    const dir = BODY_WALK_DIR;   // the shared walking body (garment walks come from selectWalk)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
       if (packed) loadPacked(THREE, S.loader, u + '.gz', res, undefined, rej);

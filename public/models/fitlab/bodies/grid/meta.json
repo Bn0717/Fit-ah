@@ -17446,11 +17446,11 @@
   }
  },
  "videos": {
-  "beauty": "/models/fitlab/walk_sizes.mp4",
-  "fit": "/models/fitlab/walk_sizes_fit.mp4"
+  "beauty": "/models/fitlab/brands/tnt_co/gon_tee/videos/walk_sizes.mp4",
+  "fit": "/models/fitlab/brands/tnt_co/gon_tee/videos/walk_sizes_fit.mp4"
  },
  "walk": {
-  "dir": "/models/fitlab/walk",
+  "dir": "/models/fitlab/brands/tnt_co/gon_tee/walk",
   "body": "h175_c101",
   "sizes": {
    "S": {

@@ -21,7 +21,7 @@ assert np.array_equal(fixed[0],goals[0]);assert np.array_equal(goals[1],[.201,0,
 print('PASS: local band depth, shared side targets, centre-back rise, pin expansion, transitive joins, unchanged inputs')
 import os
 root=Path(__file__).resolve().parents[1];sys.path.insert(0,str(root/'blender'))
-os.environ['FITAH_PANTS_SPEC']=str(root/'blender/products/ns_matrix_white/build/spec.json')
+os.environ['FITAH_PANTS_SPEC']=str(root/'blender/products/tnt_co/ns_matrix_white/build/spec.json')
 import garment,garment_pants as gp
 for size in ['S','M','L','XL','2XL']:
     panels,seams,_=gp.build_pants_pattern(gp.size_spec(size));counts=garment.edge_counts(panels,seams,1.2)

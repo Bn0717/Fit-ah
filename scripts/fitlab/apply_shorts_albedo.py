@@ -6,7 +6,7 @@ import gzip, json, os, shutil, struct
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BACKUP = Path('/private/tmp/fitah-shorts-albedo-backup')
-PRODUCT = 'public/models/fitlab/products/ns_matrix_white'
+PRODUCT = 'public/models/fitlab/brands/tnt_co/ns_matrix_white'
 def apply_albedo(path, *, source_uv_fixed=False):
     path = Path(path).resolve()
     if 'ns_matrix_white' not in path.parts:
@@ -22,7 +22,7 @@ def apply_albedo(path, *, source_uv_fixed=False):
         side='front' if 'front' in name else 'back' if 'back' in name else None
         if not side: raise ValueError(f'Unexpected texture: {name}')
         image.pop('bufferView',None)
-        image['uri']=(f'../../products/ns_matrix_white/albedo_{side}_v1.png' if path.parent.name == 'ns_matrix_white' and path.parent.parent.name == 'walk' else f'../albedo_{side}_v1.png')
+        image['uri']=f'../albedo_{side}_v1.png'   # belt/ and walk/ both sit directly inside the product folder
         image['mimeType']='image/png'
     model['asset'].setdefault('extras',{})['albedo_version']=1
     if source_uv_fixed:
@@ -31,7 +31,7 @@ def apply_albedo(path, *, source_uv_fixed=False):
     encoded+=b' '*(-len(encoded)%4)
     result=struct.pack('<III',0x46546c67,2,28+len(encoded)+len(binary))+struct.pack('<II',len(encoded),0x4e4f534a)+encoded+struct.pack('<II',len(binary),0x004e4942)+binary
     assert result[28+len(encoded):]==binary
-    relative=path.relative_to(ROOT) if path.is_relative_to(ROOT) else Path('staged')/('walk' if path.parent.parent.name == 'walk' else 'static')/path.name
+    relative=path.relative_to(ROOT) if path.is_relative_to(ROOT) else Path('staged')/('walk' if path.parent.name == 'walk' else 'static')/path.name
     backup=BACKUP/relative
     backup.parent.mkdir(parents=True,exist_ok=True)
     if not backup.exists(): shutil.copy2(path,backup)
@@ -41,6 +41,6 @@ def apply_albedo(path, *, source_uv_fixed=False):
 
 if __name__ == '__main__':
     paths = list((ROOT/PRODUCT/'belt').glob('jeans_*.glb*'))
-    paths += list((ROOT/'public/models/fitlab/walk/ns_matrix_white').glob('walk_jeans_*.glb*'))
+    paths += list((ROOT/'public/models/fitlab/brands/tnt_co/ns_matrix_white/walk').glob('walk_jeans_*.glb*'))
     report = [apply_albedo(path) for path in sorted(paths)]
     Path('/private/tmp/shorts-albedo-report.json').write_text(json.dumps(report,indent=2))

@@ -57,20 +57,23 @@ next-env.d.ts
 /Adobe Express*
 
 # Fit Lab 3D files the website does not load (it loads the packed .glb.gz: blender/pack_web.sh)
+# Layout: bodies/ = shared by every brand; brands/<brand>/<style>/ = that garment's files
 /public/models/fitlab/exact/
-/public/models/fitlab/body_M_shirt_M.*
-/public/models/fitlab/walk_sizes*.mp4
+/public/models/fitlab/brands/tnt_co/gon_tee/prototype/
+/public/models/fitlab/brands/tnt_co/gon_tee/videos/
 # Catwalk playback loads losslessly packed .bin.gz; retain originals locally.
-/public/models/fitlab/walk/*.bin
-/public/models/fitlab/grid/**/*.glb
-!/public/models/fitlab/grid/body.glb
-/public/models/fitlab/grid/jeans_*.glb.gz
-/public/models/fitlab/products/*/belt/*.glb
-/public/models/fitlab/products/*/drop/*.glb
+/public/models/fitlab/bodies/walk/*.bin
+/public/models/fitlab/brands/tnt_co/gon_tee/walk/*.bin
+/public/models/fitlab/brands/tnt_co/xin_jeans/walk/*.bin
+/public/models/fitlab/brands/tnt_co/gon_tee/grid/*.glb
+/public/models/fitlab/brands/tnt_co/xin_jeans/grid/**/*.glb
+/public/models/fitlab/brands/tnt_co/xin_jeans/grid/jeans_*.glb.gz
+/public/models/fitlab/brands/*/*/belt/*.glb
+/public/models/fitlab/brands/*/*/drop/*.glb
 # hidden products (not shown on the site yet)
-/public/models/fitlab/products/xin_check/
-/public/models/fitlab/products/stallion_brown/
+/public/models/fitlab/brands/tnt_co/xin_jeans/xin_check/
+/public/models/fitlab/brands/tnt_co/stallion_brown/
 
 # Product catwalks load packed files, with raw exports retained locally.
-/public/models/fitlab/walk/*/*.bin
-/public/models/fitlab/walk/*/*.glb
+/public/models/fitlab/brands/*/*/walk/*.bin
+/public/models/fitlab/brands/tnt_co/ns_matrix_white/walk/*.glb

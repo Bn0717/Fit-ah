@@ -3,7 +3,7 @@
  "name": "NS Matrix Shorts (White, BCL ver.)",
  "brand": "TNT CO",
  "fabric": "poly_mesh",
- "dir": "/models/fitlab/products/ns_matrix_white",
+ "dir": "/models/fitlab/brands/tnt_co/ns_matrix_white",
  "source": {
   "S": {
    "waist": "fabric width (0.95 x hip), elastic gathers it",
@@ -1564,7 +1564,7 @@
  },
  "drop": {},
  "walk": {
-  "dir": "/models/fitlab/walk/ns_matrix_white",
+  "dir": "/models/fitlab/brands/tnt_co/ns_matrix_white/walk",
   "sizes": [
    "S",
    "M",
