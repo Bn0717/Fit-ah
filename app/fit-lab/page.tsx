@@ -28,8 +28,8 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
-import { applySkinTone, isSkinTone, hexToLinear } from './skinTone';
-import { fabricFor } from './displayColour';
+import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -151,15 +151,8 @@ function FitLab() {
   const sizesOfTop = (it?: LabItem | null) => (topProductOf(it)?.sizes ?? SIZES) as Size[];
   const topSizes = sizesOfTop(items.find(i => i.id === activeId));
   const shirtKey = `${topProduct?.id ?? 'gon'}:${size}`;              // loaded shirt files: one per product and size
-  // colour of a shirt product (same cut, same fit: only the fabric colour changes), remembered in this browser
-  const [topColour, setTopColour] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('fitlab_top_colour') || '{}'); } catch { return {}; }
-  });
-  const pickTopColour = (id: string, hex: string) => setTopColour(c => {
-    const n = { ...c, [id]: hex };
-    try { localStorage.setItem('fitlab_top_colour', JSON.stringify(n)); } catch { /* storage blocked */ }
-    return n;
-  });
+  // colour of a shirt product (same cut, same fit), remembered in this browser and shared with My fitting room
+  const { chosen: topColour, pick: pickTopColour } = useTopColours();
   // shirt products into the wardrobe (built-in tops next to the Gon tee); hidden ones stay out until checked
   useEffect(() => {
     let stop = false;
@@ -303,7 +296,7 @@ function FitLab() {
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -451,7 +444,7 @@ function FitLab() {
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;
@@ -626,19 +619,8 @@ function FitLab() {
   // ── shirt product colour: plain fabrics are recoloured from the simulated texture's colour ───────────
   useEffect(() => {
     const grp = sceneRef.current.shirts?.[shirtKey];
-    if (!grp || typeof grp === 'string' || !topProduct?.base_hex) return;
-    // the chosen colour (default: the swatch closest to the built colour), turned into the fabric colour that SHOWS as
-    // that swatch under the fitting room's lights and tone mapping (displayColour.ts); the texture is the built colour
-    const near = (h: string) => { const x = hexToLinear(h), y = hexToLinear(topProduct.base_hex!); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
-    const want = topColour[topProduct.id] ?? ([...(topProduct.colours ?? [])].sort((x, y) => near(x.hex) - near(y.hex))[0]?.hex ?? topProduct.base_hex);
-    const b = hexToLinear(topProduct.base_hex), t = fabricFor(hexToLinear(want));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const p of grp.userData.parts as any[]) {
-      p.fabric.color.setRGB(t[0] / b[0], t[1] / b[1], t[2] / b[2]);
-      // the cotton sheen follows the fabric colour too (a white sheen washes every colour out to pastel)
-      if (p.fabric.sheenColor) p.fabric.sheenColor.setRGB(0.9 * t[0], 0.9 * t[1], 0.9 * t[2]);
-      p.fabric.needsUpdate = true;
-    }
+    if (!grp || typeof grp === 'string' || !topProduct) return;
+    applyTopColour(grp.userData.parts, topProduct, currentHex(topProduct, topColour));
   }, [shirtKey, topColour, topProduct, ready]);
 
   // ── apply sliders: morph weights on body + shirt, blended fit map ───────────────
@@ -1367,23 +1349,7 @@ function FitLab() {
                       style={shirtOn && size === s ? { background: C.navy, color: '#fff' } : { background: C.cream }}>{s}</button>
                   ))}
                 </div>
-                {topProduct && (topProduct.colours?.length ?? 0) > 1 && topProduct.base_hex && (() => {
-                  const near = (h: string) => { const a = hexToLinear(h), b = hexToLinear(topProduct.base_hex!); return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); };
-                  const cur = topColour[topProduct.id] ?? [...topProduct.colours!].sort((x, y) => near(x.hex) - near(y.hex))[0].hex;
-                  const name = topProduct.colours!.find(c => c.hex === cur)?.name ?? '';
-                  return (
-                    <div className="mt-3">
-                      <div className="mb-1.5 text-xs" style={{ color: C.navy }}>Colour: <span className="font-semibold">{name}</span> <span style={{ opacity: 0.6 }}>· same fit in every colour</span></div>
-                      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Colour">
-                        {topProduct.colours!.map(c => (
-                          <button key={c.hex + c.name} role="radio" aria-checked={c.hex === cur} aria-label={c.name} title={c.name}
-                            onClick={() => pickTopColour(topProduct.id, c.hex)} className="h-7 w-7 rounded-full transition"
-                            style={{ background: c.hex, boxShadow: c.hex === cur ? `0 0 0 2px #fff, 0 0 0 4px ${C.navy}` : 'inset 0 0 0 1px rgba(0,0,0,0.15)' }} />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
+                {topProduct && <div className="mt-3"><ColourSwatches product={topProduct} chosen={topColour} onPick={pickTopColour} /></div>}
                 {meta?.walk && <div className="mt-2 text-xs" style={{ opacity: 0.6 }}>
                   {SIZES.some(s => !meta.walk!.sizes[s]) && <> · still simulating: {SIZES.filter(s => !meta.walk!.sizes[s]).join(', ')}</>}
                 </div>}
