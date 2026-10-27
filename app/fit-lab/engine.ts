@@ -111,6 +111,14 @@ export type Variant = typeof VARIANTS[number];
 
 export const key = (h: number, c: number) => `h${h}_c${c}`;
 
+// the simulated body range (height and chest, cm): every page clamps and labels with this, so adding grid bodies
+// (blender/build_men_range.sh) widens the sliders everywhere without code changes
+export const DEFAULT_RANGE = { height: [160, 190], chest: [92, 116] } as const;
+export function gridRange(meta: Pick<GridMeta, 'heights' | 'chests'> | null | undefined): { height: [number, number]; chest: [number, number] } {
+  if (!meta?.heights?.length || !meta?.chests?.length) return { height: [...DEFAULT_RANGE.height], chest: [...DEFAULT_RANGE.chest] };
+  return { height: [meta.heights[0], meta.heights[meta.heights.length - 1]], chest: [meta.chests[0], meta.chests[meta.chests.length - 1]] };
+}
+
 // bilinear weights of the 4 grid points around (h, c)
 export function gridWeights(meta: GridMeta, h: number, c: number): Record<string, number> {
   const seg = (axis: number[], v: number) => {
@@ -126,6 +134,9 @@ export function gridWeights(meta: GridMeta, h: number, c: number): Record<string
   };
   add(a.i, b.i, (1 - a.t) * (1 - b.t)); add(a.i + 1, b.i, a.t * (1 - b.t));
   add(a.i, b.i + 1, (1 - a.t) * b.t);   add(a.i + 1, b.i + 1, a.t * b.t);
+  // only the bodies that contribute: a corner with zero weight changes nothing, and a shirt simulated on some bodies
+  // only (a new product) must not count as "not simulated" because of a corner it does not use
+  for (const k of Object.keys(w)) if (w[k] < 1e-9) delete w[k];
   return w;
 }
 
@@ -375,7 +386,27 @@ export function shirtShapeOk(meta: GridMeta, h: number, c: number) {
   const g = meta.shirt_var_grid;
   if (!g) return false;
   const ks = Object.entries(gridWeights(meta, h, c)).filter(([, v]) => v > 1e-6).map(([k]) => k);
-  return SIZES.every(s => ks.every(k => VARIANTS.every(v => g[s]?.[k]?.[v])));
+  // every size of this shirt (the TNT tee's S-XL, or a shirt product's own sizes)
+  return (Object.keys(meta.shirt) as Size[]).every(s => ks.every(k => VARIANTS.every(v => g[s]?.[k]?.[v])));
+}
+
+// A shirt product (blender/build_shirt_meta.py -> public/models/fitlab/brands/<brand>/<style>/product.json):
+// its own sizes, chart and simulated measurements, in the same layout as the TNT tee's part of meta.json.
+export interface ShirtProduct {
+  id: string; name: string; brand: string; kind: 'top'; dir: string; sizes: string[];
+  chart: Record<string, { chest: number; shoulder: number; length: number; sleeve: number }>;
+  shirt: Record<string, Record<string, ShirtNums>>;
+  shirt_var_grid?: Record<string, Record<string, Partial<Record<Variant, ShirtNums>>>>;
+  intended_fit?: 'Regular' | 'Oversized' | 'Slim' | null; fabric?: string;
+  colours?: { hex: string; name: string }[];
+  simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
+}
+// The body grid (meta.json) with a shirt product's numbers in place of the TNT tee's, so every fit function
+// (fitNumbers, shirtShapeOk, ...) works for that shirt unchanged.
+export function withShirt(meta: GridMeta, top: ShirtProduct | null | undefined): GridMeta {
+  if (!top) return meta;
+  return { ...meta, chart: top.chart as GridMeta['chart'], shirt: top.shirt as GridMeta['shirt'], shirt_var: undefined,
+    shirt_var_grid: top.shirt_var_grid as GridMeta['shirt_var_grid'] };
 }
 
 export function solveBody(meta: GridMeta, h: number, c: number, shoulder: number | null, waist: number | null, belly = 0) {
@@ -401,7 +432,11 @@ export function solveBody(meta: GridMeta, h: number, c: number, shoulder: number
     range.shoulder = pick(shoulder, natural.shoulder, 'sh44', 'sh48', 'shoulder');
     range.waist = pick(waist, natural.waist, 'w70', 'w86', 'waist');
     const dChest = VARIANTS.reduce((s, v) => s + vw[v] * d(v, 'chest'), 0);
-    w = gridWeights(meta, h, c - dChest);
+    // the shape versions change the chest a little: re-centre on the grid, but never onto bodies whose shape
+    // versions are not calibrated yet (new grid rows, e.g. chest 84 / 124, before run_shape_drapes.sh)
+    const next = gridWeights(meta, h, c - dChest);
+    if (!Object.keys(next).every(k => sh![k] && meta.body[k].shoulder !== undefined)) break;
+    w = next;
   }
   return { w, vw, range, natural, ok };
 }

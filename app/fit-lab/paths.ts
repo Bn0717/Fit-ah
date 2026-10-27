@@ -13,6 +13,7 @@ export const BODY_GRID_DIR = `${FITLAB}/bodies/grid`;   // body.glb, meta.json (
 export const BODY_WALK_DIR = `${FITLAB}/bodies/walk`;   // walk_body.glb / .json / .bin.gz
 export const GRID_META_URL = `${BODY_GRID_DIR}/meta.json`;
 export const PRODUCTS_INDEX_URL = `${FITLAB}/brands/index.json`;
+export const TOPS_INDEX_URL = `${FITLAB}/brands/tops.json`;         // shirt products shown on the site (blender/new_shirt.sh)
 
 // TNT CO
 const TNT = `${FITLAB}/brands/tnt_co`;

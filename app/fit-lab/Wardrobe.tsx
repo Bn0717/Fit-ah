@@ -26,6 +26,7 @@ export interface LabItem {
   tex?: { front: Result; back: Result };            // aligned photos (not set for the original Gon Tee)
   pantsTex?: { front: HTMLCanvasElement; back: HTMLCanvasElement };   // pants photo swap, drawn into the Xin texture frame
   chart?: SizeChartData;                            // its own size chart (added items; none = the simulated chart)
+  topDir?: string;                                  // a shirt product (brands/tops.json): its own simulated sizes in <topDir>
 }
 export type SizeFit = Record<Size, { verdict: string; color: string; ease: number } | null>;
 
@@ -389,6 +390,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
   body: { height: number; chest: number; waist: number; shoulder: number | null };
   onCheckFit: (it: LabItem, size: Size) => void;
 } & SizeRecordProps) {
+  const SIZES = (Object.keys(chart).length ? Object.keys(chart) : ['S', 'M', 'L', 'XL']) as Size[];   // this item's sizes
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [viewSize, setViewSize] = useState<Size>(size);
