@@ -31,10 +31,11 @@ export interface FitViewerProps {
   onWalking: (on: boolean) => void; onWalkStatus: (msg: string | null) => void;
   background?: string; className?: string; style?: React.CSSProperties;
   skinTone?: SkinToneId | null;               // Monk Skin Tone Scale id; null = the model's own skin
+  shirtDir?: string;                          // a shirt product's grid folder (default: the TNT Gon tee)
 }
 
 export default function FitViewer({ meta, height, chest, shoulder, waist, size, mode, walking, photos, showShirt = true,
-  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style, skinTone = null }: FitViewerProps) {
+  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style, skinTone = null, shirtDir = GON.grid }: FitViewerProps) {
   const jOn = !!jeans && !jeans.hidden;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,19 +154,21 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       };
     });
     return () => { cancelled = true; cleanup(); };
-  }, [meta]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.body]);   // the body grid only: switching shirts (withShirt gives a new meta) must not rebuild the scene
 
   // ── load the selected size's shirt on demand ───────────────────────────────────
   useEffect(() => {
     const S = sceneRef.current;
     if (!S.loader || !meta) return;
-    S.shirtWant = size;                         // read by downloads that finish later (the size wanted NOW)
-    for (const [sz, grp] of Object.entries(S.shirts)) (grp as { visible: boolean }).visible = sz === size && showShirt;
-    if (S.shirts[size]) { setReady(r => r + 1); return; }
-    S.shirts[size] = 'loading';
+    const key = `${shirtDir}:${size}`;          // loaded shirt files: one per shirt and size
+    S.shirtWant = key;                          // read by downloads that finish later (the shirt + size wanted NOW)
+    for (const [sz, grp] of Object.entries(S.shirts)) (grp as { visible: boolean }).visible = sz === key && showShirt;
+    if (S.shirts[key]) { setReady(r => r + 1); return; }
+    S.shirts[key] = 'loading';
     setShirtProg({ size, pct: 0 });
     const gen = S.gen;
-    loadPacked(S.THREE, S.loader, `${GON.grid}/shirt_${size}.glb.gz`,
+    loadPacked(S.THREE, S.loader, `${shirtDir}/shirt_${size}.glb.gz`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (g: any) => {
         if (S.gen !== gen) return;               // a download that finishes after the scene was rebuilt (page reload / live edit): its scene is gone, drop it
@@ -184,13 +187,13 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
           o.material = fabric; o.userData.fabric = fabric; parts.push({ mesh: o, fabric, fit });
         });
         g.scene.userData.parts = parts;
-        S.scene.add(g.scene); S.shirts[size] = g.scene; applyColourway(S);
+        S.scene.add(g.scene); S.shirts[key] = g.scene; applyColourway(S);
         for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = sz === S.shirtWant && showShirt && !S.walkOn;
         setReady(r => r + 1); setShirtProg(p => p?.size === size ? null : p);
       }, e => { if (e.total) setShirtProg(p => p?.size === size ? { size, pct: Math.round(100 * e.loaded / e.total) } : p); },
       () => { setShirtProg(null); setError(`Could not load size ${size}.`); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size, meta, loading]);
+  }, [size, meta, loading, shirtDir]);
 
   // ── catwalk: load the baked walk (body once, shirt per size) and switch the scene over ───
   useEffect(() => {
@@ -210,7 +213,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
       if (S.bodyRoot) S.bodyRoot.visible = !on;
-      for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !on && sz === size && showShirt;
+      for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !on && sz === `${shirtDir}:${size}` && showShirt;
       if (on) for (const g of Object.values(S.jeans || {})) if (g && typeof g !== 'string') (g as { visible: boolean }).visible = false;
       for (const [sz, sh] of Object.entries(W.shirts)) (sh as { root: { visible: boolean } }).root.visible = on && sz === sk && showShirt;
       for (const [sz, jj] of Object.entries(W.jeans)) (jj as { root: { visible: boolean } }).root.visible = on && sz === js;
@@ -374,7 +377,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       }
     };
     S.bodyMeshes?.forEach((m: unknown) => setMorphs(m));
-    const grp = S.shirts?.[size];
+    const grp = S.shirts?.[`${shirtDir}:${size}`];
     const jg = jOn && jeans ? S.jeans?.[jeans.url] : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shirtParts: any[] = grp && typeof grp !== 'string' ? grp.userData.parts : [];
@@ -402,13 +405,13 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     }
     applyStaticLayers(shirtParts, jeansParts, showShirt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, height, chest, shoulder, waist, belly, size, mode, ready, jeans?.url, jeans?.elastic?.extension, jeans?.elastic?.limit, jOn, showShirt]);
+  }, [meta, height, chest, shoulder, waist, belly, size, shirtDir, mode, ready, jeans?.url, jeans?.elastic?.extension, jeans?.elastic?.limit, jOn, showShirt]);
 
 
   useEffect(() => {
     const S = sceneRef.current;
-    for (const [sz, grp] of Object.entries(S.shirts || {})) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !S.walk?.active && sz === size && showShirt;
-  }, [showShirt, size, ready]);
+    for (const [sz, grp] of Object.entries(S.shirts || {})) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !S.walk?.active && sz === `${shirtDir}:${size}` && showShirt;
+  }, [showShirt, size, shirtDir, ready]);
 
   // ── colourway photos -> textures on every loaded shirt (grid sizes and catwalk) ──────────
   useEffect(() => {

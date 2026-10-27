@@ -22,8 +22,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
 import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
-import { GRID_META_URL, PRODUCTS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
-import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, FIT_LEGEND, type Size, type ViewMode, type GridMeta } from '../fit-lab/engine';
+import { GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
+import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, withShirt, FIT_LEGEND, type Size, type ViewMode, type GridMeta, type ShirtProduct } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
 import { jeansState, wornBody, type PantsData, type JeansState } from '../fit-lab/jeansFit';
@@ -46,7 +46,7 @@ type Body = { height: number; chest: number; waist: number; shoulder: number; be
 type Photos = { front: Result; back: Result };
 type WItem = {
   id: string; name: string; brand: string; img: string; back?: string; group: 'tops' | 'bottoms';
-  kind: 'gon' | 'shirt' | 'xin' | 'swap' | 'product' | 'unsim';
+  kind: 'gon' | 'shirt' | 'xin' | 'swap' | 'product' | 'unsim' | 'top';   // top = a shirt product (brands/tops.json)
   file?: { front: Blob; back: Blob };     // pants photo swap source photos
   dir?: string;                           // product folder
   chart?: SizeChartData;
@@ -103,8 +103,10 @@ export default function MyFittingRoom() {
   };
 
   // ── Fit Lab data ───────────────────────────────────────────────────────────────
-  const [meta, setMeta] = useState<GridMeta | null>(null);
-  const RANGE = gridRange(meta);     // the simulated bodies (grows when grid bodies are added)
+  const [baseMeta, setMeta] = useState<GridMeta | null>(null);      // the body grid (+ the TNT Gon tee's numbers)
+  const RANGE = gridRange(baseMeta);     // the simulated bodies (grows when grid bodies are added)
+  // shirt products (brands/tops.json): their own sizes and simulated numbers, put over the body grid when worn
+  const [topProducts, setTopProducts] = useState<Record<string, ShirtProduct>>({});
   const [stored, setStored] = useState<{ id: string; name: string; brand: string; front: Blob; back: Blob; kind: 'shirt' | 'pants'; chart?: SizeChartData }[]>([]);
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -112,6 +114,10 @@ export default function MyFittingRoom() {
     fetch(GRID_META_URL).then(r => r.json()).then(setMeta);
     fetch(PRODUCTS_INDEX_URL).then(r => r.json())
       .then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => setProducts([]));   // "hidden": not ready for shoppers yet
+    fetch(TOPS_INDEX_URL).then(r => r.ok ? r.json() : []).then(async (l: { id: string; dir: string; hidden?: boolean }[]) => {
+      const loaded = await Promise.all(l.filter(p => !p.hidden).map(p => fetch(`${p.dir}/product.json`).then(r => r.ok ? r.json() as Promise<ShirtProduct> : null).catch(() => null)));
+      setTopProducts(Object.fromEntries(loaded.filter((p): p is ShirtProduct => !!p).map(p => [p.id, p])));
+    }).catch(() => {});
     try { setHidden(JSON.parse(localStorage.getItem('fitlab_hidden') || '[]')); } catch { /* storage blocked */ }
   }, []);
   useEffect(() => {
@@ -133,9 +139,10 @@ export default function MyFittingRoom() {
       ...stored.map(s => ({ id: s.id, name: s.name, brand: s.brand, img: urls[s.id]?.front, back: urls[s.id]?.back, group: (s.kind === 'pants' ? 'bottoms' : 'tops') as WItem['group'],
         kind: (s.kind === 'pants' ? 'swap' : 'shirt') as WItem['kind'], chart: s.chart, file: { front: s.front, back: s.back } })),
       ...products.filter(p => p.id !== 'xin_check').map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, back: `${p.dir}/back.png`, group: 'bottoms' as const, kind: 'product' as const, dir: p.dir })),
+      ...Object.values(topProducts).map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, back: `${p.dir}/back.png`, group: 'tops' as const, kind: 'top' as const, dir: p.dir })),
     ];
     return list.filter(i => !hidden.includes(i.id) && i.img);
-  }, [stored, urls, products, hidden]);
+  }, [stored, urls, products, hidden, topProducts]);
   const byId = useCallback((id: string | undefined) => wardrobe.find(w => w.id === id) ?? null, [wardrobe]);
 
   // ── what is being worn ─────────────────────────────────────────────────────────
@@ -147,6 +154,10 @@ export default function MyFittingRoom() {
   const [walkStatus, setWalkStatus] = useState<string | null>(null);
   const preWalkBody = useRef<Body | null>(null);
   const topItem = byId(top?.id), bottomItem = byId(bottom?.id);
+  const topProductOf = (it: WItem | null | undefined) => (it?.kind === 'top' && topProducts[it.id]) || null;
+  const sizesOf = (it: WItem | null | undefined) => (topProductOf(it)?.sizes ?? SIZES) as Size[];
+  // the body grid with the worn shirt's numbers (a shirt product's, or the Gon tee's): every fit below reads `meta`
+  const meta = useMemo(() => baseMeta && withShirt(baseMeta, topProductOf(topItem)), [baseMeta, topItem, topProducts]);
 
   // shirt photos lined up with the 3D pattern (once per item)
   const cwRefs = useRef<Record<'front' | 'back', Ref> | null>(null);
@@ -220,7 +231,7 @@ export default function MyFittingRoom() {
     : { waist: body.waist, belly: 0, lock: false, snap: false };
   const simW = wb.waist, simB = 0; // Natural belly only; simW null means natural waist.
   const walkCentre = meta?.body[meta.centre];
-  const walkAvailable = !!meta?.walk && !!walkCentre;
+  const walkAvailable = !!meta?.walk && !!walkCentre && topItem?.kind !== 'top';   // shirt products: no catwalk simulated yet
   useEffect(() => { if (walking && !walkAvailable) setWalking(false); }, [walking, walkAvailable]);
   const toggleCatwalk = () => {
     if (walking) {
@@ -248,18 +259,28 @@ export default function MyFittingRoom() {
   ].filter(Boolean) as string[];
 
   // ── fit of every size ──────────────────────────────────────────────────────────
-  const topFits = useMemo(() => {
-    if (!meta || !sb) return {} as Record<string, { label: string; tier: string; ease: number; color: string } | null>;
-    return Object.fromEntries(SIZES.map(sz => {
-      const f = fitNumbers(meta, sb, sz);
+  // fitsFor: every size of a top on this body (a shirt product with its own numbers, or the Gon tee's)
+  const fitsFor = (it: WItem | null | undefined) => {
+    const m = baseMeta && withShirt(baseMeta, topProductOf(it));
+    if (!m || !sb) return {} as Record<string, { label: string; tier: string; ease: number; color: string } | null>;
+    return Object.fromEntries(sizesOf(it).map(sz => {
+      const f = fitNumbers(m, sb, sz);
       if (!f.shirt) return [sz, null];
       const e = f.shirt.chest - f.body.chest, t = fitTier(e, f.body.chest);
       return [sz, { label: t.label, tier: t.tier, ease: e, color: toneOfTier(t.tier) }];
-    }));
-  }, [meta, sb]);
-  const topMatch = (it: WItem | null) => it?.chart && meta ? matchChart('shirt', it.chart, meta.chart) : null;
+    })) as Record<string, { label: string; tier: string; ease: number; color: string } | null>;
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const topFits = useMemo(() => fitsFor(topItem), [meta, sb, topItem]);
+  const topMatch = (it: WItem | null) => it?.chart && baseMeta ? matchChart('shirt', it.chart, baseMeta.chart) : null;   // colourway uploads reuse the Gon tee's cut
   const topSupported = (it: WItem | null, size: string) => { const match = topMatch(it); return !match || !!match[size]?.ok; };
-  const topBest = (it: WItem | null) => !saved || outside.length ? null : recommendedTop(SIZES, size => topFits[size], size => topSupported(it, size));
+  // a shirt designed oversized is recommended in the size that gives that look, not its smallest wearable size
+  const topBest = (it: WItem | null) => {
+    if (!saved || outside.length) return null;
+    const fits = fitsFor(it), want = topProductOf(it)?.intended_fit;
+    if (want) { const z = sizesOf(it).find(s => fits[s]?.label === want && topSupported(it, s)); if (z) return z; }
+    return recommendedTop(sizesOf(it), size => fits[size], size => topSupported(it, size));
+  };
   const jeansAt = useCallback((it: WItem | null, sz: string, withBelt: boolean): JeansState | null => {
     const P = pantsOf(it);
     return meta && P ? jeansState(meta, P, sz, withBelt, simH, simC, simS, null, 0) : null;
@@ -273,20 +294,20 @@ export default function MyFittingRoom() {
     return !!matchChart('pants', it.chart, ref)[size]?.ok;
   };
   const bottomBest = (it: WItem | null) => !saved || outside.length || it?.kind === 'unsim' ? null : recommendedBottom(bottomSizes(it), size => jeansAt(it, size, false), size => bottomSupported(it, size));
-  const recordSizes = (it: WItem) => it.chart ? Object.keys(it.chart) : it.group === 'tops' ? [...SIZES] : bottomSizes(it);
+  const recordSizes = (it: WItem) => it.chart ? Object.keys(it.chart) : it.group === 'tops' ? [...sizesOf(it)] : bottomSizes(it);
   const sizeRecord = (it: WItem, previewSize?: string) => ({ itemId: it.id, name: it.name, sizes: recordSizes(it), savedSize: sizeRecords.sizes[it.id], recommended: it.group === 'tops' ? topBest(it) : bottomBest(it), previewSize, onSave: sizeRecords.saveSize, syncError: sizeRecords.error });
   const js = bottom ? jeansAt(bottomItem, bottom.size, belt) : null;
   const P = pantsOf(bottomItem);
   const jeansUrl = bottom && js && P && bottomSupported(bottomItem, bottom.size) ? (js.variant === 'held' ? `${P.dir}/jeans_${bottom.size}.glb` : `${P.dir}/${js.variant}/jeans_${bottom.size}.glb`) : null;
   const topFit = top ? topFits[top.size] : null;
-  const shirtNow = meta && sb && top && SIZES.includes(top.size as Size) ? fitNumbers(meta, sb, top.size as Size) : null;
+  const shirtNow = meta && sb && top && sizesOf(topItem).includes(top.size as Size) ? fitNumbers(meta, sb, top.size as Size) : null;
 
   // ── actions ────────────────────────────────────────────────────────────────────
   // tapping what you already wear takes it off (toggle); outfits only put things on
   const wear = (it: WItem, toggle = true) => {
     if (it.group === 'tops') {
       if (top?.id === it.id) { if (toggle) { setTop(null); setWalking(false); } return; }
-      const supported = SIZES.filter(size => topSupported(it, size));
+      const supported = sizesOf(it).filter(size => topSupported(it, size));
       if (!supported.length) { flash('This item’s chart has no simulated sizes yet.'); setTop({ id: it.id, size: '' }); return; }
       setTop({ id: it.id, size: initialSize(sizeRecords.sizes[it.id], topBest(it), supported) });
     } else {
@@ -388,7 +409,7 @@ export default function MyFittingRoom() {
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       {top && topItem && (
         <WornRow sizeRecord={sizeRecord(topItem, top.size)} compact={compact} title={topItem.name} img={topItem.img} onRemove={() => { setTop(null); setWalking(false); }}
-          sizes={SIZES.filter(sz => topSupported(topItem, sz)).map(sz => ({ size: sz, color: topFits[sz]?.color ?? '#d1d5db', hint: topFits[sz]?.label ?? 'not simulated', best: sz === topBest(topItem) }))}
+          sizes={sizesOf(topItem).filter(sz => topSupported(topItem, sz)).map(sz => ({ size: sz, color: topFits[sz]?.color ?? '#d1d5db', hint: topFits[sz]?.label ?? 'not simulated', best: sz === topBest(topItem) }))}
           size={top.size} onSize={sz => setTop({ ...top, size: sz })}
           verdict={topFit ? { text: `${topFit.label} · ${topFit.ease >= 0 ? '+' : ''}${topFit.ease.toFixed(0)} cm room at the chest`, color: topFit.color } : null}
           note={topItem.kind === 'shirt' && topPhotos === 'busy' ? 'Lining the photos up with the 3D pattern…'
@@ -495,7 +516,7 @@ export default function MyFittingRoom() {
   const stage = (
     <div className="relative flex h-full w-full flex-col" style={{ background: C.cream }}>
       {meta ? (
-        <FitViewer skinTone={skinTone} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
+        <FitViewer skinTone={skinTone} shirtDir={topItem?.kind === 'top' && topItem.dir ? `${topItem.dir}/grid` : undefined} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
           jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}

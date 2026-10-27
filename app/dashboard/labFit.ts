@@ -2,11 +2,11 @@
 // The Fit Lab verdicts for the dashboard: every Fit Lab shirt and pants on your saved body, in every size.
 // Same functions and the same steps as "My fitting room" (app/fit-lab-profile/page.tsx), so both pages agree:
 // tops use the simulated chest room (fitTier), bottoms use the simulated waistband (jeansState).
-import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, type GridMeta } from '../fit-lab/engine';
+import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, withShirt, type GridMeta, type ShirtProduct } from '../fit-lab/engine';
 import { jeansState, wornBody, type PantsData } from '../fit-lab/jeansFit';
 import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { auth } from '@/lib/firebase/config';
-import { GON, GRID_META_URL, PRODUCTS_INDEX_URL, XIN } from '../fit-lab/paths';
+import { GON, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, XIN } from '../fit-lab/paths';
 
 const JEANS_SIZES = ['M', 'L', 'XL', '2XL'];
 
@@ -20,7 +20,7 @@ export type LabPiece = {
   sizes: SizeVerdict[];
 };
 export type LabData = { meta: GridMeta; products: (PantsData & { id: string; name: string; brand: string; dir: string })[];
-  stored: { id: string; name: string; brand: string; front: Blob; kind: 'shirt' | 'pants' }[]; hidden: string[] };
+  stored: { id: string; name: string; brand: string; front: Blob; kind: 'shirt' | 'pants' }[]; hidden: string[]; tops?: ShirtProduct[] };
 
 // the profile keeps chest and waist as half widths; Fit Lab works around the body (same conversion as My fitting room)
 export function bodyFromProfile(a: Record<string, number | undefined> | null): LabBody | null {
@@ -45,7 +45,11 @@ export async function loadLab(): Promise<LabData> {
   const stored = (auth.currentUser ? await syncWardrobe(auth.currentUser.uid, message => console.warn(message)) : []).sort((a, b) => a.created - b.created).map(s => ({ id: s.id, name: s.name, brand: s.brand, front: s.front, kind: s.kind ?? 'shirt' as const }));
   let hidden: string[] = [];
   try { hidden = JSON.parse(localStorage.getItem('fitlab_hidden') || '[]'); } catch { /* storage blocked */ }
-  return { meta, products: products.filter(Boolean) as LabData['products'], stored, hidden };
+  // shirt products (brands/tops.json): their own sizes and simulated numbers
+  const topIndex: { id: string; dir: string; hidden?: boolean }[] = await fetch(TOPS_INDEX_URL).then(r => r.ok ? r.json() : []).catch(() => []);
+  const tops = (await Promise.all(topIndex.filter(p => !p.hidden).map(p => fetch(`${p.dir}/product.json`).then(r => r.json() as Promise<ShirtProduct>).catch(() => null))))
+    .filter((p): p is ShirtProduct => !!p);
+  return { meta, products: products.filter(Boolean) as LabData['products'], stored, hidden, tops };
 }
 
 export function outsideRange(b: LabBody, meta?: GridMeta | null) {
@@ -71,14 +75,18 @@ export function labPieces(lab: LabData, b: LabBody, img: (id: string, blob: Blob
   const shirtLock = !shirtShapeOk(meta, simH, simC);
   const simS = shirtLock ? null : clamp(b.shoulder, shRange[0], shRange[1]);
   const sb = solveBody(meta, simH, simC, simS, shirtLock ? null : waist, shirtLock ? 0 : b.belly);
-  const topSizes: SizeVerdict[] = SIZES.map(sz => {
-    const f = fitNumbers(meta, sb, sz);
-    if (!f.shirt) return { size: sz, tone: 'grey' as Tone, label: 'Not simulated', best: false };
-    const e = f.shirt.chest - f.body.chest, t = fitTier(e, f.body.chest);
-    return { size: sz, tone: toneOfTier(t.tier), label: `${t.label} · ${e >= 0 ? '+' : ''}${e.toFixed(0)} cm at the chest`, best: false, tier: t.tier } as SizeVerdict & { tier: string };
-  });
-  const topBest = (topSizes as (SizeVerdict & { tier?: string })[]).find(s => s.tier && s.tier !== 'Compression' && s.tier !== 'Slim')?.size ?? null;
-  const tops = (): Omit<LabPiece, 'id' | 'name' | 'brand' | 'img'> => {
+  // top: a shirt product (its own sizes and numbers over the body grid) or the Gon tee; a shirt designed oversized
+  // gets the size that gives that look as its best size
+  const tops = (top?: ShirtProduct): Omit<LabPiece, 'id' | 'name' | 'brand' | 'img'> => {
+    const m = withShirt(meta, top);
+    const topSizes = (top?.sizes ?? SIZES).map(sz => {
+      const f = fitNumbers(m, sb, sz as typeof SIZES[number]);
+      if (!f.shirt) return { size: sz, tone: 'grey' as Tone, label: 'Not simulated', best: false } as SizeVerdict & { tier?: string; tierLabel?: string };
+      const e = f.shirt.chest - f.body.chest, t = fitTier(e, f.body.chest);
+      return { size: sz, tone: toneOfTier(t.tier), label: `${t.label} · ${e >= 0 ? '+' : ''}${e.toFixed(0)} cm at the chest`, best: false, tier: t.tier, tierLabel: t.label } as SizeVerdict & { tier?: string; tierLabel?: string };
+    });
+    const topBest = (top?.intended_fit && topSizes.find(s => s.tierLabel === top.intended_fit)?.size)
+      || topSizes.find(s => s.tier && s.tier !== 'Compression' && s.tier !== 'Slim')?.size || null;
     const sizes = topSizes.map(s => ({ size: s.size, tone: s.tone, label: s.label, best: s.size === topBest }));
     const at = sizes.find(s => s.best);
     return { group: 'tops', best: topBest, sizes,
@@ -107,6 +115,7 @@ export function labPieces(lab: LabData, b: LabBody, img: (id: string, blob: Blob
   const list: LabPiece[] = [
     { id: 'gon', name: 'Gon Tee (green)', brand: 'TNT CO', img: GON.front, ...tops() },
     ...lab.stored.filter(s => s.kind === 'shirt').map(s => ({ id: s.id, name: s.name, brand: s.brand, img: img(s.id, s.front), ...tops() })),
+    ...(lab.tops ?? []).map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, ...tops(p) })),
     ...(xin ? [{ id: 'xin', name: '"Xin" Denim Biker Pants (grey)', brand: 'TNT CO', img: XIN.front, ...bottoms(xin, JEANS_SIZES) }] : []),
     ...(xin ? lab.stored.filter(s => s.kind === 'pants').map(s => ({ id: s.id, name: s.name, brand: s.brand, img: img(s.id, s.front), ...bottoms(xin, JEANS_SIZES) })) : []),
     ...lab.products.map(p => ({ id: p.id, name: p.name, brand: p.brand, img: `${p.dir}/front.png`, ...bottoms(p, Object.keys(p.sizes ?? {})) })),
