@@ -7,14 +7,15 @@
 import { ModelSkeleton } from '@/components/ui/Skeleton';
 import React, { useEffect, useRef, useState } from 'react';
 import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, fitColor, applyColourway, applyPantsSkin, VARIANTS, makeTrack, applyFrame, refreshWalkNormals, rootPath, solveBody, jeansVarWeights,
-  pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type ProductWalk, type WalkTrack } from './engine';
+  pushOutside, cpuMorphed, loadPacked, fetchBin, layerShirtOverPants, joinParts, type Size, type ViewMode, type GridMeta, type ProductWalk, type WalkTrack, type ShirtProduct } from './engine';
 import type { Result } from './colourway';
 
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
 import { xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GON, XIN } from './paths';
-import { applySkinTone, type SkinToneId } from './skinTone';
+import { applySkinTone, realisticSkin, type SkinToneId } from './skinTone';
 import { hideCoveredFeet } from './bodyCover';
+import { applyTopColour } from './ColourSwatches';
 
 
 export interface FitViewerProps {
@@ -33,10 +34,11 @@ export interface FitViewerProps {
   background?: string; className?: string; style?: React.CSSProperties;
   skinTone?: SkinToneId | null;               // Monk Skin Tone Scale id; null = the model's own skin
   shirtDir?: string;                          // a shirt product's grid folder (default: the TNT Gon tee)
+  shirtColour?: { product: ShirtProduct; hex: string | null } | null;   // a shirt product's chosen colour
 }
 
 export default function FitViewer({ meta, height, chest, shoulder, waist, size, mode, walking, photos, showShirt = true,
-  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style, skinTone = null, shirtDir = GON.grid }: FitViewerProps) {
+  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style, skinTone = null, shirtDir = GON.grid, shirtColour = null }: FitViewerProps) {
   const jOn = !!jeans && !jeans.hidden;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +58,12 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     applySkinTone(S.bodyRoot, skinTone);
     applySkinTone(S.walk?.group, skinTone);
   }, [skinTone, loading]);
+
+  // a shirt product's colour on the loaded shirt (ColourSwatches.tsx)
+  useEffect(() => {
+    const grp = sceneRef.current.shirts?.[`${shirtDir}:${size}`];
+    if (grp && typeof grp !== 'string') applyTopColour(grp.userData.parts, shirtColour?.product, shirtColour?.hex ?? null);
+  }, [shirtColour?.product, shirtColour?.hex, shirtDir, size, ready]);
 
   // ── scene setup + body ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -103,7 +111,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -189,7 +197,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
         });
         g.scene.userData.parts = parts;
         S.scene.add(g.scene); S.shirts[key] = g.scene; applyColourway(S);
-        for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = sz === S.shirtWant && showShirt && !S.walkOn;
+        for (const [sz, grp] of Object.entries(S.shirts)) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = sz === S.shirtWant && showShirt && S.shirtSimulated !== false && !S.walkOn;
         setReady(r => r + 1); setShirtProg(p => p?.size === size ? null : p);
       }, e => { if (e.total) setShirtProg(p => p?.size === size ? { size, pct: Math.round(100 * e.loaded / e.total) } : p); },
       () => { setShirtProg(null); setError(`Could not load size ${size}.`); });
@@ -244,7 +252,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;
@@ -379,6 +387,13 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     };
     S.bodyMeshes?.forEach((m: unknown) => setMorphs(m));
     const grp = S.shirts?.[`${shirtDir}:${size}`];
+    // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the page says why)
+    if (grp && typeof grp !== 'string') {
+      const simulatedHere = Object.keys(w).every(k => meta.shirt[size]?.[k]);
+      S.shirtSimulated = simulatedHere;            // read by the visibility effect below (it must not re-show it)
+      if (!simulatedHere) grp.visible = false;
+      else if (showShirt && !S.walk?.active) grp.visible = true;
+    }
     const jg = jOn && jeans ? S.jeans?.[jeans.url] : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shirtParts: any[] = grp && typeof grp !== 'string' ? grp.userData.parts : [];
@@ -411,7 +426,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
 
   useEffect(() => {
     const S = sceneRef.current;
-    for (const [sz, grp] of Object.entries(S.shirts || {})) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !S.walk?.active && sz === `${shirtDir}:${size}` && showShirt;
+    for (const [sz, grp] of Object.entries(S.shirts || {})) if (typeof grp !== 'string') (grp as { visible: boolean }).visible = !S.walk?.active && sz === `${shirtDir}:${size}` && showShirt && S.shirtSimulated !== false;
   }, [showShirt, size, shirtDir, ready]);
 
   // ── colourway photos -> textures on every loaded shirt (grid sizes and catwalk) ──────────
