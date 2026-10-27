@@ -15,7 +15,7 @@ import { xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GON, XIN } from './paths';
 import { applySkinTone, realisticSkin, type SkinToneId } from './skinTone';
 import { hideCoveredFeet } from './bodyCover';
-import { applyTopColour } from './ColourSwatches';
+import { applyTopColour, loadPantsColour } from './ColourSwatches';
 
 
 export interface FitViewerProps {
@@ -29,7 +29,9 @@ export interface FitViewerProps {
   // jeans being worn: glb of the chosen simulation (drop / belt), size for the catwalk, hidden = cannot be worn or
   // not simulated for this body (the basic pants are shown instead), skin = pants photo swap textures
   // walk: false = no walking simulation of these pants (the catwalk then shows the basic pants)
-  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; builtinXin?: boolean; belt?: boolean; elastic?: { extension: number; limit: number }; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
+  jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; builtinXin?: boolean; belt?: boolean; elastic?: { extension: number; limit: number }; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null;
+    // a pants product's colour (ColourSwatches.tsx): that colour's texture files (null = the 3D file's own) + colour correction
+    colour?: { files: { front: string; back: string } | null; tint: number[] | null } | null } | null;
   onWalking: (on: boolean) => void; onWalkStatus: (msg: string | null) => void;
   background?: string; className?: string; style?: React.CSSProperties;
   skinTone?: SkinToneId | null;               // Monk Skin Tone Scale id; null = the model's own skin
@@ -357,12 +359,21 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
     const S = sceneRef.current;
     if (!S.THREE) return;
     const THREE = S.THREE;
-    S.pantsSkin?.front?.dispose(); S.pantsSkin?.back?.dispose();
+    if (!S.pantsSkin?.shared) { S.pantsSkin?.front?.dispose(); S.pantsSkin?.back?.dispose(); }
     const sk = jeans?.skin;
     const tex = (c: HTMLCanvasElement) => { const t = new THREE.CanvasTexture(c); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+    S.pantsTint = jeans?.colour?.tint ?? null;
+    const files = !sk ? jeans?.colour?.files : null;
+    S.pantsWant = files?.front ?? null;
+    if (files) {
+      // colour textures are shared (cached) between renders: not disposed here
+      S.pantsSkin = null;
+      loadPantsColour(THREE, files).then(t => { if (S.pantsWant === files.front) { S.pantsSkin = { ...t, shared: true }; applyPantsSkin(S); } }).catch(() => {});
+      return;
+    }
     S.pantsSkin = sk ? { front: tex(sk.front), back: tex(sk.back) } : null;
     applyPantsSkin(S);
-  }, [jeans?.skin, ready]);
+  }, [jeans?.skin, jeans?.colour?.files?.front, jeans?.colour?.tint?.join(), ready]);
 
   // ── apply sliders: morph weights on body + shirt, blended fit map ───────────────
   useEffect(() => {

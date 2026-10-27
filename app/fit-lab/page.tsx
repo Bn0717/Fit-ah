@@ -29,7 +29,7 @@ import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, typ
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
 import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
-import { useTopColours, currentHex, applyTopColour, ColourSwatches } from './ColourSwatches';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -40,7 +40,7 @@ const PANTS_REF = XIN.outline;
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
 const SAME_CUT_MAX = 0.05;   // mean proportion difference allowed vs the Xin outline (pantsSwap.ts compare): Xin's own photos 0.7-1.6 %, Stallion (another cut) 6.6-7.5 %
-type PantsProduct = { walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null };
+type PantsProduct = { walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null; colours?: PantsColour[]; base_colour?: string };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -557,9 +557,21 @@ function FitLab() {
       };
       S.pantsTex[it.id] = { front: tex(it.tex.front.canvas), back: tex(it.tex.back.canvas) };
     }
+    // a pants product in another colour: that colour's photo textures (same pattern, same fit)
+    const prod = pantsId !== 'xin' && product?.id === pantsId ? product : null;
+    S.pantsTint = pantsTint(prod, topColour);
+    const files = prod ? pantsColourFiles(prod, topColour) : null;
+    if (files) {
+      const want = files.front;
+      S.pantsWant = want;
+      loadPantsColour(S.THREE, files).then(t => { if (S.pantsWant === want) { S.pantsSkin = t; applyPantsSkin(S); } })
+        .catch(() => { /* texture missing: the colour inside the 3D file stays */ });
+      return;
+    }
+    S.pantsWant = null;
     S.pantsSkin = it?.tex ? S.pantsTex[it.id] : null;
     applyPantsSkin(S);
-  }, [pantsSkin, pantsItems, pantsId, ready, jeansKey]);
+  }, [pantsSkin, pantsItems, pantsId, ready, jeansKey, product, topColour]);
 
   // ── exact fit: remember the last job in this browser; poll it; when ready, show it instead of the preview ──
   useEffect(() => {
@@ -1385,6 +1397,9 @@ function FitLab() {
                     style={belt ? { background: C.navy, color: '#fff' } : { background: C.cream }}>
                     {belt ? 'Belt on: the belt pulls the waistband in at the waist' : 'Add a belt'}
                   </button>
+                )}
+                {pantsId !== 'xin' && product?.id === pantsId && pantsSwatches(product) && (
+                  <ColourSwatches product={pantsSwatches(product)!} chosen={topColour} onPick={pickTopColour} />
                 )}
                 {pants && <p className="text-xs" style={{ opacity: 0.6 }}>{pants.name}, {pantsId === 'xin' ? 'rigid 100 % cotton denim' : product?.fabric.replace('_', ' ')}, estimated{pantsId === 'xin' || Object.keys(pants.drop?.[jeansSize ?? ''] ?.bodies ?? pants.sizes[jeansSize ?? '']?.bodies ?? {}).length > 1 ? ' fit preview' : ' (preview: 175 cm / chest 101 cm body only)'}{elasticW ? ', elastic waist' : jeansVariant !== 'held' && (belt ? ', held by a belt' : jeansHide ? '' : ', nothing holding them up but the body')}</p>}
                 {jeansNow && (

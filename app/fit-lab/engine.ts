@@ -36,6 +36,9 @@ export function applyPantsSkin(S: any) {
       if (m.userData.origMap === undefined) m.userData.origMap = m.map;
       const side = /front/.test(m.name) ? 'front' : /back/.test(m.name) ? 'back' : null;
       m.map = (side && S.pantsSkin?.[side]) || m.userData.origMap;
+      // colour correction for the studio lights (ColourSwatches.pantsTint); white = the texture as it is
+      const t = S.pantsTint as number[] | null | undefined;
+      m.color.setRGB(t?.[0] ?? 1, t?.[1] ?? 1, t?.[2] ?? 1);
       m.needsUpdate = true;
     });
   }
