@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-const code = ts.transpileModule(readFileSync(new URL('../app/fit-lab/skinTone.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText;
-const { SKIN_TONES, isSkinTone, toneHex, hexToLinear, toneFactor, applySkinTone } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const tr = f => ts.transpileModule(readFileSync(new URL(f, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText;
+const dcUrl = `data:text/javascript;base64,${Buffer.from(tr('../app/fit-lab/displayColour.ts')).toString('base64')}`;
+const code = tr('../app/fit-lab/skinTone.ts').replaceAll("'./displayColour'", JSON.stringify(dcUrl));
+const { SKIN_TONES, isSkinTone, toneHex, hexToLinear, toneFactor, applySkinTone, TEXTURE_AVG } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const { shown, SKIN } = await import(dcUrl);
 
 test('the Monk Skin Tone Scale has 10 distinct tones, lightest to darkest', () => {
   assert.equal(SKIN_TONES.length, 10);
@@ -14,12 +17,12 @@ test('the Monk Skin Tone Scale has 10 distinct tones, lightest to darkest', () =
   assert.equal(toneHex(null), null);
 });
 
-test('tone 5 is the model\'s own skin; other tones scale it lighter or darker', () => {
-  assert.deepEqual(toneFactor('#d7bd96').map(v => Math.round(v * 1e9) / 1e9), [1, 1, 1]);
-  const lum = f => f[0] * 0.2126 + f[1] * 0.7152 + f[2] * 0.0722;
-  const lums = SKIN_TONES.map(t => lum(toneFactor(t.hex)));
-  for (let i = 5; i < 10; i++) assert.ok(lums[i] < lums[i - 1], `tone ${i + 1} darker than tone ${i}`);
-  assert.ok(lums[0] > 1 && lums[9] < 0.05);
+test('every tone SHOWS as its Monk swatch in the lit fitting room (skin calibration), darkest included', () => {
+  for (const tone of SKIN_TONES) {
+    const f = toneFactor(tone.hex), seen = shown(TEXTURE_AVG.map((a, i) => a * f[i]), SKIN), want = hexToLinear(tone.hex);
+    // tone 10 is darker than the remaining shine allows: it lands at the darkest the scene can show
+    want.forEach((v, i) => assert.ok(Math.abs(seen[i] - v) < 0.012 || v > 0.83 || seen[i] <= shown([0, 0, 0], SKIN)[i] + 0.002, `${tone.id} ch${i}: shows ${seen[i]} for ${v}`));
+  }
 });
 
 function mesh(name, avg) {

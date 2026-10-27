@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
 import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
 import { GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
+import { useTopColours, currentHex, ColourSwatches } from '../fit-lab/ColourSwatches';
 import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, withShirt, FIT_LEGEND, type Size, type ViewMode, type GridMeta, type ShirtProduct } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
@@ -107,6 +108,7 @@ export default function MyFittingRoom() {
   const RANGE = gridRange(baseMeta);     // the simulated bodies (grows when grid bodies are added)
   // shirt products (brands/tops.json): their own sizes and simulated numbers, put over the body grid when worn
   const [topProducts, setTopProducts] = useState<Record<string, ShirtProduct>>({});
+  const { chosen: topColour, pick: pickTopColour } = useTopColours();   // shared with the Wardrobe fitting room
   const [stored, setStored] = useState<{ id: string; name: string; brand: string; front: Blob; back: Blob; kind: 'shirt' | 'pants'; chart?: SizeChartData }[]>([]);
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -411,9 +413,11 @@ export default function MyFittingRoom() {
         <WornRow sizeRecord={sizeRecord(topItem, top.size)} compact={compact} title={topItem.name} img={topItem.img} onRemove={() => { setTop(null); setWalking(false); }}
           sizes={sizesOf(topItem).filter(sz => topSupported(topItem, sz)).map(sz => ({ size: sz, color: topFits[sz]?.color ?? '#d1d5db', hint: topFits[sz]?.label ?? 'not simulated', best: sz === topBest(topItem) }))}
           size={top.size} onSize={sz => setTop({ ...top, size: sz })}
-          verdict={topFit ? { text: `${topFit.label} · ${topFit.ease >= 0 ? '+' : ''}${topFit.ease.toFixed(0)} cm room at the chest`, color: topFit.color } : null}
+          verdict={topFit ? { text: `${topFit.label} · ${topFit.ease >= 0 ? '+' : ''}${topFit.ease.toFixed(0)} cm room at the chest`, color: topFit.color }
+            : topProductOf(topItem) ? { text: 'Not simulated for a body like yours yet, so it is not shown', color: C.mute } : null}
           note={topItem.kind === 'shirt' && topPhotos === 'busy' ? 'Lining the photos up with the 3D pattern…'
-            : topItem.kind === 'shirt' && outlineMatch < 0.8 ? 'This looks like a different cut from the Gon Tee, so the 3D shape and sizes are the Gon Tee\'s.' : null} />
+            : topItem.kind === 'shirt' && outlineMatch < 0.8 ? 'This looks like a different cut from the Gon Tee, so the 3D shape and sizes are the Gon Tee\'s.' : null}
+          extra={topProductOf(topItem) ? <div className="mt-2"><ColourSwatches product={topProductOf(topItem)!} chosen={topColour} onPick={pickTopColour} size={24} /></div> : undefined} />
       )}
       {bottom && bottomItem && (bottomItem.kind === 'unsim' ? (
         <WornRow sizeRecord={sizeRecord(bottomItem, bottom.size)} compact={compact} title={bottomItem.name} img={bottomItem.img} onRemove={() => setBottom(null)} sizes={[]} size="" onSize={() => {}} verdict={null}
@@ -516,7 +520,7 @@ export default function MyFittingRoom() {
   const stage = (
     <div className="relative flex h-full w-full flex-col" style={{ background: C.cream }}>
       {meta ? (
-        <FitViewer skinTone={skinTone} shirtDir={topItem?.kind === 'top' && topItem.dir ? `${topItem.dir}/grid` : undefined} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
+        <FitViewer skinTone={skinTone} shirtColour={topProductOf(topItem) ? { product: topProductOf(topItem)!, hex: currentHex(topProductOf(topItem)!, topColour) } : null} shirtDir={topItem?.kind === 'top' && topItem.dir ? `${topItem.dir}/grid` : undefined} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
           jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
@@ -798,9 +802,9 @@ function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, ext
           <p className={`min-w-0 flex-1 truncate text-[11px] ${alert ? 'font-semibold' : ''}`} style={{ color: alert ? '#991b1b' : verdict?.color ?? C.mute }} title={note ?? undefined}>
             {alert && note ? note : verdict?.text ?? note}
           </p>
-          {extra && <div className="shrink-0">{extra}</div>}
         </div>
       )}
+      {extra && <div className="mt-1 min-w-0 pl-10">{extra}</div>}{/* own full-width line: colour swatches / buttons wrap instead of running off a phone screen */}
       {sizeRecord && <details className="mt-2 pl-10 text-[10px]" style={{ color: C.navy }}><summary className="cursor-pointer py-1">Recommended: {sizeRecord.recommended ?? 'Unavailable'} · Your size: {sizeRecord.savedSize ?? 'Not set'} · Edit</summary><SavedSizeControl {...sizeRecord} /></details>}
     </div>
   );

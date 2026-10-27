@@ -28,7 +28,8 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
-import { applySkinTone, isSkinTone } from './skinTone';
+import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -150,6 +151,8 @@ function FitLab() {
   const sizesOfTop = (it?: LabItem | null) => (topProductOf(it)?.sizes ?? SIZES) as Size[];
   const topSizes = sizesOfTop(items.find(i => i.id === activeId));
   const shirtKey = `${topProduct?.id ?? 'gon'}:${size}`;              // loaded shirt files: one per product and size
+  // colour of a shirt product (same cut, same fit), remembered in this browser and shared with My fitting room
+  const { chosen: topColour, pick: pickTopColour } = useTopColours();
   // shirt products into the wardrobe (built-in tops next to the Gon tee); hidden ones stay out until checked
   useEffect(() => {
     let stop = false;
@@ -293,7 +296,7 @@ function FitLab() {
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);   // no skin poking through the shoes
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -441,7 +444,7 @@ function FitLab() {
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
-          applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
+          realisticSkin(g.scene, S.THREE); applySkinTone(g.scene, S.skinTone); hideCoveredFeet(g.scene);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;
@@ -613,6 +616,13 @@ function FitLab() {
     setExact(r.error ? { error: r.error } : { id: r.id, step: 'queued', pct: 0, msg: 'Starting…', size });
   };
 
+  // ── shirt product colour: plain fabrics are recoloured from the simulated texture's colour ───────────
+  useEffect(() => {
+    const grp = sceneRef.current.shirts?.[shirtKey];
+    if (!grp || typeof grp === 'string' || !topProduct) return;
+    applyTopColour(grp.userData.parts, topProduct, currentHex(topProduct, topColour));
+  }, [shirtKey, topColour, topProduct, ready]);
+
   // ── apply sliders: morph weights on body + shirt, blended fit map ───────────────
   useEffect(() => {
     const S = sceneRef.current;
@@ -637,7 +647,11 @@ function FitLab() {
     S.bodyMeshes?.forEach(setMorphs);
     const grp = S.shirts?.[shirtKey];
     // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the Tops panel says why)
-    if (grp && typeof grp !== 'string' && !Object.keys(w).every(k => meta.shirt[size]?.[k])) grp.visible = false;
+    if (grp && typeof grp !== 'string') {
+      const simulatedHere = Object.keys(w).every(k => meta.shirt[size]?.[k]);
+      if (!simulatedHere) grp.visible = false;
+      else if (shirtOn && !S.walk?.active && !S.walkOn) grp.visible = true;   // back on a simulated body: show it again
+    }
     const jg = jeansKey && !jeansHide ? S.jeans?.[jeansKey] : null;   // hidden jeans: the shirt hangs on the body
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allParts: any[] = [...(grp && typeof grp !== 'string' ? grp.userData.parts : []), ...(jg && typeof jg !== 'string' ? jg.userData.parts : [])];
@@ -1335,6 +1349,7 @@ function FitLab() {
                       style={shirtOn && size === s ? { background: C.navy, color: '#fff' } : { background: C.cream }}>{s}</button>
                   ))}
                 </div>
+                {topProduct && <div className="mt-3"><ColourSwatches product={topProduct} chosen={topColour} onPick={pickTopColour} /></div>}
                 {meta?.walk && <div className="mt-2 text-xs" style={{ opacity: 0.6 }}>
                   {SIZES.some(s => !meta.walk!.sizes[s]) && <> · still simulating: {SIZES.filter(s => !meta.walk!.sizes[s]).join(', ')}</>}
                 </div>}

@@ -7,13 +7,21 @@
   190
  ],
  "chests": [
+  84,
   92,
   101,
   110,
-  116
+  116,
+  124
  ],
  "centre": "h175_c101",
  "body": {
+  "h160_c84": {
+   "height": 160.0,
+   "chest": 84.0,
+   "waist": 57.2,
+   "hip": 77.4
+  },
   "h160_c92": {
    "height": 160.0,
    "chest": 92.0,
@@ -45,6 +53,18 @@
    "hip": 96.3,
    "shoulder": 49.4,
    "belly": 21.1
+  },
+  "h160_c124": {
+   "height": 160.0,
+   "chest": 124.0,
+   "waist": 80.6,
+   "hip": 94.9
+  },
+  "h165_c84": {
+   "height": 165.0,
+   "chest": 84.0,
+   "waist": 58.3,
+   "hip": 79.0
   },
   "h165_c92": {
    "height": 165.0,
@@ -78,6 +98,18 @@
    "shoulder": 49.8,
    "belly": 21.4
   },
+  "h165_c124": {
+   "height": 165.0,
+   "chest": 124.0,
+   "waist": 81.9,
+   "hip": 96.5
+  },
+  "h175_c84": {
+   "height": 175.0,
+   "chest": 84.0,
+   "waist": 60.6,
+   "hip": 82.1
+  },
   "h175_c92": {
    "height": 175.0,
    "chest": 92.0,
@@ -109,6 +141,18 @@
    "hip": 100.6,
    "shoulder": 50.5,
    "belly": 23.9
+  },
+  "h175_c124": {
+   "height": 175.0,
+   "chest": 124.0,
+   "waist": 84.4,
+   "hip": 99.6
+  },
+  "h185_c84": {
+   "height": 185.0,
+   "chest": 84.0,
+   "waist": 62.9,
+   "hip": 84.9
   },
   "h185_c92": {
    "height": 185.0,
@@ -142,6 +186,18 @@
    "shoulder": 50.8,
    "belly": 24.3
   },
+  "h185_c124": {
+   "height": 185.0,
+   "chest": 124.0,
+   "waist": 85.5,
+   "hip": 101.6
+  },
+  "h190_c84": {
+   "height": 190.0,
+   "chest": 84.0,
+   "waist": 64.1,
+   "hip": 86.4
+  },
   "h190_c92": {
    "height": 190.0,
    "chest": 92.0,
@@ -173,6 +229,12 @@
    "hip": 103.8,
    "shoulder": 51.9,
    "belly": 24.5
+  },
+  "h190_c124": {
+   "height": 190.0,
+   "chest": 124.0,
+   "waist": 86.2,
+   "hip": 102.8
   }
  },
  "chart": {
@@ -203,6 +265,13 @@
  },
  "shirt": {
   "S": {
+   "h160_c84": {
+    "chest_cm": 109.7,
+    "length_cm": 71.0,
+    "shoulder_cm": 42.5,
+    "hem_cm": 68.1,
+    "stretch_p95": 2.2
+   },
    "h160_c92": {
     "chest_cm": 109.9,
     "length_cm": 70.9,
@@ -230,6 +299,20 @@
     "shoulder_cm": 40.9,
     "hem_cm": 74.9,
     "stretch_p95": 11.3
+   },
+   "h160_c124": {
+    "chest_cm": 110.3,
+    "length_cm": 69.8,
+    "shoulder_cm": 41.9,
+    "hem_cm": 77.3,
+    "stretch_p95": 34.2
+   },
+   "h165_c84": {
+    "chest_cm": 109.8,
+    "length_cm": 70.9,
+    "shoulder_cm": 42.0,
+    "hem_cm": 72.8,
+    "stretch_p95": 2.3
    },
    "h165_c92": {
     "chest_cm": 110.0,
@@ -259,6 +342,20 @@
     "hem_cm": 79.7,
     "stretch_p95": 11.5
    },
+   "h165_c124": {
+    "chest_cm": 110.6,
+    "length_cm": 69.6,
+    "shoulder_cm": 41.4,
+    "hem_cm": 82.0,
+    "stretch_p95": 32.3
+   },
+   "h175_c84": {
+    "chest_cm": 109.7,
+    "length_cm": 70.7,
+    "shoulder_cm": 42.6,
+    "hem_cm": 82.3,
+    "stretch_p95": 2.4
+   },
    "h175_c92": {
     "chest_cm": 110.2,
     "length_cm": 70.5,
@@ -286,6 +383,20 @@
     "shoulder_cm": 40.8,
     "hem_cm": 89.5,
     "stretch_p95": 12.5
+   },
+   "h175_c124": {
+    "chest_cm": 110.3,
+    "length_cm": 69.3,
+    "shoulder_cm": 42.0,
+    "hem_cm": 91.1,
+    "stretch_p95": 32.8
+   },
+   "h185_c84": {
+    "chest_cm": 109.8,
+    "length_cm": 70.5,
+    "shoulder_cm": 42.4,
+    "hem_cm": 92.2,
+    "stretch_p95": 2.6
    },
    "h185_c92": {
     "chest_cm": 110.4,
@@ -315,6 +426,20 @@
     "hem_cm": 99.0,
     "stretch_p95": 12.7
    },
+   "h185_c124": {
+    "chest_cm": 110.6,
+    "length_cm": 69.1,
+    "shoulder_cm": 42.1,
+    "hem_cm": 100.3,
+    "stretch_p95": 34.8
+   },
+   "h190_c84": {
+    "chest_cm": 110.0,
+    "length_cm": 70.6,
+    "shoulder_cm": 42.4,
+    "hem_cm": 97.1,
+    "stretch_p95": 2.8
+   },
    "h190_c92": {
     "chest_cm": 110.4,
     "length_cm": 70.1,
@@ -342,9 +467,23 @@
     "shoulder_cm": 41.3,
     "hem_cm": 103.8,
     "stretch_p95": 12.6
+   },
+   "h190_c124": {
+    "chest_cm": 110.7,
+    "length_cm": 69.3,
+    "shoulder_cm": 42.4,
+    "hem_cm": 105.9,
+    "stretch_p95": 33.7
    }
   },
   "M": {
+   "h160_c84": {
+    "chest_cm": 114.6,
+    "length_cm": 73.2,
+    "shoulder_cm": 44.4,
+    "hem_cm": 65.7,
+    "stretch_p95": 2.0
+   },
    "h160_c92": {
     "chest_cm": 114.6,
     "length_cm": 73.2,
@@ -372,6 +511,20 @@
     "shoulder_cm": 43.0,
     "hem_cm": 72.5,
     "stretch_p95": 6.5
+   },
+   "h160_c124": {
+    "chest_cm": 115.0,
+    "length_cm": 71.7,
+    "shoulder_cm": 42.5,
+    "hem_cm": 75.7,
+    "stretch_p95": 20.5
+   },
+   "h165_c84": {
+    "chest_cm": 114.7,
+    "length_cm": 73.1,
+    "shoulder_cm": 44.5,
+    "hem_cm": 70.3,
+    "stretch_p95": 2.0
    },
    "h165_c92": {
     "chest_cm": 114.7,
@@ -401,6 +554,20 @@
     "hem_cm": 77.4,
     "stretch_p95": 6.9
    },
+   "h165_c124": {
+    "chest_cm": 115.0,
+    "length_cm": 71.7,
+    "shoulder_cm": 44.0,
+    "hem_cm": 80.1,
+    "stretch_p95": 24.7
+   },
+   "h175_c84": {
+    "chest_cm": 114.7,
+    "length_cm": 73.1,
+    "shoulder_cm": 44.7,
+    "hem_cm": 79.6,
+    "stretch_p95": 2.1
+   },
    "h175_c92": {
     "chest_cm": 114.9,
     "length_cm": 72.9,
@@ -428,6 +595,20 @@
     "shoulder_cm": 42.9,
     "hem_cm": 87.2,
     "stretch_p95": 7.6
+   },
+   "h175_c124": {
+    "chest_cm": 114.9,
+    "length_cm": 71.2,
+    "shoulder_cm": 43.8,
+    "hem_cm": 89.2,
+    "stretch_p95": 28.4
+   },
+   "h185_c84": {
+    "chest_cm": 114.7,
+    "length_cm": 72.9,
+    "shoulder_cm": 44.7,
+    "hem_cm": 89.3,
+    "stretch_p95": 2.2
    },
    "h185_c92": {
     "chest_cm": 114.8,
@@ -457,6 +638,20 @@
     "hem_cm": 97.0,
     "stretch_p95": 7.5
    },
+   "h185_c124": {
+    "chest_cm": 115.1,
+    "length_cm": 71.0,
+    "shoulder_cm": 43.0,
+    "hem_cm": 98.4,
+    "stretch_p95": 22.1
+   },
+   "h190_c84": {
+    "chest_cm": 114.7,
+    "length_cm": 72.8,
+    "shoulder_cm": 44.9,
+    "hem_cm": 94.1,
+    "stretch_p95": 2.3
+   },
    "h190_c92": {
     "chest_cm": 115.0,
     "length_cm": 72.9,
@@ -484,9 +679,23 @@
     "shoulder_cm": 42.9,
     "hem_cm": 101.9,
     "stretch_p95": 7.7
+   },
+   "h190_c124": {
+    "chest_cm": 115.3,
+    "length_cm": 70.9,
+    "shoulder_cm": 43.3,
+    "hem_cm": 103.0,
+    "stretch_p95": 20.8
    }
   },
   "L": {
+   "h160_c84": {
+    "chest_cm": 119.5,
+    "length_cm": 75.4,
+    "shoulder_cm": 46.6,
+    "hem_cm": 63.2,
+    "stretch_p95": 2.1
+   },
    "h160_c92": {
     "chest_cm": 119.4,
     "length_cm": 75.5,
@@ -514,6 +723,20 @@
     "shoulder_cm": 45.7,
     "hem_cm": 69.3,
     "stretch_p95": 3.6
+   },
+   "h160_c124": {
+    "chest_cm": 120.0,
+    "length_cm": 74.1,
+    "shoulder_cm": 45.8,
+    "hem_cm": 73.3,
+    "stretch_p95": 12.4
+   },
+   "h165_c84": {
+    "chest_cm": 119.5,
+    "length_cm": 75.4,
+    "shoulder_cm": 46.5,
+    "hem_cm": 67.8,
+    "stretch_p95": 2.1
    },
    "h165_c92": {
     "chest_cm": 119.4,
@@ -543,6 +766,20 @@
     "hem_cm": 74.1,
     "stretch_p95": 3.8
    },
+   "h165_c124": {
+    "chest_cm": 120.1,
+    "length_cm": 73.6,
+    "shoulder_cm": 45.8,
+    "hem_cm": 78.1,
+    "stretch_p95": 14.4
+   },
+   "h175_c84": {
+    "chest_cm": 119.5,
+    "length_cm": 75.3,
+    "shoulder_cm": 46.7,
+    "hem_cm": 77.0,
+    "stretch_p95": 2.0
+   },
    "h175_c92": {
     "chest_cm": 119.5,
     "length_cm": 75.4,
@@ -570,6 +807,20 @@
     "shoulder_cm": 45.8,
     "hem_cm": 84.0,
     "stretch_p95": 4.6
+   },
+   "h175_c124": {
+    "chest_cm": 120.0,
+    "length_cm": 73.7,
+    "shoulder_cm": 45.5,
+    "hem_cm": 87.5,
+    "stretch_p95": 18.5
+   },
+   "h185_c84": {
+    "chest_cm": 119.5,
+    "length_cm": 75.2,
+    "shoulder_cm": 46.8,
+    "hem_cm": 86.6,
+    "stretch_p95": 2.0
    },
    "h185_c92": {
     "chest_cm": 119.7,
@@ -599,6 +850,20 @@
     "hem_cm": 93.5,
     "stretch_p95": 4.9
    },
+   "h185_c124": {
+    "chest_cm": 120.0,
+    "length_cm": 74.0,
+    "shoulder_cm": 45.4,
+    "hem_cm": 96.9,
+    "stretch_p95": 16.4
+   },
+   "h190_c84": {
+    "chest_cm": 119.5,
+    "length_cm": 75.1,
+    "shoulder_cm": 47.0,
+    "hem_cm": 91.2,
+    "stretch_p95": 2.0
+   },
    "h190_c92": {
     "chest_cm": 119.8,
     "length_cm": 75.2,
@@ -626,9 +891,23 @@
     "shoulder_cm": 45.6,
     "hem_cm": 98.4,
     "stretch_p95": 5.0
+   },
+   "h190_c124": {
+    "chest_cm": 120.1,
+    "length_cm": 73.0,
+    "shoulder_cm": 45.0,
+    "hem_cm": 101.5,
+    "stretch_p95": 19.3
    }
   },
   "XL": {
+   "h160_c84": {
+    "chest_cm": 124.7,
+    "length_cm": 77.5,
+    "shoulder_cm": 48.7,
+    "hem_cm": 60.6,
+    "stretch_p95": 2.1
+   },
    "h160_c92": {
     "chest_cm": 124.6,
     "length_cm": 77.7,
@@ -656,6 +935,20 @@
     "shoulder_cm": 48.1,
     "hem_cm": 66.6,
     "stretch_p95": 2.3
+   },
+   "h160_c124": {
+    "chest_cm": 125.3,
+    "length_cm": 76.5,
+    "shoulder_cm": 48.2,
+    "hem_cm": 70.7,
+    "stretch_p95": 8.1
+   },
+   "h165_c84": {
+    "chest_cm": 124.7,
+    "length_cm": 77.5,
+    "shoulder_cm": 48.7,
+    "hem_cm": 65.3,
+    "stretch_p95": 2.1
    },
    "h165_c92": {
     "chest_cm": 124.5,
@@ -685,6 +978,20 @@
     "hem_cm": 71.2,
     "stretch_p95": 2.3
    },
+   "h165_c124": {
+    "chest_cm": 125.2,
+    "length_cm": 76.2,
+    "shoulder_cm": 48.0,
+    "hem_cm": 75.2,
+    "stretch_p95": 9.7
+   },
+   "h175_c84": {
+    "chest_cm": 124.6,
+    "length_cm": 77.5,
+    "shoulder_cm": 48.9,
+    "hem_cm": 74.6,
+    "stretch_p95": 1.9
+   },
    "h175_c92": {
     "chest_cm": 124.5,
     "length_cm": 77.6,
@@ -712,6 +1019,20 @@
     "shoulder_cm": 47.7,
     "hem_cm": 80.6,
     "stretch_p95": 2.7
+   },
+   "h175_c124": {
+    "chest_cm": 125.4,
+    "length_cm": 75.6,
+    "shoulder_cm": 48.1,
+    "hem_cm": 85.0,
+    "stretch_p95": 11.7
+   },
+   "h185_c84": {
+    "chest_cm": 124.5,
+    "length_cm": 77.4,
+    "shoulder_cm": 48.8,
+    "hem_cm": 84.1,
+    "stretch_p95": 1.8
    },
    "h185_c92": {
     "chest_cm": 124.5,
@@ -741,6 +1062,20 @@
     "hem_cm": 90.5,
     "stretch_p95": 3.2
    },
+   "h185_c124": {
+    "chest_cm": 125.8,
+    "length_cm": 75.2,
+    "shoulder_cm": 47.1,
+    "hem_cm": 95.3,
+    "stretch_p95": 16.7
+   },
+   "h190_c84": {
+    "chest_cm": 124.5,
+    "length_cm": 77.4,
+    "shoulder_cm": 48.6,
+    "hem_cm": 88.7,
+    "stretch_p95": 1.8
+   },
    "h190_c92": {
     "chest_cm": 124.5,
     "length_cm": 77.5,
@@ -768,10 +1103,115 @@
     "shoulder_cm": 47.6,
     "hem_cm": 95.2,
     "stretch_p95": 3.4
+   },
+   "h190_c124": {
+    "chest_cm": 125.8,
+    "length_cm": 76.1,
+    "shoulder_cm": 45.7,
+    "hem_cm": 100.0,
+    "stretch_p95": 13.1
    }
   }
  },
  "checks": [
+  {
+   "what": "body h160_c84 height",
+   "got": 160.0,
+   "want": 160,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h160_c84 chest",
+   "got": 84.0,
+   "want": 84,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c84 chest",
+   "got": 109.7,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c84 length",
+   "got": 71.0,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c84 shoulder",
+   "got": 42.5,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c84 chest",
+   "got": 114.6,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c84 length",
+   "got": 73.2,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c84 shoulder",
+   "got": 44.4,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h160_c84 chest",
+   "got": 119.5,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h160_c84 length",
+   "got": 75.4,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h160_c84 shoulder",
+   "got": 46.6,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c84 chest",
+   "got": 124.7,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c84 length",
+   "got": 77.5,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c84 shoulder",
+   "got": 48.7,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
   {
    "what": "body h160_c92 height",
    "got": 160.0,
@@ -1160,6 +1600,202 @@
   {
    "what": "shirt XL on h160_c116 shoulder",
    "got": 48.1,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "body h160_c124 height",
+   "got": 160.0,
+   "want": 160,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h160_c124 chest",
+   "got": 124.0,
+   "want": 124,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c124 chest",
+   "got": 110.3,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c124 length",
+   "got": 69.8,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h160_c124 shoulder",
+   "got": 41.9,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c124 chest",
+   "got": 115.0,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c124 length",
+   "got": 71.7,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h160_c124 shoulder",
+   "got": 42.5,
+   "want": 45,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt L on h160_c124 chest",
+   "got": 120.0,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h160_c124 length",
+   "got": 74.1,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h160_c124 shoulder",
+   "got": 45.8,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c124 chest",
+   "got": 125.3,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c124 length",
+   "got": 76.5,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h160_c124 shoulder",
+   "got": 48.2,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "body h165_c84 height",
+   "got": 165.0,
+   "want": 165,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h165_c84 chest",
+   "got": 84.0,
+   "want": 84,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h165_c84 chest",
+   "got": 109.8,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h165_c84 length",
+   "got": 70.9,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h165_c84 shoulder",
+   "got": 42.0,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h165_c84 chest",
+   "got": 114.7,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h165_c84 length",
+   "got": 73.1,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h165_c84 shoulder",
+   "got": 44.5,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c84 chest",
+   "got": 119.5,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c84 length",
+   "got": 75.4,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c84 shoulder",
+   "got": 46.5,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c84 chest",
+   "got": 124.7,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c84 length",
+   "got": 77.5,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c84 shoulder",
+   "got": 48.7,
    "want": 49,
    "tol": 1.5,
    "ok": true
@@ -1557,6 +2193,202 @@
    "ok": false
   },
   {
+   "what": "body h165_c124 height",
+   "got": 165.0,
+   "want": 165,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h165_c124 chest",
+   "got": 124.0,
+   "want": 124,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h165_c124 chest",
+   "got": 110.6,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h165_c124 length",
+   "got": 69.6,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h165_c124 shoulder",
+   "got": 41.4,
+   "want": 43,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt M on h165_c124 chest",
+   "got": 115.0,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h165_c124 length",
+   "got": 71.7,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h165_c124 shoulder",
+   "got": 44.0,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c124 chest",
+   "got": 120.1,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c124 length",
+   "got": 73.6,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h165_c124 shoulder",
+   "got": 45.8,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c124 chest",
+   "got": 125.2,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c124 length",
+   "got": 76.2,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h165_c124 shoulder",
+   "got": 48.0,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "body h175_c84 height",
+   "got": 175.0,
+   "want": 175,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h175_c84 chest",
+   "got": 84.0,
+   "want": 84,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h175_c84 chest",
+   "got": 109.7,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h175_c84 length",
+   "got": 70.7,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h175_c84 shoulder",
+   "got": 42.6,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h175_c84 chest",
+   "got": 114.7,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h175_c84 length",
+   "got": 73.1,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h175_c84 shoulder",
+   "got": 44.7,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c84 chest",
+   "got": 119.5,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c84 length",
+   "got": 75.3,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c84 shoulder",
+   "got": 46.7,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c84 chest",
+   "got": 124.6,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c84 length",
+   "got": 77.5,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c84 shoulder",
+   "got": 48.9,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
    "what": "body h175_c92 height",
    "got": 175.0,
    "want": 175,
@@ -1944,6 +2776,202 @@
   {
    "what": "shirt XL on h175_c116 shoulder",
    "got": 47.7,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "body h175_c124 height",
+   "got": 175.0,
+   "want": 175,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h175_c124 chest",
+   "got": 124.0,
+   "want": 124,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h175_c124 chest",
+   "got": 110.3,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h175_c124 length",
+   "got": 69.3,
+   "want": 71,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h175_c124 shoulder",
+   "got": 42.0,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h175_c124 chest",
+   "got": 114.9,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h175_c124 length",
+   "got": 71.2,
+   "want": 73,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt M on h175_c124 shoulder",
+   "got": 43.8,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c124 chest",
+   "got": 120.0,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c124 length",
+   "got": 73.7,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h175_c124 shoulder",
+   "got": 45.5,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c124 chest",
+   "got": 125.4,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c124 length",
+   "got": 75.6,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h175_c124 shoulder",
+   "got": 48.1,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "body h185_c84 height",
+   "got": 185.0,
+   "want": 185,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h185_c84 chest",
+   "got": 84.0,
+   "want": 84,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h185_c84 chest",
+   "got": 109.8,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h185_c84 length",
+   "got": 70.5,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h185_c84 shoulder",
+   "got": 42.4,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h185_c84 chest",
+   "got": 114.7,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h185_c84 length",
+   "got": 72.9,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h185_c84 shoulder",
+   "got": 44.7,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h185_c84 chest",
+   "got": 119.5,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h185_c84 length",
+   "got": 75.2,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h185_c84 shoulder",
+   "got": 46.8,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h185_c84 chest",
+   "got": 124.5,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h185_c84 length",
+   "got": 77.4,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h185_c84 shoulder",
+   "got": 48.8,
    "want": 49,
    "tol": 1.5,
    "ok": true
@@ -2341,6 +3369,202 @@
    "ok": true
   },
   {
+   "what": "body h185_c124 height",
+   "got": 185.0,
+   "want": 185,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h185_c124 chest",
+   "got": 124.0,
+   "want": 124,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h185_c124 chest",
+   "got": 110.6,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h185_c124 length",
+   "got": 69.1,
+   "want": 71,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h185_c124 shoulder",
+   "got": 42.1,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h185_c124 chest",
+   "got": 115.1,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h185_c124 length",
+   "got": 71.0,
+   "want": 73,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt M on h185_c124 shoulder",
+   "got": 43.0,
+   "want": 45,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt L on h185_c124 chest",
+   "got": 120.0,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h185_c124 length",
+   "got": 74.0,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h185_c124 shoulder",
+   "got": 45.4,
+   "want": 47,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt XL on h185_c124 chest",
+   "got": 125.8,
+   "want": 124,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt XL on h185_c124 length",
+   "got": 75.2,
+   "want": 77,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt XL on h185_c124 shoulder",
+   "got": 47.1,
+   "want": 49,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "body h190_c84 height",
+   "got": 190.0,
+   "want": 190,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h190_c84 chest",
+   "got": 84.0,
+   "want": 84,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h190_c84 chest",
+   "got": 110.0,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h190_c84 length",
+   "got": 70.6,
+   "want": 71,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h190_c84 shoulder",
+   "got": 42.4,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h190_c84 chest",
+   "got": 114.7,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h190_c84 length",
+   "got": 72.8,
+   "want": 73,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h190_c84 shoulder",
+   "got": 44.9,
+   "want": 45,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h190_c84 chest",
+   "got": 119.5,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h190_c84 length",
+   "got": 75.1,
+   "want": 75,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h190_c84 shoulder",
+   "got": 47.0,
+   "want": 47,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h190_c84 chest",
+   "got": 124.5,
+   "want": 124,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h190_c84 length",
+   "got": 77.4,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h190_c84 shoulder",
+   "got": 48.6,
+   "want": 49,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
    "what": "body h190_c92 height",
    "got": 190.0,
    "want": 190,
@@ -2731,6 +3955,104 @@
    "want": 49,
    "tol": 1.5,
    "ok": true
+  },
+  {
+   "what": "body h190_c124 height",
+   "got": 190.0,
+   "want": 190,
+   "tol": 0.5,
+   "ok": true
+  },
+  {
+   "what": "body h190_c124 chest",
+   "got": 124.0,
+   "want": 124,
+   "tol": 1.0,
+   "ok": true
+  },
+  {
+   "what": "shirt S on h190_c124 chest",
+   "got": 110.7,
+   "want": 109.0,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h190_c124 length",
+   "got": 69.3,
+   "want": 71,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt S on h190_c124 shoulder",
+   "got": 42.4,
+   "want": 43,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h190_c124 chest",
+   "got": 115.3,
+   "want": 114,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt M on h190_c124 length",
+   "got": 70.9,
+   "want": 73,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt M on h190_c124 shoulder",
+   "got": 43.3,
+   "want": 45,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt L on h190_c124 chest",
+   "got": 120.1,
+   "want": 119.0,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt L on h190_c124 length",
+   "got": 73.0,
+   "want": 75,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt L on h190_c124 shoulder",
+   "got": 45.0,
+   "want": 47,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt XL on h190_c124 chest",
+   "got": 125.8,
+   "want": 124,
+   "tol": 1.5,
+   "ok": false
+  },
+  {
+   "what": "shirt XL on h190_c124 length",
+   "got": 76.1,
+   "want": 77,
+   "tol": 1.5,
+   "ok": true
+  },
+  {
+   "what": "shirt XL on h190_c124 shoulder",
+   "got": 45.7,
+   "want": 49,
+   "tol": 1.5,
+   "ok": false
   },
   {
    "what": "body h175_c101_sh44 chest",
