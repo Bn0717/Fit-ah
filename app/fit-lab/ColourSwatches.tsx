@@ -67,3 +67,41 @@ export function ColourSwatches({ product, chosen, onPick, size = 28 }: {
     </div>
   );
 }
+
+// ── pants colours (blender/pants_colours.py): each colour is its own photo texture lined up on the same pattern,
+// so the fit is unchanged; the colour the pants were simulated in (base) keeps the texture inside the 3D file ──
+export type PantsColour = { code: string; name: string; hex: string; front?: string; back?: string; base?: boolean };
+export type PantsColours = { id: string; dir: string; colours?: PantsColour[]; base_colour?: string };
+
+// the swatch row's view of a pants product (same component as the shirts)
+export function pantsSwatches(p: PantsColours): ShirtProduct | null {
+  const base = p.colours?.find(c => c.base);
+  if (!base || (p.colours?.length ?? 0) < 2) return null;
+  return { id: p.id, colours: p.colours!.map(c => ({ hex: c.hex, name: c.name, code: c.code })), base_hex: base.hex } as unknown as ShirtProduct;
+}
+
+// the chosen colour's texture files, or null for the colour inside the 3D file
+export function pantsColourFiles(p: PantsColours | null | undefined, chosen: Record<string, string>): { front: string; back: string } | null {
+  const c = p?.colours?.find(x => x.hex === chosen[p.id]);
+  return c && !c.base && c.front && c.back ? { front: `${p!.dir}/${c.front}`, back: `${p!.dir}/${c.back}` } : null;
+}
+
+// the multiplier that makes a photo texture of average colour `hex` show as that colour under the fitting room's
+// lights (same calibration as the shirts, displayColour.ts); null when the product has no measured colours
+export function pantsTint(p: PantsColours | null | undefined, chosen: Record<string, string>): number[] | null {
+  const c = p?.colours?.find(x => x.hex === chosen[p.id]) ?? p?.colours?.find(x => x.base);
+  if (!c) return null;
+  const lin = hexToLinear(c.hex), want = fabricFor(lin);
+  return want.map((w, i) => Math.min(w / Math.max(lin[i], 1e-4), 1));
+}
+
+// load (once) the two textures of a colour; flipY false + sRGB like the textures inside the glTF files
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const texCache: Record<string, Promise<any>> = {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function loadPantsColour(THREE: any, files: { front: string; back: string }): Promise<{ front: any; back: any }> {
+  const one = (url: string) => (texCache[url] ||= new THREE.TextureLoader().loadAsync(url).then((t: { flipY: boolean; colorSpace: string; anisotropy: number }) => {
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  }));
+  return Promise.all([one(files.front), one(files.back)]).then(([front, back]) => ({ front, back }));
+}

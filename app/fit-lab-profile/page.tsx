@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
 import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
 import { GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
-import { useTopColours, currentHex, ColourSwatches } from '../fit-lab/ColourSwatches';
+import { useTopColours, currentHex, ColourSwatches, pantsSwatches, pantsColourFiles, pantsTint, type PantsColours } from '../fit-lab/ColourSwatches';
 import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, withShirt, FIT_LEGEND, type Size, type ViewMode, type GridMeta, type ShirtProduct } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
@@ -200,6 +200,7 @@ export default function MyFittingRoom() {
 
   // products (other pants cuts): their own simulation data
   const [productData, setProductData] = useState<Record<string, PantsData & { dir: string }>>({});
+  const [pantsColours, setPantsColours] = useState<Record<string, PantsColours>>({});   // pants products' colours
   useEffect(() => {
     let alive = true;
     Promise.all(products.map(async it => {
@@ -207,6 +208,7 @@ export default function MyFittingRoom() {
         const response = await fetch(`${it.dir}/product.json`);
         if (!response.ok) return null;
         const p = await response.json();
+        if (p.colours) setPantsColours(c => ({ ...c, [it.id]: { id: it.id, dir: it.dir, colours: p.colours, base_colour: p.base_colour } }));
         return [it.id, { name: `${p.brand} ${p.name}`, sizes: p.belt, drop: p.drop, belt: p.belt, dir: it.dir, elasticStretch: p.elastic_stretch, walk: p.walk }] as const;
       } catch { return null; }
     })).then(entries => { if (alive) setProductData(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => !!entry))); });
@@ -431,7 +433,9 @@ export default function MyFittingRoom() {
           note={js?.hide ? js.reason : js?.now && js.now.lengthFit === 'pooling' ? `About ${js.now.extra.toFixed(0)} cm too long (piles up on the shoes).`
             : js?.now && js.now.lengthFit === 'short' ? `Too short: the hem ends ${js.now.hem.toFixed(0)} cm above the floor (the ankle shows).` : null}
           alert={!!js?.hide}
-          extra={js?.hide && js.noSim && !js.elastic && !js.tooSmall && !js.cantPullOn && js.now && natW !== null ? (
+          extra={<>{pantsSwatches(pantsColours[bottomItem.id] ?? { id: '', dir: '' }) && !js?.hide && (
+            <div className="mt-2"><ColourSwatches product={pantsSwatches(pantsColours[bottomItem.id])!} chosen={topColour} onPick={pickTopColour} size={24} /></div>)}
+          {js?.hide && js.noSim && !js.elastic && !js.tooSmall && !js.cantPullOn && js.now && natW !== null ? (
             <button onClick={() => setBody({ ...body, waist: Math.round(natW), belly: 0 })} className="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
               style={{ borderColor: C.navy, color: C.navy }}>See them with a natural waist</button>
           ) : js && !js.hide && !js.elastic && js.variant !== 'held' ? (
@@ -439,7 +443,7 @@ export default function MyFittingRoom() {
               style={belt ? { background: C.navy, color: '#fff', borderColor: C.navy } : { borderColor: C.line, color: C.navy }}>
               {belt ? '✓ Belt' : '+ Belt'}
             </button>
-          ) : null} />
+          ) : null}</>} />
       ))}
       {/* compact rows show the colours as a line under each size; the key is only on roomy screens */}
       {!compact && <p className="flex w-full flex-nowrap gap-x-3 overflow-x-auto whitespace-nowrap text-[10px]" style={{ color: C.mute }}>
@@ -523,7 +527,8 @@ export default function MyFittingRoom() {
         <FitViewer skinTone={skinTone} shirtColour={topProductOf(topItem) ? { product: topProductOf(topItem)!, hex: currentHex(topProductOf(topItem)!, topColour) } : null} shirtDir={topItem?.kind === 'top' && topItem.dir ? `${topItem.dir}/grid` : undefined} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
           jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
-            skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
+            skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null,
+            colour: bottomItem?.kind === 'product' && pantsColours[bottomItem.id] ? { files: pantsColourFiles(pantsColours[bottomItem.id], topColour), tint: pantsTint(pantsColours[bottomItem.id], topColour) } : null } : null}
           onWalking={w => { if (!w && walking) toggleCatwalk(); else if (w && !walking) toggleCatwalk(); }} onWalkStatus={setWalkStatus} className="min-h-0 w-full flex-1" />
       ) : <div className="min-h-0 flex-1"><ModelSkeleton /></div>}
       {/* top left: my body (the big-screen layout shows it docked on the left instead) */}
@@ -813,9 +818,9 @@ function WornRow({ title, img, sizes, size, onSize, verdict, note, onRemove, ext
       <div className="flex items-center gap-2">
         <img src={img} alt="" className="h-9 w-9 rounded-lg border bg-white object-contain" style={{ borderColor: C.line }} crossOrigin="anonymous" />
         <p className="min-w-0 flex-1 truncate text-xs font-semibold" style={{ color: C.navy }}>{title}</p>
-        {extra}
         <button onClick={onRemove} className="flex h-6 w-6 items-center justify-center rounded-full text-xs hover:bg-gray-100" style={{ color: C.mute }} aria-label={`Take off ${title}`}>✕</button>
       </div>
+      {extra && <div className="min-w-0">{extra}</div>}{/* own line: the name keeps its room, swatches / buttons wrap */}
       {sizes.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {sizes.map(s => (
