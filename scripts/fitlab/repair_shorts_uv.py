@@ -41,7 +41,7 @@ def write(path, j, data):
 
 reports=[]
 for size in ['S','M','L','XL','2XL']:
-    product=ROOT/'blender/products/ns_matrix_white'
+    product=ROOT/'blender/products/tnt_co/ns_matrix_white'
     cfg=json.loads((product/f'grid/cfg_{size}.json').read_text())
     os.environ['FITAH_PANTS_SPEC']=str(product/'build/spec.json')
     panels,seams,info=gp.build_pants_pattern(gp.size_spec(size))
@@ -68,7 +68,7 @@ for size in ['S','M','L','XL','2XL']:
     tree.balance()
     hem={'np':np}; definitions(ROOT/'blender/fix_pants_hem_uv.py', {'leg_maps','remap'},hem)
     for walking in [False,True]:
-        folder=ROOT/('public/models/fitlab/walk/ns_matrix_white' if walking else 'public/models/fitlab/products/ns_matrix_white/belt')
+        folder=ROOT/('public/models/fitlab/brands/tnt_co/ns_matrix_white/walk' if walking else 'public/models/fitlab/brands/tnt_co/ns_matrix_white/belt')
         stem=f'walk_jeans_{size}.glb' if walking else f'jeans_{size}.glb'
         for path in [folder/stem,folder/(stem+'.gz')]:
             if not path.exists(): continue

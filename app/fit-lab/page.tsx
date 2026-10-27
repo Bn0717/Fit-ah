@@ -27,12 +27,13 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
   type Size, type ViewMode, type GridMeta, type Tape, type ShirtNums, type Variant, type ProductWalk, type WalkTrack, type JeansSim, type JeansBody, jeansVarWeights } from './engine';
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
+import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
-// a pants product made by blender/new_pants.sh (public/models/fitlab/products/<id>/product.json)
+// a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
 // a pants photo swap: new photos on the simulated Xin jeans (pantsSwap.ts)
 type PantsItem = { id: string; brand: string; name: string; frontUrl: string; backUrl: string; tex?: { front: PantsResult; back: PantsResult }; chart?: SizeChartData };
-const PANTS_REF = '/models/fitlab/pants_xin/outline.json';
+const PANTS_REF = XIN.outline;
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
 const SAME_CUT_MAX = 0.05;   // mean proportion difference allowed vs the Xin outline (pantsSwap.ts compare): Xin's own photos 0.7-1.6 %, Stallion (another cut) 6.6-7.5 %
@@ -46,8 +47,7 @@ const C = {
 
 // developer panels ("My exact fit", chart vs. draped table, walking videos): hidden from shoppers; set true for demos / checks
 const DEV_PANELS = false;
-const GRID_DIR = '/models/fitlab/grid';
-const CW_DIR = '/models/fitlab/colourway';
+const CW_DIR = GON_FILES.colourway;
 
 // defined outside the page so React keeps the same input element while dragging
 function Slider({ label, value, min, max, step = 1, note, disabled, onChange }: { label: string; value: number; min: number; max: number; step?: number; note?: string; disabled?: boolean; onChange: (v: number) => void }) {
@@ -103,7 +103,7 @@ function FitLab() {
     return () => { alive = false; };
   }, [products]);
   // products flagged "hidden" in products/index.json (not ready for shoppers yet, e.g. simulated on one body only) are left out
-  useEffect(() => { fetch('/models/fitlab/products/index.json').then(r => r.ok ? r.json() : []).then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => {}); }, []);
+  useEffect(() => { fetch(PRODUCTS_INDEX_URL).then(r => r.ok ? r.json() : []).then(l => setProducts(l.filter((p: { hidden?: boolean }) => !p.hidden))).catch(() => {}); }, []);
   useEffect(() => {
     const it = products.find(p => p.id === openPants?.id);
     if (!it) { setOpenProduct(null); return; }
@@ -115,7 +115,7 @@ function FitLab() {
     fetch(`${it.dir}/product.json`).then(r => r.json()).then(setProduct).catch(() => setProduct(null));
   }, [pantsId, products]);
   const pants: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>; dir: string } | null =
-    pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: xinOn ? XIN_GRID_DIR : GRID_DIR } : null)
+    pantsId === 'xin' ? (meta?.jeans ? { ...meta.jeans, dir: xinOn ? XIN_GRID_DIR : XIN.grid } : null)
       : product && product.id === pantsId ? { name: `${product.brand} ${product.name}`, sizes: product.belt, drop: product.drop, belt: product.belt, dir: product.dir } : null;
   const belly = 0; // Belly adjustment is temporarily disabled; always use the natural shape.
   // "My exact fit": a real simulation on this exact body (blender/exact_fit.sh via /api/fitlab/exact)
@@ -131,7 +131,7 @@ function FitLab() {
   const savedBody = useRef<{ height: number; chest: number; shoulder: number; waist: number } | null>(null);
   const [walking, setWalking] = useState(false);
   const [walkStatus, setWalkStatus] = useState<string | null>(null);
-  const GON: LabItem = { id: 'gon', brand: 'TNT CO', name: 'Gon Tee (green)', frontUrl: '/models/fitlab/items/gon_front.png', backUrl: '/models/fitlab/items/gon_back.png', builtin: true };
+  const GON: LabItem = { id: 'gon', brand: 'TNT CO', name: 'Gon Tee (green)', frontUrl: GON_FILES.front, backUrl: GON_FILES.back, builtin: true };
   const [items, setItems] = useState<LabItem[]>([GON]);
   // built-in wardrobe items the user removed (kept on disk, only hidden; "Restore" brings them back)
   const [hidden, setHidden] = useState<string[]>([]);
@@ -211,7 +211,7 @@ function FitLab() {
   const jeansHide = !!jst?.hide;
 
   useEffect(() => {
-    fetch(`${GRID_DIR}/meta.json`).then(r => r.json()).then(setMeta).catch(() => setError('Could not load the size grid.'));
+    fetch(GRID_META_URL).then(r => r.json()).then(setMeta).catch(() => setError('Could not load the size grid.'));
   }, []);
 
   // ── scene setup + body ──────────────────────────────────────────────────────
@@ -258,7 +258,7 @@ function FitLab() {
       Object.assign(S, { THREE, scene, loader, gen: (S.gen ?? 0) + 1, bodyMeshes: [], shirts: {} as Record<string, unknown>, jeans: {} as Record<string, unknown> });
       // development only: lets automated checks turn the camera (front / side / back views); not in the live build
       if (process.env.NODE_ENV !== 'production') Object.assign(S, { camera, controls }), Object.assign(window, { __fitlabScene: S });
-      loader.load(`${GRID_DIR}/body.glb`,
+      loader.load(`${BODY_GRID_DIR}/body.glb`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (g: any) => {
           if (cancelled) return;
@@ -334,7 +334,7 @@ function FitLab() {
     S.shirts[size] = 'loading';
     const gen = S.gen;
     setShirtProg({ size, pct: 0 });
-    loadPacked(S.THREE, S.loader, `${GRID_DIR}/shirt_${size}.glb.gz`,
+    loadPacked(S.THREE, S.loader, `${GON_FILES.grid}/shirt_${size}.glb.gz`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (g: any) => {
         if (S.gen !== gen) return;               // a download that finishes after the scene was rebuilt (page reload / live edit): its scene is gone, drop it
@@ -371,7 +371,7 @@ function FitLab() {
     W.jeans ||= {};
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
     const jz = pantsId === 'xin' && jeansSize && belt && meta.walk?.jeans?.[jeansSize + 'belt'] ? jeansSize + 'belt' : jeansSize;
-    const originalWalk = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined);
+    const originalWalk = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined, { shirt: GON_FILES.walk, pants: XIN.walk });
     const selected = xinWalkAssets(originalWalk, xinOn);
     const { js, sk } = selected;
     W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
@@ -388,7 +388,7 @@ function FitLab() {
     };
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
     if (!has) { setWalking(false); setWalkStatus(`The ${size} catwalk is still being simulated.`); return; }
-    const dir = meta.walk!.dir;
+    const dir = BODY_WALK_DIR;   // the shared walking body (garment walks come from selectWalk)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
       if (packed) loadPacked(THREE, S.loader, u + '.gz', res, undefined, rej);
@@ -890,7 +890,7 @@ function FitLab() {
 
   // ── bottoms section of the wardrobe: Xin, its photo swaps, and pants with their own simulation (products) ──
   const bottoms: LabItem[] = [
-    { id: 'xin', brand: 'TNT CO', name: '"Xin" Denim Biker Pants (grey)', frontUrl: '/models/fitlab/items/xin_front.jpg', backUrl: '/models/fitlab/items/xin_back.jpg', builtin: true },
+    { id: 'xin', brand: 'TNT CO', name: '"Xin" Denim Biker Pants (grey)', frontUrl: XIN.front, backUrl: XIN.back, builtin: true },
     ...pantsItems.map(p => ({ id: p.id, brand: p.brand, name: p.name, frontUrl: p.frontUrl, backUrl: p.backUrl, pantsTex: p.tex ? { front: p.tex.front.canvas, back: p.tex.back.canvas } : undefined })),
     ...products.filter(p => p.id !== 'xin_check').map(p => ({ id: p.id, brand: p.brand, name: p.name, frontUrl: `${p.dir}/front.png`, backUrl: `${p.dir}/back.png`, builtin: true })),
   ];
@@ -1012,7 +1012,7 @@ function FitLab() {
   };
   // the open bottom's simulation: Xin (and its photo swaps) from the grid, other cuts from their product folder
   const pm = openPants && (openPants.id === 'xin' || pantsItems.some(p => p.id === openPants.id))
-    ? (meta?.jeans ? { sims: meta.jeans.belt ?? meta.jeans.sizes, glb: (z: string) => meta.jeans?.belt ? `${openPants.id === 'xin' ? XIN_GRID_DIR : GRID_DIR}/belt/jeans_${z}.glb.gz` : `${openPants.id === 'xin' ? XIN_GRID_DIR : GRID_DIR}/jeans_${z}.glb.gz`,
+    ? (meta?.jeans ? { sims: meta.jeans.belt ?? meta.jeans.sizes, glb: (z: string) => meta.jeans?.belt ? `${openPants.id === 'xin' ? XIN_GRID_DIR : XIN.grid}/belt/jeans_${z}.glb.gz` : `${openPants.id === 'xin' ? XIN_GRID_DIR : XIN.grid}/jeans_${z}.glb.gz`,
         note: openPants.id === 'xin' ? 'Chart from the brand. Every size was cloth-simulated on real body shapes, so "Check My Fit" shows where the waistband sits, how the legs hang and where the hem lands on your body.'
           : 'Same cut as the Xin jeans: your photos are wrapped on the Xin simulation, so sizes, drape and fit are those of the Xin jeans.' } : null)
     : openProduct && openProduct.id === openPants?.id ? { sims: openProduct.belt, glb: (z: string) => `${openProduct.dir}/belt/jeans_${z}.glb.gz`,
@@ -1431,7 +1431,7 @@ function FitLab() {
       }} open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
       refChart={addKind === 'pants' ? pantsRef : shirtRef} refName={addKind === 'pants' ? 'Xin jeans' : 'Gon Tee'} />
     {meta && bodyNow && (
-      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(openItem?.chart as unknown as Partial<typeof meta.chart>) ?? meta.chart} sizeFit={sizeFit} size={size} gridDir={GRID_DIR}
+      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(openItem?.chart as unknown as Partial<typeof meta.chart>) ?? meta.chart} sizeFit={sizeFit} size={size} gridDir={GON_FILES.grid}
         fav={!!openItem && favs.includes(openItem.id)} onFav={() => openItem && toggleFav(openItem.id)} match={topMatch(openItem)}
         body={{ height, chest: bodyNow.chest, waist: bodyNow.waist, shoulder: bodyNow.shoulder }} onCheckFit={checkFit} />
     )}

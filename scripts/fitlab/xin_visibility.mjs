@@ -9,7 +9,7 @@ const moduleUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toStr
 const engine=moduleUrl(compile(fs.readFileSync(path.join(root,'app/fit-lab/engine.ts'),'utf8')));
 const source=compile(fs.readFileSync(path.join(root,'app/fit-lab/jeansFit.ts'),'utf8')).replaceAll("'./engine'",JSON.stringify(engine));
 const {jeansState}=await import(moduleUrl(source));
-const meta=JSON.parse(fs.readFileSync(path.join(root,'public/models/fitlab/grid/meta.json'))),result={};
+const meta=JSON.parse(fs.readFileSync(path.join(root,'public/models/fitlab/bodies/grid/meta.json'))),result={};
 for(const mode of ['drop','belt'])for(const size of ['M','L','XL','2XL']){
  const cases={};
  for(const h of meta.heights)for(const c of meta.chests){

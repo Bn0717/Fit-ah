@@ -88,7 +88,7 @@ test('active pants geometry with absent shape measurements cannot silently keep 
 const sizingSource = readFileSync(new URL('../app/fit-lab/jeansFit.ts', import.meta.url), 'utf8');
 const sizingCompiled = ts.transpileModule(sizingSource, {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText.replaceAll("'./engine'", JSON.stringify(engineUrl)).replaceAll('"./engine"',JSON.stringify(engineUrl));
 const {jeansState}=await import(`data:text/javascript;base64,${Buffer.from(sizingCompiled).toString('base64')}`);
-const meta=JSON.parse(readFileSync(new URL('../public/models/fitlab/grid/meta.json',import.meta.url),'utf8'));
+const meta=JSON.parse(readFileSync(new URL('../public/models/fitlab/bodies/grid/meta.json',import.meta.url),'utf8'));
 test('a clean synthetic simulation is not hidden by an arbitrary 2cm waistband deficit',()=>{
   const clean=structuredClone(meta.jeans);
   for(const sample of Object.values(clean.belt.M.bodies)){sample.put_on_failed=false;sample.seam_gap_mean_cm=0;sample.crotch_drop_cm=Math.max(-2,sample.crotch_drop_cm);sample.hem_lowest_cm=Math.min(15,sample.hem_lowest_cm);}
@@ -110,7 +110,7 @@ test('directional fields blend independently of legacy area strain',()=>{
   assert.ok(Math.abs(result[0]-.15)<1e-6);
 });
 
-const shortsProduct=JSON.parse(readFileSync(new URL('../public/models/fitlab/products/ns_matrix_white/product.json',import.meta.url),'utf8'));
+const shortsProduct=JSON.parse(readFileSync(new URL('../public/models/fitlab/brands/tnt_co/ns_matrix_white/product.json',import.meta.url),'utf8'));
 const shorts={name:shortsProduct.name,sizes:shortsProduct.belt,belt:shortsProduct.belt,drop:shortsProduct.drop,elasticStretch:shortsProduct.elastic_stretch};
 test('actual 183/102 interpolation cannot dilute its known failed corner',()=>{
  const state=jeansState(meta,meta.jeans,'M',true,183,102,48,null,0);

@@ -5,7 +5,7 @@
 //   - scale: the person's height in the photo (top of the mask above the head to the heels) = typed height
 //   - shoulder: distance between the shoulder points, converted to the seam-to-seam shoulder width
 //   - chest / waist / hips: the width of the body outline at that height x a girth-per-width factor measured on
-//     the Fit Lab 3D bodies (blender/grid, cross-sections): waist 2.79 (+-1 %), hips 2.62 (+-0.6 %), chest 2.82
+//     the Fit Lab 3D bodies (blender/bodies/grid, cross-sections): waist 2.79 (+-1 %), hips 2.62 (+-0.6 %), chest 2.82
 //     (+-3 %). A front photo shows width only, not depth, so real people differ more than the 3D bodies do:
 //     expect about +-6-8 cm on chest / waist (more in loose clothes); belly needs a side view and is not measured.
 // Every failure returns a plain-language reason so the page can ask for a better photo or a typed number.

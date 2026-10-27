@@ -25,6 +25,7 @@ from mesh_correspondence import resolve_triangle_mapping
 from pack_walk import pack, unpack
 
 PUBLIC = ROOT/'public/models/fitlab'
+XIN_PUBLIC = PUBLIC/'brands/tnt_co/xin_jeans'   # raw Xin grid/ and walk/
 DEST = Path('/private/tmp/xin-surface/stage')
 REPORT = Path('/private/tmp/xin-surface/repair-report.json')
 TYPES = {5126:'<f4',5125:'<u4',5123:'<u2',5122:'<i2',5121:'u1'}
@@ -99,7 +100,7 @@ def pattern(size):
     tree=ast.parse((ROOT/'blender/drape_pants.py').read_text())
     config=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='CFG' for t in n.targets))
     cfg=eval(compile(ast.Expression(config.value),'config','eval'),{'dict':dict})
-    cfg.update(json.loads((ROOT/f'blender/pants/grid/jeans_{size}_h175_c101.json').read_text()))
+    cfg.update(json.loads((ROOT/f'blender/products/tnt_co/xin_jeans/work/grid/jeans_{size}_h175_c101.json').read_text()))
     panels,seams,info=gp.build_pants_pattern(gp.size_spec(size))
     counts=garment.edge_counts(panels,seams,cfg['spacing'])
     scope={'np':np,'cfg':cfg,'info':info,'L':gp.size_spec(size)['length'],'outline':json.loads(Path(cfg['outline']).read_text())}
@@ -146,11 +147,11 @@ def triangle_quality(before,after,faces,spec):
 def walk_body():
     global BODY_WALK
     if BODY_WALK is not None:return BODY_WALK
-    info=json.loads((PUBLIC/'walk/walk_body.json').read_text());track=info['objects']['WalkBody']
-    data=unpack(gzip.decompress((PUBLIC/'walk/walk_body.bin.gz').read_bytes()),info['packed']['regions'])
+    info=json.loads((PUBLIC/'bodies/walk/walk_body.json').read_text());track=info['objects']['WalkBody']
+    data=unpack(gzip.decompress((PUBLIC/'bodies/walk/walk_body.bin.gz').read_bytes()),info['packed']['regions'])
     q=np.frombuffer(data,dtype='<i2',count=info['frames']*track['n']*3,offset=track['offset']).reshape(info['frames'],track['n'],3)
     points=np.array(track['min'])+(q.astype(float)+32768)*np.array(track['scale'])
-    j,b=load(PUBLIC/'walk/walk_body.glb');triangles=[]
+    j,b=load(PUBLIC/'bodies/walk/walk_body.glb');triangles=[]
     for node in j['nodes']:
         if node.get('name')!='WalkBody':continue
         mesh=j['meshes'][node['mesh']]
@@ -161,8 +162,8 @@ def walk_body():
     BODY_WALK=points,np.array(triangles);return BODY_WALK
 
 def finish_walk(size,spec):
-    info=json.loads((PUBLIC/f'walk/walk_jeans_{size}.json').read_text())
-    data=bytearray(unpack(gzip.decompress((PUBLIC/f'walk/walk_jeans_{size}.bin.gz').read_bytes()),info['packed']['regions']))
+    info=json.loads((XIN_PUBLIC/f'walk/walk_jeans_{size}.json').read_text())
+    data=bytearray(unpack(gzip.decompress((XIN_PUBLIC/f'walk/walk_jeans_{size}.bin.gz').read_bytes()),info['packed']['regions']))
     q=np.frombuffer(data,dtype='<i2',count=info['frames']*info['n']*3).reshape(info['frames'],info['n'],3)
     old=np.array(info['min'])+(q.astype(float)+32768)*np.array(info['scale'])
     body,body_faces=walk_body();results=[];changes=[];first_finished=None;garment_faces=pattern(size.removesuffix('belt'))[1]
@@ -198,7 +199,7 @@ def finish_walk(size,spec):
         changes.append(new-points)
     changes=np.array(changes)
     # The unchanged tail contains all original directional strain samples.
-    original=unpack(gzip.decompress((PUBLIC/f'walk/walk_jeans_{size}.bin.gz').read_bytes()),info['packed']['regions'])
+    original=unpack(gzip.decompress((XIN_PUBLIC/f'walk/walk_jeans_{size}.bin.gz').read_bytes()),info['packed']['regions'])
     assert data[info['strain_offset']:info['gap_offset']]==original[info['strain_offset']:info['gap_offset']]
     packed=pack(data,info['packed']['regions']);assert unpack(packed,info['packed']['regions'])==bytes(data)
     dest=DEST/'walk';dest.mkdir(parents=True,exist_ok=True)
@@ -211,10 +212,10 @@ def finish_walk(size,spec):
 def repair(size,mode):
     walking=mode=='walk';stem=f'walk_jeans_{size}' if walking else f'jeans_{size}'
     chart_size=size.removesuffix('belt')
-    src=(PUBLIC/'walk'/f'{stem}.glb') if walking else (PUBLIC/'grid'/('' if mode=='held' else mode)/f'{stem}.glb.gz')
+    src=(XIN_PUBLIC/'walk'/f'{stem}.glb') if walking else (XIN_PUBLIC/'grid'/('' if mode=='held' else mode)/f'{stem}.glb.gz')
     dst=DEST/('walk' if walking else 'grid')/('' if mode in ['walk','held'] else mode)/f'{stem}.glb.gz'
     uv,original_faces,waist_spec=pattern(chart_size)
-    source_dir=ROOT/('blender/pants/grid' if mode=='held' else 'blender/pants/settle/'+('belt' if walking else mode))
+    source_dir=ROOT/('blender/products/tnt_co/xin_jeans/work/grid' if mode=='held' else 'blender/products/tnt_co/xin_jeans/work/settle/'+('belt' if walking else mode))
     sample=source_dir/f'jeans_{chart_size}_h175_c101.npz'
     if not sample.exists():raise FileNotFoundError(sample)
     positions=np.load(sample)['Jeans'];body_positions=np.load(sample)['Body']

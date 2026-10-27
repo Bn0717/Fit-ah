@@ -42,7 +42,7 @@ OUTPUT FORMAT:
 [{"bottom":"...","shoes":"...","reason":"...","comfort":"...","vibe":"..."}]`;
   return { prompt, fitLabel };
 }
-const img = fs.readFileSync('public/models/fitlab/items/gon_front.png').toString('base64');
+const img = fs.readFileSync('public/models/fitlab/brands/tnt_co/gon_tee/photos/gon_front.png').toString('base64');
 const runs = [['Kuala Lumpur', 'M'], ['Tokyo', 'L'], ['London', 'S']];
 const out = [];
 for (const [city, size] of runs) {

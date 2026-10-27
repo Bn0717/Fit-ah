@@ -15,7 +15,7 @@ function model(path) {
 }
 for(const size of ['S','M','L','XL','2XL']) {
   test(`shorts ${size} static photo stays continuous across texture-split vertices`,()=>{
-    const {j,array}=model(`products/ns_matrix_white/belt/jeans_${size}.glb.gz`);
+    const {j,array}=model(`brands/tnt_co/ns_matrix_white/belt/jeans_${size}.glb.gz`);
     assert.equal(j.asset.extras.uv_vertex_identity_fixed,true);
     assert.equal(j.asset.extras.hem_uv_fixed,true,'preserve the approved slanted-photo hem correction');
     for(const primitive of j.meshes.flatMap(m=>m.primitives)) {
@@ -30,7 +30,7 @@ for(const size of ['S','M','L','XL','2XL']) {
     }
   });
   test(`shorts ${size} walking photo follows stable source vertex IDs`,()=>{
-    const {j,array}=model(`walk/ns_matrix_white/walk_jeans_${size}.glb.gz`), seen=new Map();
+    const {j,array}=model(`brands/tnt_co/ns_matrix_white/walk/walk_jeans_${size}.glb.gz`), seen=new Map();
     assert.equal(j.asset.extras.uv_vertex_identity_fixed,true);
     assert.equal(j.asset.extras.hem_uv_fixed,true,'preserve the approved slanted-photo hem correction');
     for(const primitive of j.meshes.flatMap(m=>m.primitives)) {
@@ -43,7 +43,7 @@ for(const size of ['S','M','L','XL','2XL']) {
     }
   });
   test(`shorts ${size} walking fit uses the baked collision envelope`,()=>{
-    const info=JSON.parse(readFileSync(new URL(`../public/models/fitlab/walk/ns_matrix_white/walk_jeans_${size}.json`,import.meta.url)));
+    const info=JSON.parse(readFileSync(new URL(`../public/models/fitlab/brands/tnt_co/ns_matrix_white/walk/walk_jeans_${size}.json`,import.meta.url)));
     assert.ok(Math.abs(info.fit_collision_cm-.55)<1e-9,'3mm cloth plus 2.5mm body clearance');
     assert.equal(info.frames,131);
   });
@@ -52,8 +52,8 @@ for(const size of ['S','M','L','XL','2XL']) {
 
 test('all static and walking sizes use the same clean front/back albedo with resolvable paths', () => {
   for(const size of ['S','M','L','XL','2XL']) for(const path of [
-    `products/ns_matrix_white/belt/jeans_${size}.glb.gz`,
-    `walk/ns_matrix_white/walk_jeans_${size}.glb.gz`,
+    `brands/tnt_co/ns_matrix_white/belt/jeans_${size}.glb.gz`,
+    `brands/tnt_co/ns_matrix_white/walk/walk_jeans_${size}.glb.gz`,
   ]) {
     const {j}=model(path);
     assert.equal(j.asset.extras.albedo_version,1);
@@ -62,13 +62,13 @@ test('all static and walking sizes use the same clean front/back albedo with res
       assert.ok(image && !('bufferView' in image));
       const resolved=new URL(image.uri,new URL('../public/models/fitlab/'+path,import.meta.url));
       assert.ok(existsSync(resolved),`texture path resolves: ${path} ${image.uri}`);
-      assert.ok(resolved.pathname.endsWith(`/products/ns_matrix_white/albedo_${side}_v1.png`));
+      assert.ok(resolved.pathname.endsWith(`/brands/tnt_co/ns_matrix_white/albedo_${side}_v1.png`));
     }
   }
 });
 
 test('the shorts catalog contains the regenerated measurements for all100 bodies',()=>{
-  const root=new URL('../public/models/fitlab/products/ns_matrix_white/',import.meta.url);
+  const root=new URL('../public/models/fitlab/brands/tnt_co/ns_matrix_white/',import.meta.url);
   const product=JSON.parse(readFileSync(new URL('product.json',root)));
   for(const size of ['S','M','L','XL','2XL']) {
     const sim=JSON.parse(readFileSync(new URL(`belt/jeans_${size}.json`,root)));

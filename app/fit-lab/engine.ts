@@ -51,12 +51,14 @@ export interface ProductWalk {
   layered: Partial<Record<Size, string>>;
 }
 
+// dirs: where the built-in shirt's walks and the legacy (Xin) jeans walks live (app/fit-lab/paths.ts); both default
+// to meta.walk.dir (the old single walk folder)
 export function selectWalk(meta: GridMeta, shirt: Size, pants: string | null | undefined,
-  legacy: boolean, product?: ProductWalk) {
-  const base = meta.walk?.dir ?? '';
+  legacy: boolean, product?: ProductWalk, dirs?: { shirt: string; pants: string }) {
+  const base = dirs?.shirt ?? meta.walk?.dir ?? '';
   const own = !!pants && !!product?.sizes.includes(pants);
   const pantsFile = own ? pants! : legacy && pants && meta.walk?.jeans?.[pants] ? pants : null;
-  const pantsDir = own ? product!.dir : base;
+  const pantsDir = own ? product!.dir : dirs?.pants ?? base;
   const layered = !!pantsFile && (own ? product!.layered[shirt] : meta.walk?.layered?.[shirt]) === pantsFile;
   const shirtFile = layered ? `${shirt}_j${pantsFile}` : shirt;
   const shirtDir = own && layered ? pantsDir : base;

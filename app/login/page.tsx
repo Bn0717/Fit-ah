@@ -352,7 +352,7 @@ function Feature({ n, title, text, chips, media, flip }: {
 // a looping, muted video that only plays while on screen
 // the 2 size videos are the same Fit Lab grid (normal and fit map). Sizes match the labels in Fit Lab's own
 // video (blender/compose_walk_video.sh): the S shirt is worn with M jeans, the smallest jeans simulated.
-// body: the 175 x 101 grid body (public/models/fitlab/grid/meta.json, waist 77.7)
+// body: the 175 x 101 grid body (public/models/fitlab/bodies/grid/meta.json, waist 77.7)
 const SIZE_LABELS: [string, string][] = [['S', 'M'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']];   // [shirt, jeans]
 
 function VideoCard({ src, poster, ratio, labels, legend, narrow }: {
