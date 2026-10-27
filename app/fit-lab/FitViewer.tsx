@@ -13,6 +13,7 @@ import type { Result } from './colourway';
 const C = { cream: '#F8F3EA', navy: '#0B1957', red: '#ef4444' };
 import { xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GON, XIN } from './paths';
+import { applySkinTone, type SkinToneId } from './skinTone';
 
 
 export interface FitViewerProps {
@@ -29,10 +30,11 @@ export interface FitViewerProps {
   jeans?: { url: string; size: string; hidden: boolean; walk?: boolean; productWalk?: ProductWalk; builtinXin?: boolean; belt?: boolean; elastic?: { extension: number; limit: number }; skin?: { front: HTMLCanvasElement; back: HTMLCanvasElement } | null } | null;
   onWalking: (on: boolean) => void; onWalkStatus: (msg: string | null) => void;
   background?: string; className?: string; style?: React.CSSProperties;
+  skinTone?: SkinToneId | null;               // Monk Skin Tone Scale id; null = the model's own skin
 }
 
 export default function FitViewer({ meta, height, chest, shoulder, waist, size, mode, walking, photos, showShirt = true,
-  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style }: FitViewerProps) {
+  belly = 0, jeans = null, onWalking, onWalkStatus, background = C.cream, className, style, skinTone = null }: FitViewerProps) {
   const jOn = !!jeans && !jeans.hidden;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +46,14 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
   const [ready, setReady] = useState(0);
   const setWalking = (on: boolean) => onWalking(on);
   const setWalkStatus = (m: string | null) => onWalkStatus(m);
+
+  // skin tone: kept on the scene so bodies loaded later (the walking body) get it too
+  useEffect(() => {
+    const S = sceneRef.current;
+    S.skinTone = skinTone;
+    applySkinTone(S.bodyRoot, skinTone);
+    applySkinTone(S.walk?.group, skinTone);
+  }, [skinTone, loading]);
 
   // ── scene setup + body ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -91,6 +101,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
+          applySkinTone(g.scene, S.skinTone);
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -229,6 +240,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
+          applySkinTone(g.scene, S.skinTone);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;

@@ -28,6 +28,7 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
+import { applySkinTone, isSkinTone } from './skinTone';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
@@ -187,6 +188,9 @@ function FitLab() {
       savedBody.current = saved;
       setHeight(saved.height); setChest(saved.chest); setWaist(saved.waist); setShoulder(saved.shoulder);
       setHasProfile(true);
+      // skin tone (set on the Profile page): the static and the walking body, now and when they load later
+      const S = sceneRef.current, tone = isSkinTone(profile.skinTone) ? profile.skinTone : null;
+      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone);
     });
     return () => { alive = false; };
   }, [userId]);
@@ -264,6 +268,7 @@ function FitLab() {
           if (cancelled) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           g.scene.traverse((o: any) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.morphTargetDictionary) S.bodyMeshes.push(o); } });
+          applySkinTone(g.scene, S.skinTone);
           scene.add(g.scene); S.bodyRoot = g.scene; setLoading(false); setReady(r => r + 1);
         }, undefined, () => !cancelled && setError('Could not load the body model.'));
 
@@ -410,6 +415,7 @@ function FitLab() {
             o.castShadow = o.receiveShadow = true;
             tracks.push(makeTrack(o, buf, m.offset, { n: m.n, min: m.min, scale: m.scale, frames: info.frames }));
           });
+          applySkinTone(g.scene, S.skinTone);
           W.group.add(g.scene); W.fps = info.fps; W.frames = info.frames;
           W.root = rootPath(tracks.find(t => /Body/.test(t.mesh.name) || /Body/.test(t.mesh.parent?.name)) || tracks[0]);
           W.body = tracks;

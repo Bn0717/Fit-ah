@@ -23,11 +23,22 @@ import type { FitResult } from '../types/fit';
 export const saveAvatar = async (avatar: Omit<ParametricAvatar, 'createdAt' | 'updatedAt'>) => {
   try {
     const avatarRef = doc(db, 'users', avatar.userId, 'avatar', 'data');
+    // merge: fields this caller does not send (e.g. skinTone, saved on its own) are kept
     await setDoc(avatarRef, {
       ...avatar,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Only the skin tone (null = the 3D model's own skin), without touching the measurements
+export const saveSkinTone = async (userId: string, skinTone: string | null) => {
+  try {
+    await setDoc(doc(db, 'users', userId, 'avatar', 'data'), { skinTone, updatedAt: serverTimestamp() }, { merge: true });
     return { success: true, error: null };
   } catch (error: any) {
     return { success: false, error: error.message };

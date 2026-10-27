@@ -29,7 +29,8 @@ import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pa
 import { jeansState, wornBody, type PantsData, type JeansState } from '../fit-lab/jeansFit';
 import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { getAvatar, saveAvatar } from '@/lib/firebase/firestore';
+import { getAvatar, saveAvatar, saveSkinTone } from '@/lib/firebase/firestore';
+import { SKIN_TONES, isSkinTone, type SkinToneId } from '../fit-lab/skinTone';
 import { useStored, type Outfit } from '../fit-lab/WardrobeExtras';
 import { uploadUserPhoto } from '@/lib/firebase/storage';
 import { scanBody, type ScanResult } from '@/lib/mediapipe/bodyScan';
@@ -65,6 +66,7 @@ export default function MyFittingRoom() {
   // ── profile + body ─────────────────────────────────────────────────────────────
   const [profile, setProfile] = useState({ name: '', age: '', gender: '', photo: null as string | null });
   const [saved, setSaved] = useState<Body | null>(null);
+  const [skinTone, setSkinTone] = useState<SkinToneId | null>(null);   // saved on its own, right away
   const [body, setBody] = useState<Body>({ height: 175, chest: 101, waist: 78, shoulder: 45, belly: 0 });
   const [fromScan, setFromScan] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,6 +84,7 @@ export default function MyFittingRoom() {
         const chest = a.chest > 35 && a.chest < 80 ? a.chest * 2 : 101, waist = a.waist > 25 && a.waist < 80 ? a.waist * 2 : 78;
         const b: Body = { height: a.height > 120 && a.height < 230 ? a.height : 175, chest, waist, shoulder: a.shoulder > 30 && a.shoulder < 65 ? a.shoulder : 45, belly: 0 };
         setSaved(b); setBody(b);
+        setSkinTone(isSkinTone(a.skinTone) ? a.skinTone : null);
         setProfile({ name: a.displayName || '', age: a.age ? String(a.age) : '', gender: a.gender || '', photo: a.photoUrl || null });
       }
       setLoadingData(false);
@@ -492,7 +495,7 @@ export default function MyFittingRoom() {
   const stage = (
     <div className="relative flex h-full w-full flex-col" style={{ background: C.cream }}>
       {meta ? (
-        <FitViewer meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
+        <FitViewer skinTone={skinTone} meta={meta} height={simH} chest={simC} shoulder={simS} waist={simW} belly={simB}
           size={(top?.size as Size) || 'M'} mode={mode} walking={walking} photos={photos} showShirt={!!top?.size && topSupported(topItem, top.size)}
           jeans={jeansUrl && bottom ? { url: jeansUrl, size: bottom.size, hidden: !!js?.hide, belt, elastic: js?.now?.elasticExtension != null && js.now.elasticLimit != null ? { extension: js.now.elasticExtension, limit: js.now.elasticLimit } : undefined, productWalk: P?.walk, builtinXin: bottomItem?.kind === 'xin', walk: bottomItem?.kind === 'xin' || bottomItem?.kind === 'swap',
             skin: bottomItem?.kind === 'swap' ? skins[bottomItem.id] ?? null : null } : null}
@@ -548,7 +551,13 @@ export default function MyFittingRoom() {
       wornNote={shirtLock ? `Shoulder and waist are shown natural for this height and chest: ${topItem?.name ?? 'this shirt'} has not been simulated with a different shape here yet. Your numbers are kept.`
         : wb.lock ? `Waist is shown natural while you wear ${bottomItem?.name ?? 'these pants'}. Your waist adjustment is available again when you take the pants off.` : null}
       onSave={() => saveBody()} onReset={() => saved && setBody(saved)} onScan={() => setScan({ photo: profile.photo })}
-      onPhoto={onProfilePhoto} onEditProfile={() => setEditProfile(true)} />
+      onPhoto={onProfilePhoto} onEditProfile={() => setEditProfile(true)}
+      skinTone={skinTone} onSkinTone={async id => {
+        setSkinTone(id);
+        if (!user) return;
+        const r = await saveSkinTone(user.uid, id);
+        flash(r.success ? 'Skin tone saved' : 'Could not save the skin tone. Please try again.');
+      }} />
   );
   const openSheet = (t: 'tops' | 'bottoms') => { setTab(t); setSheet(true); };
   // pull up the handle to open the wardrobe, pull the open sheet down to close it (the finger moves it as you drag)
@@ -635,12 +644,13 @@ export default function MyFittingRoom() {
 }
 
 // ─── left panel: my body ────────────────────────────────────────────────────────────
-function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked }: {
+function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked, skinTone, onSkinTone }: {
   body: Body; setBody: (b: Body) => void; saved: Body | null; dirty: boolean; saving: boolean; fromScan: boolean; wornNote?: string | null;
   wRange: number[]; shRange: number[]; waistLocked: boolean; waistDisplay: number;
   profile: { name: string; age: string; gender: string; photo: string | null };
   onSave: () => void; onReset: () => void; onScan: () => void; onPhoto: (f: File) => void; onEditProfile: () => void; onClose: () => void;
   docked?: boolean;    // always on screen (big screens): no close button
+  skinTone: SkinToneId | null; onSkinTone: (id: SkinToneId | null) => void;
 }) {
   const set = (k: keyof Body) => (v: number) => setBody({ ...body, [k]: v });
   const pm = (v: number) => fromScan ? v : undefined;
@@ -670,6 +680,7 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
         <Measure label="Waist" disabled={waistLocked} value={waistDisplay} min={wRange[0]} max={wRange[1]} typeMin={55} typeMax={150} onChange={set('waist')} pm={pm(7)} />
         {wornNote && <p className="rounded-lg px-3 py-2 text-[11px]" style={{ background: C.cream, color: C.mute }}>{wornNote}</p>}
         <Measure label="Shoulder" value={body.shoulder} min={shRange[0]} max={shRange[1]} typeMin={35} typeMax={60} onChange={set('shoulder')} pm={pm(2.5)} />
+        <SkinTonePicker value={skinTone} onChange={onSkinTone} />
       </div>
       <div className="sticky bottom-0 border-t bg-white px-4 py-3" style={{ borderColor: C.line }}>
         {dirty ? (
@@ -680,6 +691,27 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
           </div>
         ) : <p className="text-center text-[11px]" style={{ color: C.mute }}>{saved ? '✓ Saved' : 'Not set yet'}</p>}
       </div>
+    </div>
+  );
+}
+
+// Skin tone of the 3D body: the Monk Skin Tone Scale (10 tones) or the model's own skin. Saved as soon as it is tapped.
+function SkinTonePicker({ value, onChange }: { value: SkinToneId | null; onChange: (id: SkinToneId | null) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Skin tone of your 3D body">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-xs font-semibold" style={{ color: C.ink }}>Skin tone</span>
+        <button role="radio" aria-checked={value === null} onClick={() => onChange(null)} className="rounded-md px-1 text-[11px] font-semibold"
+          style={{ color: value === null ? C.navy : C.mute, textDecoration: value === null ? 'underline' : 'none' }}>Original</button>
+      </div>
+      <div className="grid grid-cols-10 gap-1">
+        {SKIN_TONES.map((t, i) => (
+          <button key={t.id} role="radio" aria-checked={value === t.id} aria-label={`Skin tone ${i + 1} of ${SKIN_TONES.length}`} title={`Tone ${i + 1}`}
+            onClick={() => onChange(t.id)} className="aspect-square w-full rounded-full transition"
+            style={{ background: t.hex, boxShadow: value === t.id ? `0 0 0 2px #fff, 0 0 0 4px ${C.navy}` : 'inset 0 0 0 1px rgba(0,0,0,0.12)' }} />
+        ))}
+      </div>
+      <p className="mt-1 text-[10px]" style={{ color: C.mute }}>Monk Skin Tone Scale. Only changes how your 3D body looks, not the fit.</p>
     </div>
   );
 }
