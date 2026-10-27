@@ -2,13 +2,12 @@
 // The Fit Lab verdicts for the dashboard: every Fit Lab shirt and pants on your saved body, in every size.
 // Same functions and the same steps as "My fitting room" (app/fit-lab-profile/page.tsx), so both pages agree:
 // tops use the simulated chest room (fitTier), bottoms use the simulated waistband (jeansState).
-import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, type GridMeta } from '../fit-lab/engine';
+import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, type GridMeta } from '../fit-lab/engine';
 import { jeansState, wornBody, type PantsData } from '../fit-lab/jeansFit';
 import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { auth } from '@/lib/firebase/config';
 import { GON, GRID_META_URL, PRODUCTS_INDEX_URL, XIN } from '../fit-lab/paths';
 
-export const RANGE = { height: [160, 190], chest: [92, 116] } as const;      // the simulated bodies
 const JEANS_SIZES = ['M', 'L', 'XL', '2XL'];
 
 export type Tone = 'green' | 'amber' | 'blue' | 'red' | 'grey';
@@ -49,7 +48,8 @@ export async function loadLab(): Promise<LabData> {
   return { meta, products: products.filter(Boolean) as LabData['products'], stored, hidden };
 }
 
-export function outsideRange(b: LabBody) {
+export function outsideRange(b: LabBody, meta?: GridMeta | null) {
+  const RANGE = gridRange(meta);      // the simulated bodies
   return [
     b.height < RANGE.height[0] || b.height > RANGE.height[1] ? `height ${RANGE.height[0]}–${RANGE.height[1]} cm` : null,
     b.chest < RANGE.chest[0] || b.chest > RANGE.chest[1] ? `chest ${RANGE.chest[0]}–${RANGE.chest[1]} cm` : null,
@@ -60,6 +60,7 @@ const toneOfTier = (tier: string): Tone => tier === 'Regular' ? 'green' : tier =
 
 export function labPieces(lab: LabData, b: LabBody, img: (id: string, blob: Blob) => string): LabPiece[] {
   const { meta } = lab;
+  const RANGE = gridRange(meta);
   const simH = clamp(b.height, RANGE.height[0], RANGE.height[1]), simC = clamp(b.chest, RANGE.chest[0], RANGE.chest[1]);
   const sb0 = solveBody(meta, simH, simC, null, null, 0);
   const wRange = sb0.ok ? [Math.ceil(sb0.range.waist[0]), Math.floor(sb0.range.waist[1])] : [70, 90];

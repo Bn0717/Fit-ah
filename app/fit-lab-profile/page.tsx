@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation';
 import FitViewer from '../fit-lab/FitViewer';
 import { XIN_GRID_DIR } from '../fit-lab/xinAssets';
 import { GRID_META_URL, PRODUCTS_INDEX_URL, GON, XIN } from '../fit-lab/paths';
-import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, FIT_LEGEND, type Size, type ViewMode, type GridMeta } from '../fit-lab/engine';
+import { SIZES, solveBody, shirtShapeOk, fitNumbers, clamp, fitTier, gridRange, FIT_LEGEND, type Size, type ViewMode, type GridMeta } from '../fit-lab/engine';
 import { loadRef, makeTexture, type Ref, type Result } from '../fit-lab/colourway';
 import { makePantsTexture, loadPantsRef, type PantsOutline } from '../fit-lab/pantsSwap';
 import { jeansState, wornBody, type PantsData, type JeansState } from '../fit-lab/jeansFit';
@@ -40,7 +40,6 @@ const C = { cream: '#F8F3EA', navy: '#0B1957', peach: '#FFDBD1', pink: '#FA9EBC'
 const TONE = { red: C.red, amber: C.amber, green: C.green, blue: C.blue };
 const CW_DIR = GON.colourway;
 const PANTS_REF = XIN.outline;
-const RANGE = { height: [160, 190], chest: [92, 116] } as const;     // simulated bodies
 const JEANS_SIZES = ['M', 'L', 'XL', '2XL'];
 
 type Body = { height: number; chest: number; waist: number; shoulder: number; belly: number };   // cm around; belly -1..1
@@ -105,6 +104,7 @@ export default function MyFittingRoom() {
 
   // ── Fit Lab data ───────────────────────────────────────────────────────────────
   const [meta, setMeta] = useState<GridMeta | null>(null);
+  const RANGE = gridRange(meta);     // the simulated bodies (grows when grid bodies are added)
   const [stored, setStored] = useState<{ id: string; name: string; brand: string; front: Blob; back: Blob; kind: 'shirt' | 'pants'; chart?: SizeChartData }[]>([]);
   const [products, setProducts] = useState<{ id: string; name: string; brand: string; dir: string }[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -552,7 +552,7 @@ export default function MyFittingRoom() {
         : wb.lock ? `Waist is shown natural while you wear ${bottomItem?.name ?? 'these pants'}. Your waist adjustment is available again when you take the pants off.` : null}
       onSave={() => saveBody()} onReset={() => saved && setBody(saved)} onScan={() => setScan({ photo: profile.photo })}
       onPhoto={onProfilePhoto} onEditProfile={() => setEditProfile(true)}
-      skinTone={skinTone} onSkinTone={async id => {
+      range={RANGE} skinTone={skinTone} onSkinTone={async id => {
         setSkinTone(id);
         if (!user) return;
         const r = await saveSkinTone(user.uid, id);
@@ -644,13 +644,14 @@ export default function MyFittingRoom() {
 }
 
 // ─── left panel: my body ────────────────────────────────────────────────────────────
-function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked, skinTone, onSkinTone }: {
+function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked, skinTone, onSkinTone, range: RANGE }: {
   body: Body; setBody: (b: Body) => void; saved: Body | null; dirty: boolean; saving: boolean; fromScan: boolean; wornNote?: string | null;
   wRange: number[]; shRange: number[]; waistLocked: boolean; waistDisplay: number;
   profile: { name: string; age: string; gender: string; photo: string | null };
   onSave: () => void; onReset: () => void; onScan: () => void; onPhoto: (f: File) => void; onEditProfile: () => void; onClose: () => void;
   docked?: boolean;    // always on screen (big screens): no close button
   skinTone: SkinToneId | null; onSkinTone: (id: SkinToneId | null) => void;
+  range: { height: [number, number]; chest: [number, number] };
 }) {
   const set = (k: keyof Body) => (v: number) => setBody({ ...body, [k]: v });
   const pm = (v: number) => fromScan ? v : undefined;

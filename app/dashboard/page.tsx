@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const img = (id: string, blob: Blob) => (urls.current[id] ||= URL.createObjectURL(blob));
 
   const me = useMemo(() => bodyFromProfile(profile as unknown as Record<string, number> | null), [profile]);
-  const outside = me ? outsideRange(me) : [];
+  const outside = me ? outsideRange(me, lab?.meta) : [];
   const pieces = useMemo<LabPiece[]>(() => (lab && me && !outside.length ? labPieces(lab, me, img) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lab, me, outside.length]);
