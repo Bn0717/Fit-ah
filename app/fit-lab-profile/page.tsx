@@ -222,13 +222,17 @@ export default function MyFittingRoom() {
   // shoulder / waist can only move within what was simulated for this height and chest (beyond it the 3D would be
   // stretched past the simulations): the 3D uses the nearest simulated value and the panel says so
   const sb0 = meta ? solveBody(meta, simH, simC, null, null, 0) : null;
-  const wRange = sb0?.ok ? [Math.ceil(sb0.range.waist[0]), Math.floor(sb0.range.waist[1])] : [70, 90];
-  const shRange = sb0?.ok ? [Math.ceil(sb0.range.shoulder[0] * 2) / 2, Math.floor(sb0.range.shoulder[1] * 2) / 2] : [42, 50];
+  // no shape versions for this body: the slider sits on its natural value (locked), so a 4XL waist is not clamped
+  const around = (v: number, fallback: number[]) => v ? [Math.floor(v) - 1, Math.ceil(v) + 1] : fallback;
+  const wRange = sb0?.ok ? [Math.ceil(sb0.range.waist[0]), Math.floor(sb0.range.waist[1])] : around(sb0?.natural.waist ?? 0, [70, 90]);
+  const shRange = sb0?.ok ? [Math.ceil(sb0.range.shoulder[0] * 2) / 2, Math.floor(sb0.range.shoulder[1] * 2) / 2] : around(sb0?.natural.shoulder ?? 0, [42, 50]);
   // Pants use the natural waist; keep the saved waist for shirt-only fitting.
   const natW = sb0?.ok ? sb0.natural.waist : null;
   const wornPants = bottom && bottomItem && bottomItem.kind !== 'unsim' ? pantsOf(bottomItem) : null;
   // a shirt simulated with shoulder / waist / belly changes only on some bodies: natural shape elsewhere (no guesses)
-  const shirtLock = !!(top && meta && !shirtShapeOk(meta, simH, simC));
+  // bodies without shoulder / waist versions yet (the outer grid rows before run_shape_drapes.sh): natural shape only
+  const shapeLock = !!sb0 && !sb0.ok;
+  const shirtLock = shapeLock || !!(top && meta && !shirtShapeOk(meta, simH, simC));
   const simS = shirtLock ? null : clamp(body.shoulder, shRange[0], shRange[1]);
   const wb = meta ? wornBody(meta, wornPants, bottom?.size ?? null, simH, simC, simS,
       shirtLock ? null : clamp(body.waist, wRange[0], wRange[1]), 0)
@@ -577,8 +581,10 @@ export default function MyFittingRoom() {
   const bodyPanel = (docked: boolean) => (
     <BodyPanel body={body} setBody={b => { setBody(b); setFromScan(false); }} saved={saved} dirty={dirty} saving={saving} fromScan={fromScan}
       waistLocked={wb.lock || shirtLock} waistDisplay={wb.lock || shirtLock ? Math.round((sb?.natural.waist ?? body.waist) * 10) / 10 : body.waist}
+      shoulderLocked={shirtLock} shoulderDisplay={shirtLock && sb?.natural.shoulder ? Math.round(sb.natural.shoulder * 2) / 2 : body.shoulder}
       wRange={wRange} shRange={shRange} profile={profile} onClose={() => setDrawer(false)} docked={docked}
-      wornNote={shirtLock ? `Shoulder and waist are shown natural for this height and chest: ${topItem?.name ?? 'this shirt'} has not been simulated with a different shape here yet. Your numbers are kept.`
+      wornNote={shapeLock ? `Shoulder and waist are shown natural for this height and chest: adjusting them for a body this size is not simulated yet. Your numbers are kept.`
+        : shirtLock ? `Shoulder and waist are shown natural for this height and chest: ${topItem?.name ?? 'this shirt'} has not been simulated with a different shape here yet. Your numbers are kept.`
         : wb.lock ? `Waist is shown natural while you wear ${bottomItem?.name ?? 'these pants'}. Your waist adjustment is available again when you take the pants off.` : null}
       onSave={() => saveBody()} onReset={() => saved && setBody(saved)} onScan={() => setScan({ photo: profile.photo })}
       onPhoto={onProfilePhoto} onEditProfile={() => setEditProfile(true)}
@@ -674,9 +680,9 @@ export default function MyFittingRoom() {
 }
 
 // ─── left panel: my body ────────────────────────────────────────────────────────────
-function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked, skinTone, onSkinTone, range: RANGE }: {
+function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRange, profile, wornNote, waistLocked, waistDisplay, shoulderLocked = false, shoulderDisplay, onSave, onReset, onScan, onPhoto, onEditProfile, onClose, docked, skinTone, onSkinTone, range: RANGE }: {
   body: Body; setBody: (b: Body) => void; saved: Body | null; dirty: boolean; saving: boolean; fromScan: boolean; wornNote?: string | null;
-  wRange: number[]; shRange: number[]; waistLocked: boolean; waistDisplay: number;
+  wRange: number[]; shRange: number[]; waistLocked: boolean; waistDisplay: number; shoulderLocked?: boolean; shoulderDisplay?: number;
   profile: { name: string; age: string; gender: string; photo: string | null };
   onSave: () => void; onReset: () => void; onScan: () => void; onPhoto: (f: File) => void; onEditProfile: () => void; onClose: () => void;
   docked?: boolean;    // always on screen (big screens): no close button
@@ -710,7 +716,7 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
         <Measure label="Chest" value={body.chest} min={RANGE.chest[0]} max={RANGE.chest[1]} typeMin={70} typeMax={150} onChange={set('chest')} pm={pm(7)} />
         <Measure label="Waist" disabled={waistLocked} value={waistDisplay} min={wRange[0]} max={wRange[1]} typeMin={55} typeMax={150} onChange={set('waist')} pm={pm(7)} />
         {wornNote && <p className="rounded-lg px-3 py-2 text-[11px]" style={{ background: C.cream, color: C.mute }}>{wornNote}</p>}
-        <Measure label="Shoulder" value={body.shoulder} min={shRange[0]} max={shRange[1]} typeMin={35} typeMax={60} onChange={set('shoulder')} pm={pm(2.5)} />
+        <Measure label="Shoulder" disabled={shoulderLocked} value={shoulderDisplay ?? body.shoulder} min={shRange[0]} max={shRange[1]} typeMin={35} typeMax={60} onChange={set('shoulder')} pm={pm(2.5)} />
         <SkinTonePicker value={skinTone} onChange={onSkinTone} />
       </div>
       <div className="sticky bottom-0 border-t bg-white px-4 py-3" style={{ borderColor: C.line }}>
