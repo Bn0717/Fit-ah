@@ -420,7 +420,13 @@ export function solveBody(meta: GridMeta, h: number, c: number, shoulder: number
   const ok = !!sh && Object.keys(w).every(k => sh[k] && meta.body[k].shoulder !== undefined);
   const range = { shoulder: [0, 0], waist: [0, 0] };
   const natural = { shoulder: 0, waist: 0 };
-  if (!ok) return { w, vw, range, natural, ok };
+  if (!ok) {
+    // no shape versions for these bodies yet: the natural body only (its own waist / shoulder, nothing to adjust)
+    natural.waist = blend(w, k => meta.body[k].waist);
+    natural.shoulder = Object.keys(w).every(k => meta.body[k].shoulder !== undefined) ? blend(w, k => meta.body[k].shoulder!) : 0;
+    range.waist = [natural.waist, natural.waist]; range.shoulder = [natural.shoulder, natural.shoulder];
+    return { w, vw, range, natural, ok };
+  }
   const d = (v: Variant, m: keyof Tape) => blend(w, k => sh![k][v]?.[m] ?? 0);
   // belly: -1 flat .. 0 natural .. +1 round (same waist: the variants were built with the waist held)
   const hasBelly = Object.keys(w).every(k => sh![k].bm && sh![k].bp);
