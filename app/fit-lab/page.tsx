@@ -15,7 +15,7 @@ import { WardrobeSkeleton } from '@/components/ui/PageSkeletons';
 import { getAvatar } from '@/lib/firebase/firestore';
 import { SavedSizeControl } from './SavedSizeControl';
 import { useSizePreferences } from './useSizePreferences';
-import { initialSize, recommendedTop, recommendedBottom } from './sizePreferences';
+import { initialSize, recommendedTop, recommendedBottom, brandBodySize } from './sizePreferences';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveWardrobeItem, saveWardrobeUvMap, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
@@ -1015,6 +1015,8 @@ function FitLab() {
       const ok = sizesOfTop(it).filter(z => canWear(m, z) && fits[z] && fits[z]!.ease >= 0);
       if (!ok.length || !bodyNow) return [];
       // the look the shirt was designed for: oversized shirts aim at ~30 % room, others at a regular 12 %
+      const own = brandBodySize(topProductOf(it)?.body_size, bodyNow.chest, q => ok.includes(q as Size)) as Size | null;
+      if (own) return [{ it, z: own }];
       const aim = topProductOf(it)?.intended_fit === 'Oversized' ? 30 : 12;
       const z = ok.reduce((a, b) => Math.abs(100 * fits[b]!.ease / bodyNow.chest - aim) < Math.abs(100 * fits[a]!.ease / bodyNow.chest - aim) ? b : a);
       return [{ it, z }];
@@ -1097,6 +1099,9 @@ function FitLab() {
     if (!it || !hasProfile || !sb?.ok) return null;
     const fits = topFitOf(it), sizes = sizesOfTop(it), want = topProductOf(it)?.intended_fit;
     const tier = (z: string) => fits[z as Size] ? fitTier(fits[z as Size]!.ease, bodyNow?.chest ?? chest) : null;
+    // the brand's body chart first (its size for this chest), when that size was simulated and can be worn
+    const own = brandBodySize(topProductOf(it)?.body_size, bodyNow?.chest ?? chest, z => sizes.includes(z as Size) && !!fits[z as Size] && canWear(topMatch(it), z as Size));
+    if (own) return own;
     if (want) {
       const z = sizes.find(q => tier(q)?.label === want && canWear(topMatch(it), q));
       if (z) return z;
