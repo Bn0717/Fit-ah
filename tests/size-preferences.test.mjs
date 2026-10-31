@@ -51,3 +51,10 @@ test('the brand body chart decides when it covers the body', async () => {
   assert.equal(brandBodySize(uq, 96, s => s !== 'L'), 'M');
   assert.equal(brandBodySize(null, 97), null);
 });
+
+test('pants: no comfortable size still recommends the best wearable one', () => {
+  const tones = { S: 'red', M: 'amber', L: 'amber' };
+  assert.equal(recommendedBottom(['S', 'M', 'L'], z => ({ hide: z === 'S', now: { tone: tones[z] } })), 'L');   // snug: the least tight
+  assert.equal(recommendedBottom(['S', 'M', 'L'], z => ({ hide: false, now: { tone: z === 'L' ? 'blue' : 'amber' } })), 'L');
+  assert.equal(recommendedBottom(['S', 'M'], () => ({ hide: true, now: { tone: 'green' } })), null);
+});

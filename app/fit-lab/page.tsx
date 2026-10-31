@@ -1104,7 +1104,7 @@ function FitLab() {
 
   // the size that fits this body; a shirt product designed oversized is recommended for that look, not its smallest size
   const recommendTop = (it: LabItem | null) => {
-    if (!it || !hasProfile || !sb?.ok) return null;
+    if (!it || !hasProfile || !sb) return null;   // natural shape (no shape versions yet) is still a real simulated body
     const fits = topFitOf(it), sizes = sizesOfTop(it), want = topProductOf(it)?.intended_fit;
     const tier = (z: string) => fits[z as Size] ? fitTier(fits[z as Size]!.ease, bodyNow?.chest ?? chest) : null;
     // the brand's body chart first (its size for this chest), when that size was simulated and can be worn
@@ -1117,7 +1117,7 @@ function FitLab() {
     return recommendedTop(sizes, tier, z => canWear(topMatch(it), z));
   };
   const recommendBottom = (it: LabItem | null) => {
-    if (!it || !meta || !hasProfile || !sb?.ok) return null;
+    if (!it || !meta || !hasProfile || !sb) return null;
     const data = sizeCatalog[it.id];
     const sims = data?.belt ?? ((it.id === 'xin' || pantsItems.some(p => p.id === it.id)) ? meta.jeans?.belt ?? meta.jeans?.sizes : null);
     if (!sims) return null;

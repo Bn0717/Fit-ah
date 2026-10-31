@@ -10,11 +10,18 @@ export function recommendedTop(sizes: readonly string[], fit: (size: string) => 
   }) ?? null;
 }
 
+// the first comfortable size; when none is, the best one that can still be worn (loose before snug: the same order as
+// the random outfit), so a body at the end of a size chart still gets an answer instead of "no recommendation"
 export function recommendedBottom(sizes: readonly string[], fit: (size: string) => { hide: boolean; now?: { tone: string } | null } | null | undefined, supported: (size: string) => boolean = () => true) {
-  return sizes.find(size => {
-    const f = fit(size);
-    return supported(size) && !!f && !f.hide && f.now?.tone === 'green';
-  }) ?? null;
+  for (const tone of ['green', 'blue', 'amber']) {
+    const ok = sizes.filter(size => {
+      const f = fit(size);
+      return supported(size) && !!f && !f.hide && f.now?.tone === tone;
+    });
+    // loose: the smallest loose size; snug / tight: the largest (each size up is less tight)
+    if (ok.length) return tone === 'amber' ? ok[ok.length - 1] : ok[0];
+  }
+  return null;
 }
 
 // The brand's own body size chart (who each size is made for, e.g. Uniqlo M = chest 88–96 cm). When the brand
