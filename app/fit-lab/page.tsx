@@ -39,6 +39,9 @@ type PantsItem = { id: string; brand: string; name: string; frontUrl: string; ba
 const PANTS_REF = XIN.outline;
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
+// tops: most fabric stretch (95th percentile, % over the pattern) a size can show and still be worn. Measured on the
+// Uniqlo tees: sizes that fit stretch at most ~15 %; sizes 20+ cm too small for the chest 40-87 % (would not go on)
+const SHIRT_STRETCH_MAX = 25;
 const SAME_CUT_MAX = 0.05;   // mean proportion difference allowed vs the Xin outline (pantsSwap.ts compare): Xin's own photos 0.7-1.6 %, Stallion (another cut) 6.6-7.5 %
 type PantsProduct = { source?: Record<string, Record<string, string>>; walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null; colours?: PantsColour[]; base_colour?: string };
 
@@ -663,7 +666,9 @@ function FitLab() {
     // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the Tops panel says why)
     if (grp && typeof grp !== 'string') {
       const simulatedHere = Object.keys(w).every(k => meta.shirt[size]?.[k]);
-      if (!simulatedHere) grp.visible = false;
+      // a size that would have to stretch past what knit can (SHIRT_STRETCH_MAX) would not go on: not drawn either
+      const overStretched = simulatedHere && blend(w, k => meta.shirt[size][k].stretch_p95) > SHIRT_STRETCH_MAX;
+      if (!simulatedHere || overStretched) grp.visible = false;
       else if (shirtOn && !S.walk?.active && !S.walkOn) grp.visible = true;   // back on a simulated body: show it again
     }
     const jg = jeansKey && !jeansHide ? S.jeans?.[jeansKey] : null;   // hidden jeans: the shirt hangs on the body
@@ -939,8 +944,9 @@ function FitLab() {
   const verdictOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).label;
   const colorOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).color;
   // a shirt product not simulated on this body is not drawn: say so instead of a blank verdict
-  const verdict = ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
-  const verdictColor = ease === null ? C.navy : colorOf(ease);
+  const verdict = shirtNow && shirtNow.stretch > SHIRT_STRETCH_MAX ? `Too small to put on: the fabric would have to stretch ${shirtNow.stretch.toFixed(0)} % (knit gives about ${SHIRT_STRETCH_MAX} % at most), so it is not shown. Try a larger size.`
+    : ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
+  const verdictColor = shirtNow && shirtNow.stretch > SHIRT_STRETCH_MAX ? C.red : ease === null ? C.navy : colorOf(ease);
   // room at the chest for every size on the current body (for the wardrobe's size chart)
   // fitsOf: the same for any top's data (m = the body grid with that shirt's numbers: withShirt)
   const fitsOf = (m: GridMeta | null, sizes: readonly string[]) => Object.fromEntries(sizes.map(sz => {
