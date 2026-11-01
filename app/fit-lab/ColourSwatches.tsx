@@ -80,10 +80,11 @@ export function pantsSwatches(p: PantsColours): ShirtProduct | null {
   return { id: p.id, colours: p.colours!.map(c => ({ hex: c.hex, name: c.name, code: c.code })), base_hex: base.hex } as unknown as ShirtProduct;
 }
 
-// the chosen colour's texture files, or null for the colour inside the 3D file
+// the chosen colour's texture files (none chosen: the base colour's cleaned files, whose edges have no white photo
+// rim), or null for the texture inside the 3D file (products made before the base colour had its own files)
 export function pantsColourFiles(p: PantsColours | null | undefined, chosen: Record<string, string>): { front: string; back: string } | null {
-  const c = p?.colours?.find(x => x.hex === chosen[p.id]);
-  return c && !c.base && c.front && c.back ? { front: `${p!.dir}/${c.front}`, back: `${p!.dir}/${c.back}` } : null;
+  const c = p?.colours?.find(x => x.hex === chosen[p.id]) ?? p?.colours?.find(x => x.base);
+  return c && c.front && c.back ? { front: `${p!.dir}/${c.front}`, back: `${p!.dir}/${c.back}` } : null;
 }
 
 // the multiplier that makes a photo texture of average colour `hex` show as that colour under the fitting room's

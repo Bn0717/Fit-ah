@@ -38,3 +38,23 @@ test('clearing a record restores the recommendation as the opening size', () => 
   assert.equal(initialSize(null, 'L', sizes), 'L');
   assert.equal(initialSize(undefined, null, sizes), 'S');
 });
+
+test('the brand body chart decides when it covers the body', async () => {
+  const { brandBodySize } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+  const uq = { XS: { chest: [78, 84] }, S: { chest: [80, 88] }, M: { chest: [88, 96] }, L: { chest: [96, 104] }, XL: { chest: [104, 112] } };
+  assert.equal(brandBodySize(uq, 97), 'L');
+  assert.equal(brandBodySize(uq, 92), 'M');
+  assert.equal(brandBodySize(uq, 96), 'L');          // boundary tie: size up
+  assert.equal(brandBodySize(uq, 82), 'XS');         // overlap: nearest centre (XS 81 vs S 84)
+  assert.equal(brandBodySize(uq, 70), null);         // outside the chart: the simulated fit decides
+  assert.equal(brandBodySize(uq, 97, s => s !== 'L'), null);  // its size can't be worn: the simulated fit decides
+  assert.equal(brandBodySize(uq, 96, s => s !== 'L'), 'M');
+  assert.equal(brandBodySize(null, 97), null);
+});
+
+test('pants: no comfortable size still recommends the best wearable one', () => {
+  const tones = { S: 'red', M: 'amber', L: 'amber' };
+  assert.equal(recommendedBottom(['S', 'M', 'L'], z => ({ hide: z === 'S', now: { tone: tones[z] } })), 'L');   // snug: the least tight
+  assert.equal(recommendedBottom(['S', 'M', 'L'], z => ({ hide: false, now: { tone: z === 'L' ? 'blue' : 'amber' } })), 'L');
+  assert.equal(recommendedBottom(['S', 'M'], () => ({ hide: true, now: { tone: 'green' } })), null);
+});

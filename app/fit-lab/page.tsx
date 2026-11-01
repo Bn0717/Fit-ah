@@ -15,7 +15,7 @@ import { WardrobeSkeleton } from '@/components/ui/PageSkeletons';
 import { getAvatar } from '@/lib/firebase/firestore';
 import { SavedSizeControl } from './SavedSizeControl';
 import { useSizePreferences } from './useSizePreferences';
-import { initialSize, recommendedTop, recommendedBottom } from './sizePreferences';
+import { initialSize, recommendedTop, recommendedBottom, brandBodySize } from './sizePreferences';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveWardrobeItem, saveWardrobeUvMap, syncWardrobe, deleteWardrobeItem } from './wardrobeCloud';
@@ -39,8 +39,11 @@ type PantsItem = { id: string; brand: string; name: string; frontUrl: string; ba
 const PANTS_REF = XIN.outline;
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
+// tops: most fabric stretch (95th percentile, % over the pattern) a size can show and still be worn. Measured on the
+// Uniqlo tees: sizes that fit stretch at most ~15 %; sizes 20+ cm too small for the chest 40-87 % (would not go on)
+const SHIRT_STRETCH_MAX = 25;
 const SAME_CUT_MAX = 0.05;   // mean proportion difference allowed vs the Xin outline (pantsSwap.ts compare): Xin's own photos 0.7-1.6 %, Stallion (another cut) 6.6-7.5 %
-type PantsProduct = { walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null; colours?: PantsColour[]; base_colour?: string };
+type PantsProduct = { source?: Record<string, Record<string, string>>; walk?: ProductWalk; id: string; name: string; brand: string; fabric: string; dir: string; belt: Record<string, JeansSim>; drop: Record<string, JeansSim>; waist_type?: string; elastic_stretch?: number | null; colours?: PantsColour[]; base_colour?: string };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -147,6 +150,8 @@ function FitLab() {
   const [topProducts, setTopProducts] = useState<Record<string, ShirtProduct>>({});
   const topProductOf = (it?: LabItem | null) => (it?.topDir && topProducts[it.id]) || null;
   const topProduct = topProductOf(items.find(i => i.id === activeId));
+  // a catwalk notice is about the outfit it was asked for: changing the outfit clears it (it never outlives the clothes)
+  useEffect(() => { setWalkStatus(s => (s && s !== 'Loading the catwalk…' ? null : s)); }, [activeId, shirtOn, pantsId]);
   const meta = React.useMemo(() => baseMeta && withShirt(baseMeta, topProduct), [baseMeta, topProduct]);
   const sizesOfTop = (it?: LabItem | null) => (topProductOf(it)?.sizes ?? SIZES) as Size[];
   const topSizes = sizesOfTop(items.find(i => i.id === activeId));
@@ -661,7 +666,9 @@ function FitLab() {
     // honesty: a shirt not simulated on the bodies this blend uses is not drawn (the Tops panel says why)
     if (grp && typeof grp !== 'string') {
       const simulatedHere = Object.keys(w).every(k => meta.shirt[size]?.[k]);
-      if (!simulatedHere) grp.visible = false;
+      // a size that would have to stretch past what knit can (SHIRT_STRETCH_MAX) would not go on: not drawn either
+      const overStretched = simulatedHere && blend(w, k => meta.shirt[size][k].stretch_p95) > SHIRT_STRETCH_MAX;
+      if (!simulatedHere || overStretched) grp.visible = false;
       else if (shirtOn && !S.walk?.active && !S.walkOn) grp.visible = true;   // back on a simulated body: show it again
     }
     const jg = jeansKey && !jeansHide ? S.jeans?.[jeansKey] : null;   // hidden jeans: the shirt hangs on the body
@@ -937,8 +944,9 @@ function FitLab() {
   const verdictOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).label;
   const colorOf = (e: number) => fitTier(e, bodyNow?.chest ?? 100).color;
   // a shirt product not simulated on this body is not drawn: say so instead of a blank verdict
-  const verdict = ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
-  const verdictColor = ease === null ? C.navy : colorOf(ease);
+  const verdict = shirtNow && shirtNow.stretch > SHIRT_STRETCH_MAX ? `Too small to put on: the fabric would have to stretch ${shirtNow.stretch.toFixed(0)} % (knit gives about ${SHIRT_STRETCH_MAX} % at most), so it is not shown. Try a larger size.`
+    : ease === null ? (topProduct && meta && Object.keys(w).length ? `Not simulated for a body like yours yet, so it is not shown (simulated so far: ${(topProduct.simulated?.[size] ?? []).map(k => k.replace(/^h(\d+)_c(\d+)$/, '$1 cm / chest $2')).join(', ') || 'none'})` : '—') : verdictOf(ease);
+  const verdictColor = shirtNow && shirtNow.stretch > SHIRT_STRETCH_MAX ? C.red : ease === null ? C.navy : colorOf(ease);
   // room at the chest for every size on the current body (for the wardrobe's size chart)
   // fitsOf: the same for any top's data (m = the body grid with that shirt's numbers: withShirt)
   const fitsOf = (m: GridMeta | null, sizes: readonly string[]) => Object.fromEntries(sizes.map(sz => {
@@ -1015,6 +1023,8 @@ function FitLab() {
       const ok = sizesOfTop(it).filter(z => canWear(m, z) && fits[z] && fits[z]!.ease >= 0);
       if (!ok.length || !bodyNow) return [];
       // the look the shirt was designed for: oversized shirts aim at ~30 % room, others at a regular 12 %
+      const own = brandBodySize(topProductOf(it)?.body_size, bodyNow.chest, q => ok.includes(q as Size)) as Size | null;
+      if (own) return [{ it, z: own }];
       const aim = topProductOf(it)?.intended_fit === 'Oversized' ? 30 : 12;
       const z = ok.reduce((a, b) => Math.abs(100 * fits[b]!.ease / bodyNow.chest - aim) < Math.abs(100 * fits[a]!.ease / bodyNow.chest - aim) ? b : a);
       return [{ it, z }];
@@ -1094,9 +1104,12 @@ function FitLab() {
 
   // the size that fits this body; a shirt product designed oversized is recommended for that look, not its smallest size
   const recommendTop = (it: LabItem | null) => {
-    if (!it || !hasProfile || !sb?.ok) return null;
+    if (!it || !hasProfile || !sb) return null;   // natural shape (no shape versions yet) is still a real simulated body
     const fits = topFitOf(it), sizes = sizesOfTop(it), want = topProductOf(it)?.intended_fit;
     const tier = (z: string) => fits[z as Size] ? fitTier(fits[z as Size]!.ease, bodyNow?.chest ?? chest) : null;
+    // the brand's body chart first (its size for this chest), when that size was simulated and can be worn
+    const own = brandBodySize(topProductOf(it)?.body_size, bodyNow?.chest ?? chest, z => sizes.includes(z as Size) && !!fits[z as Size] && canWear(topMatch(it), z as Size));
+    if (own) return own;
     if (want) {
       const z = sizes.find(q => tier(q)?.label === want && canWear(topMatch(it), q));
       if (z) return z;
@@ -1104,7 +1117,7 @@ function FitLab() {
     return recommendedTop(sizes, tier, z => canWear(topMatch(it), z));
   };
   const recommendBottom = (it: LabItem | null) => {
-    if (!it || !meta || !hasProfile || !sb?.ok) return null;
+    if (!it || !meta || !hasProfile || !sb) return null;
     const data = sizeCatalog[it.id];
     const sims = data?.belt ?? ((it.id === 'xin' || pantsItems.some(p => p.id === it.id)) ? meta.jeans?.belt ?? meta.jeans?.sizes : null);
     if (!sims) return null;
@@ -1413,7 +1426,9 @@ function FitLab() {
                       {jeansNow.lengthFit === 'pooling' && !jeansHide && <> · <b>too long</b>: about {jeansNow.extra.toFixed(0)} cm of leg piles up on the shoes (needs hemming)</>}
                       {jeansNow.lengthFit === 'short' && !jeansHide && <> · <b>too short</b>: the ankle shows</>}
                     </div>
-                    <div className="text-xs" style={{ opacity: 0.55 }}>Rise ({jeansNow.chart.rise} cm) is not in TNT&apos;s size chart: estimated.</div>
+                    {/* the rise is only flagged when this pants' brand did not publish it (TNT's chart has none) */}
+                    {!(pantsId !== 'xin' && product && Object.values(product.source ?? {}).every(m => m.rise === 'chart')) &&
+                      <div className="text-xs" style={{ opacity: 0.55 }}>Rise ({jeansNow.chart.rise} cm) is not in {pantsId !== 'xin' && product?.brand ? product.brand : 'TNT'}&apos;s size chart: estimated.</div>}
                   </div>
                 )}
                 {jeansSize && walking && <p className="text-xs" style={{ opacity: 0.6 }}>{pantsId !== 'xin' && product?.id === pantsId && product.walk?.sizes.includes(jeansSize)
