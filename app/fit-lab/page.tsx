@@ -29,7 +29,7 @@ import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, typ
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
 import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
-import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour, type PantsColours } from './ColourSwatches';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, colourCard, type PantsColour, type PantsColours } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -1194,6 +1194,7 @@ function FitLab() {
                 info={it => { const z = sizesOfTop(it); return `${topProductOf(it)?.intended_fit === 'Oversized' ? 'Oversized T-shirt' : 'Short Sleeve Shirt'} · ${z.length} sizes (${z[0]}–${z[z.length - 1]})`; }} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
                 onAdd={tab === 'all' ? () => setAddKind('shirt') : undefined} onDelete={it => it.builtin ? hideBuiltin(it, true) : removeItem(it)}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={topWarn}
+                colourOf={it => { const p = topProductOf(it), h = p && (p.colours?.length ?? 0) > 1 ? currentHex(p, topColour) : null; return h ? { hex: h, name: p!.colours!.find(c => c.hex === h)?.name ?? '', card: colourCard(p!, h, it.frontUrl) } : null; }}
                 subtitle=""
                 hiddenCount={tab === 'all' ? items.filter(it => hidden.includes(it.id)).length : 0} onRestore={() => saveHidden(hidden.filter(id => !items.some(it => it.id === id)))} />
             )}
@@ -1202,6 +1203,7 @@ function FitLab() {
                 addLabel="Add Bottom" onAdd={tab === 'all' ? () => setAddKind('pants') : undefined} items={shownBots} activeId={bottomOn} loadingIds={tab === 'all' ? pantsLoading : []} onOpen={setOpenPants}
                 onDelete={it => { const p = pantsItems.find(x => x.id === it.id); if (p) removePants(p); else hideBuiltin(it, false); }}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={botWarn}
+                colourOf={it => { const pc = sizeCatalog[it.id] as unknown as PantsColours | undefined; if (!pc?.colours || pc.colours.length < 2) return null; const c = pc.colours.find(x => x.hex === topColour[it.id]) ?? pc.colours.find(x => x.base); return c ? { hex: c.hex, name: c.name, card: c.card ? `${pc.dir}/${c.card}` : null } : null; }}
                 hiddenCount={tab === 'all' ? bottoms.filter(it => hidden.includes(it.id)).length : 0} onRestore={() => saveHidden(hidden.filter(id => !bottoms.some(it => it.id === id)))}
                 info={it => it.id === 'xin' ? 'Denim pants · M–2XL' : pantsItems.some(p => p.id === it.id) ? 'Pants · Xin cut, photo swap · M–2XL' : 'Pants · own simulation'}
                 badge="Wearing" />
@@ -1525,12 +1527,14 @@ function FitLab() {
       }} open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
       refChart={addKind === 'pants' ? pantsRef : shirtRef} refName={addKind === 'pants' ? 'Xin jeans' : 'Gon Tee'} />
     {meta && bodyNow && (
-      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(topProductOf(openItem)?.chart as unknown as Partial<typeof meta.chart>) ?? (openItem?.chart as unknown as Partial<typeof meta.chart>) ?? baseMeta!.chart} sizeFit={topFitOf(openItem)} size={size} gridDir={openItem?.topDir ? `${openItem.topDir}/grid` : GON_FILES.grid}
+      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)}
+        colour={(p => p && (p.colours?.length ?? 0) > 1 ? { product: p, saved: currentHex(p, topColour), onSave: (h: string) => { pickTopColour(p.id, h); setToast(`Saved: ${p.name} in ${p.colours?.find(c => c.hex === h)?.name ?? 'this colour'}`); } } : undefined)(topProductOf(openItem))} chart={(topProductOf(openItem)?.chart as unknown as Partial<typeof meta.chart>) ?? (openItem?.chart as unknown as Partial<typeof meta.chart>) ?? baseMeta!.chart} sizeFit={topFitOf(openItem)} size={size} gridDir={openItem?.topDir ? `${openItem.topDir}/grid` : GON_FILES.grid}
         fav={!!openItem && favs.includes(openItem.id)} onFav={() => openItem && toggleFav(openItem.id)} match={topMatch(openItem)}
         body={{ height, chest: bodyNow.chest, waist: bodyNow.waist, shoulder: bodyNow.shoulder }} onCheckFit={checkFit} />
     )}
     {openPants && pm && bodyNow && (
       <PantsModal recommended={recommendBottom(openPants)} savedSize={sizeRecords.sizes[openPants.id]} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openPants} onClose={() => setOpenPants(null)} sizes={Object.keys(pm.sims)}
+        colour={(pc => pc ? { product: pantsSwatches(pc)!, saved: topColour[pc.id] ?? pc.colours?.find(c => c.base)?.hex ?? null, skinFor: (h: string | null) => (f => f && { ...f, tint: pantsTint(pc, { [pc.id]: h ?? '' }) })(pantsColourFiles(pc, { [pc.id]: h ?? '' })), onSave: (h: string) => { pickTopColour(pc.id, h); setToast(`Saved: ${openPants.name} in ${pc.colours?.find(c => c.hex === h)?.name ?? 'this colour'}`); } } : undefined)(openProduct && openProduct.id === openPants.id && pantsSwatches(openProduct as unknown as PantsColours) ? openProduct as unknown as PantsColours : null)}
         skin={openProduct && openProduct.id === openPants.id ? (f => f && { ...f, tint: pantsTint(openProduct as unknown as PantsColours, topColour) })(pantsColourFiles(openProduct as unknown as PantsColours, topColour)) : null}
         chart={Object.fromEntries(Object.entries(pm.sims).map(([z, J]) => [z, ({ ...J.chart, waist: J.chart.elastic_waist ?? J.chart.waist, ...openPants.chart?.[z] }) as PantsChart]))} fits={pantsFits} glb={pm.glb}
         fav={favs.includes(openPants.id)} onFav={() => toggleFav(openPants.id)} match={pantsMatch(openPants)}

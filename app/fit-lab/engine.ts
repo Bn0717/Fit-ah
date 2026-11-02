@@ -402,7 +402,7 @@ export interface ShirtProduct {
   shirt_var_grid?: Record<string, Record<string, Partial<Record<Variant, ShirtNums>>>>;
   intended_fit?: 'Regular' | 'Oversized' | 'Slim' | null; fabric?: string;
   body_size?: Record<string, { chest?: number[]; waist?: number[] }> | null;   // brand's body size chart (cm ranges)
-  colours?: { hex: string; name: string; code?: string }[];   // the brand's colours (plain fabrics: recoloured)
+  colours?: { hex: string; name: string; code?: string; card?: string }[];   // the brand's colours (plain fabrics: recoloured); card = that colour's flat photo on white
   base_hex?: string | null;                                   // the colour of the simulated texture
   simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
 }
