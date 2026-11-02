@@ -34,6 +34,12 @@ function lab(hex: string): [number, number, number] {
   return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
 }
 
+// how different two colours look (CIE76 ΔE²)
+export function colourDistance(a: string, b: string): number {
+  const x = lab(a), y = lab(b);
+  return (x[0] - y[0]) ** 2 + (x[1] - y[1]) ** 2 + (x[2] - y[2]) ** 2;
+}
+
 // the everyday name closest to a colour
 export function nameOf(hex: string): string {
   const a = lab(hex);

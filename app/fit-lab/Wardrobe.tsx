@@ -545,7 +545,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                   </div>
                   <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-<CardImg card={colour ? colourCard(colour.product, shownHex, side === 'front' ? item.frontUrl : item.backUrl) : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
+<CardImg card={colour ? colourCard(colour.product, shownHex, side === 'front' ? item.frontUrl : item.backUrl, side === 'front') : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
                 </>
               ) : (
@@ -687,7 +687,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                   </div>
                   <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <CardImg card={colour ? colourCard(colour.product, tryHex ?? colour.saved, side === 'front' ? item.frontUrl : item.backUrl) : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
+                    <CardImg card={colour ? colourCard(colour.product, tryHex ?? colour.saved, side === 'front' ? item.frontUrl : item.backUrl, side === 'front') : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
                 </>
               ) : (
