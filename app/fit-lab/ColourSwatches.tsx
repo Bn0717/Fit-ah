@@ -181,3 +181,10 @@ export function colourCard(p: ShirtProduct & { dir?: string }, hex: string | nul
   if (!p.base_hex || hex === p.base_hex) return null;
   return recolouredCard(productCard, p.base_hex, hex);
 }
+
+// a garment the user added with colours (garmentColour.ts): the same shape as a brand product's colours, so the swatch
+// row, saving, the card and the 3D recolouring work the same; its base colour is the photo's own colour
+export function userColourProduct(it: { id: string; colours?: { name: string; hex: string }[] } | null | undefined): ShirtProduct | null {
+  if (!it?.colours || it.colours.length < 2) return null;
+  return { id: it.id, base_hex: it.colours[0].hex, colours: it.colours.map(c => ({ name: c.name, hex: c.hex })) } as unknown as ShirtProduct;
+}
