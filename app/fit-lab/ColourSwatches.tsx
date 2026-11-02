@@ -149,7 +149,7 @@ export function loadPantsColour(THREE: any, files: { front: string; back: string
 
 // ── wardrobe card in a chosen colour: that colour's own flat photo (card) when the brand has one, else the product's
 // card recoloured in the browser (plain fabric: garment pixels scaled in linear light from the base colour to the
-// chosen one; the pure-white card background is kept) ──
+// chosen one; the white card background round the garment is kept) ──
 const cardCache: Record<string, Promise<string>> = {};
 const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const toSrgb = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
@@ -163,8 +163,19 @@ export function recolouredCard(url: string, baseHex: string, hex: string): Promi
       const g = cv.getContext('2d')!; g.drawImage(img, 0, 0, W, H);
       const d = g.getImageData(0, 0, W, H), px = d.data;
       const b = hexToLinear(baseHex), t = hexToLinear(hex), k = [t[0] / b[0], t[1] / b[1], t[2] / b[2]];
+      // background = the pure-white (255) pixels joined to the photo's edge (flood fill); near-white pixels inside the
+      // garment are its highlights (a white base tee is full of them) and must take the new colour too
+      const n = W * H, bg = new Uint8Array(n), stack: number[] = [];
+      const white = (j: number) => px[j * 4] === 255 && px[j * 4 + 1] === 255 && px[j * 4 + 2] === 255;
+      const seed = (j: number) => { if (!bg[j] && white(j)) { bg[j] = 1; stack.push(j); } };
+      for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x); }
+      for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1); }
+      while (stack.length) {
+        const j = stack.pop()!, x = j % W;
+        if (x > 0) seed(j - 1); if (x < W - 1) seed(j + 1); if (j >= W) seed(j - W); if (j < n - W) seed(j + W);
+      }
       for (let i = 0; i < px.length; i += 4) {
-        if (px[i] > 250 && px[i + 1] > 250 && px[i + 2] > 250) continue;           // background
+        if (bg[i >> 2]) continue;                                                    // background
         for (let c = 0; c < 3; c++) px[i + c] = Math.round(255 * Math.min(toSrgb(Math.min(toLin(px[i + c] / 255) * k[c], 1)), 1));
       }
       g.putImageData(d, 0, 0); res(cv.toDataURL('image/jpeg', 0.9));

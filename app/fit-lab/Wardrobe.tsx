@@ -562,7 +562,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
             </div>
 
             <div>
-              {colour && <ColourPick product={colour.product} saved={colour.saved} preview={tryHex} onPreview={h => { setTryHex(h); setView('3d'); }} onSave={h => { colour.onSave(h); setTryHex(null); }} />}
+              {colour && <ColourPick product={colour.product} saved={colour.saved} preview={tryHex} onPreview={setTryHex} onSave={h => { colour.onSave(h); setTryHex(null); }} />}
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
               <SavedSizeControl itemId={item.id} name={item.name} sizes={Object.keys(item.chart ?? chart)} recommended={recommended} savedSize={savedSize} previewSize={viewSize} onSave={onSaveSize} syncError={sizeSyncError} />
               <GarmentSizeChart
