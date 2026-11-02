@@ -411,10 +411,14 @@ function FitLab() {
     // walking jeans for this size; with the belt on, the walk held at the waist when the plain one has slid down
     const jz = pantsId === 'xin' && jeansSize && belt && meta.walk?.jeans?.[jeansSize + 'belt'] ? jeansSize + 'belt' : jeansSize;
     const originalWalk = selectWalk(meta, size, jz, pantsId === 'xin', product?.id === pantsId ? product.walk : undefined, { shirt: GON_FILES.walk, pants: XIN.walk });
-    const selected = xinWalkAssets(originalWalk, xinOn);
+    const xinSel = xinWalkAssets(originalWalk, xinOn);
+    // a shirt product walks in its own catwalk files (same layout as the built-in shirt's); never layered with
+    // pants (the browser keeps an unpaired shirt outside the walking pants), and cached under the product's id
+    const prodWalk = topProduct?.walk;
+    const selected = topProduct ? { ...xinSel, shirtDir: prodWalk?.dir ?? '', shirtFile: size, sk: `${topProduct.id}:${size}`, packedShirt: false } : xinSel;
     const { js, sk } = selected;
     W.size = sk; W.mode = mode; W.last = -1; W.jeansSize = js; W.productPants = originalWalk.packedPants;
-    const has = !topProduct && !!meta.walk?.sizes[size];          // shirt products: no catwalk simulated yet
+    const has = topProduct ? !!prodWalk?.sizes.includes(size) : !!meta.walk?.sizes[size];
     const show = (on: boolean) => {
       W.active = on; W.group.visible = on;
       if (S.bodyRoot) S.bodyRoot.visible = !on;
@@ -426,7 +430,7 @@ function FitLab() {
       for (const t of W.body || []) if (/pants/i.test(t.mesh.name) || /pants/i.test(t.mesh.parent?.name || '')) t.mesh.visible = !js;
     };
     if (!walking) { show(false); W.t0 = undefined; setReady(r => r + 1); return; }
-    if (!has) { setWalking(false); setWalkStatus(topProduct ? `The catwalk for ${topProduct.name} has not been simulated yet.` : `The ${size} catwalk is still being simulated.`); return; }
+    if (!has) { setWalking(false); setWalkStatus(topProduct ? (prodWalk ? `The catwalk for ${topProduct.name} in size ${size} has not been simulated yet (simulated: ${prodWalk.sizes.join(', ')}).` : `The catwalk for ${topProduct.name} has not been simulated yet.`) : `The ${size} catwalk is still being simulated.`); return; }
     const dir = BODY_WALK_DIR;   // the shared walking body (garment walks come from selectWalk)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadGlb = (u: string, packed = false) => new Promise<any>((res, rej) => {
@@ -474,6 +478,8 @@ function FitLab() {
             tracks.push(makeTrack(o, buf, 0, info, info.strain_offset, info.gap_offset));
           });
           W.group.add(g.scene); W.shirts[sk] = { root: g.scene, tracks }; applyColourway(S);
+          // a shirt product's colour, as on the standing shirt (ColourSwatches.applyTopColour)
+          if (topProduct) applyTopColour(tracks.map(t => ({ fabric: t.mesh.userData.fabric })), topProduct, currentHex(topProduct, topColour));
         });
     }
     if (W.loading[sk]) jobs.push(W.loading[sk]);
@@ -635,10 +641,14 @@ function FitLab() {
 
   // ── shirt product colour: plain fabrics are recoloured from the simulated texture's colour ───────────
   useEffect(() => {
-    const grp = sceneRef.current.shirts?.[shirtKey];
-    if (!grp || typeof grp === 'string' || !topProduct) return;
-    applyTopColour(grp.userData.parts, topProduct, currentHex(topProduct, topColour));
-  }, [shirtKey, topColour, topProduct, ready]);
+    const S = sceneRef.current, grp = S.shirts?.[shirtKey];
+    if (!topProduct) return;
+    const hex = currentHex(topProduct, topColour);
+    if (grp && typeof grp !== 'string') applyTopColour(grp.userData.parts, topProduct, hex);
+    // the walking shirt too (loaded under the product's id, see the catwalk effect)
+    const w = S.walk?.shirts?.[`${topProduct.id}:${size}`] as { tracks: { mesh: { userData: { fabric: unknown } } }[] } | undefined;
+    if (w) applyTopColour(w.tracks.map(t => ({ fabric: t.mesh.userData.fabric })), topProduct, hex);
+  }, [shirtKey, topColour, topProduct, ready, size]);
 
   // ── apply sliders: morph weights on body + shirt, blended fit map ───────────────
   useEffect(() => {

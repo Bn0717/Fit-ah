@@ -405,6 +405,7 @@ export interface ShirtProduct {
   colours?: { hex: string; name: string; code?: string }[];   // the brand's colours (plain fabrics: recoloured)
   base_hex?: string | null;                                   // the colour of the simulated texture
   simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
+  walk?: { dir: string; sizes: string[] };        // catwalk: walk_shirt_<size>.glb/.bin + walk_<size>.json (export_walk.py)
 }
 // The body grid (meta.json) with a shirt product's numbers in place of the TNT tee's, so every fit function
 // (fitNumbers, shirtShapeOk, ...) works for that shirt unchanged.
