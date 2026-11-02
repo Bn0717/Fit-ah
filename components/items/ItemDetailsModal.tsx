@@ -404,7 +404,7 @@ export default function ItemDetailsModal({ isOpen, onClose, item, onCheckFit }: 
                 <div className="p-4 rounded-lg" style={{ backgroundColor: colors.cream }}>
                   {/* FIXED: explicit colour for tip text */}
                   <p className="text-xs" style={{ color: colors.navy, opacity: 0.7 }}>
-                    💡 All measurements in centimeters. Click "Check My Fit" to see size recommendations.
+                    💡 All measurements in centimeters. Click &ldquo;Check My Fit&rdquo; to see size recommendations.
                   </p>
                 </div>
               </div>

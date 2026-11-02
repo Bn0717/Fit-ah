@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test:fit-map": "node --test tests/fit-map.test.mjs",
     "test:shorts-surface": "node --test tests/static-surface.test.mjs tests/shorts-assets.test.mjs"
   },
@@ -30,8 +30,8 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.23",
-    "eslint": "^8",
-    "eslint-config-next": "14.0.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.1.4",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"

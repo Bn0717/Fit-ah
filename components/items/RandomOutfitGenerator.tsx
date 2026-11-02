@@ -115,7 +115,7 @@ export default function RandomOutfitModal({ isOpen, onClose, items, availableCat
               </p>
               <ul className="text-sm space-y-1" style={{ color: colors.navy, opacity: 0.8 }}>
                 <li>• Select the categories you want to include</li>
-                <li>• Click "Generate Random Outfit"</li>
+                <li>• Click &ldquo;Generate Random Outfit&rdquo;</li>
                 <li>• Get a random item from each category</li>
                 <li>• Save it to see in your outfits</li>
               </ul>
