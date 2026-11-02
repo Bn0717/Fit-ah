@@ -174,9 +174,37 @@ export function recolouredCard(url: string, baseHex: string, hex: string): Promi
         const j = stack.pop()!, x = j % W;
         if (x > 0) seed(j - 1); if (x < W - 1) seed(j + 1); if (j >= W) seed(j - W); if (j < n - W) seed(j + W);
       }
+      // the garment's outline: white highlights on the very edge join the background and leave white nicks; closing
+      // the garment shape (grow then shrink by R px) gives them back to the garment
+      const R = Math.max(2, Math.round(W / 150));
+      const grow = (src: Uint8Array, v: number) => {                                // square max (v=1) / min (v=0) filter
+        const a = new Uint8Array(n), out = new Uint8Array(n);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let hit = 0;
+          for (let d = -R; d <= R && !hit; d++) { const xx = x + d; if (xx >= 0 && xx < W && src[y * W + xx] === v) hit = 1; }
+          a[y * W + x] = hit ? v : 1 - v;
+        }
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let hit = 0;
+          for (let d = -R; d <= R && !hit; d++) { const yy = y + d; if (yy >= 0 && yy < H && a[yy * W + x] === v) hit = 1; }
+          out[y * W + x] = hit ? v : 1 - v;
+        }
+        return out;
+      };
+      const garment = new Uint8Array(n); for (let j = 0; j < n; j++) garment[j] = bg[j] ? 0 : 1;
+      const shape = grow(grow(garment, 1), 0);
+      for (let j = 0; j < n; j++) bg[j] = shape[j] ? 0 : 1;
       for (let i = 0; i < px.length; i += 4) {
         if (bg[i >> 2]) continue;                                                    // background
         for (let c = 0; c < 3; c++) px[i + c] = Math.round(255 * Math.min(toSrgb(Math.min(toLin(px[i + c] / 255) * k[c], 1)), 1));
+      }
+      // soft edge: an outline pixel mixes with the white background by the share of background round it (3×3)
+      const src = new Uint8ClampedArray(px);
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const j = y * W + x; if (bg[j]) continue;
+        let nb = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) nb += bg[j + dy * W + dx];
+        if (!nb) continue;
+        const f = nb / 9; for (let c = 0; c < 3; c++) px[j * 4 + c] = Math.round(src[j * 4 + c] * (1 - f) + 255 * f);
       }
       g.putImageData(d, 0, 0); res(cv.toDataURL('image/jpeg', 0.9));
     };
