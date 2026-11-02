@@ -186,7 +186,8 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName,
 const GLB_CACHE: Record<string, Promise<any>> = {};
 
 // ─── 3D view of the simulated shirt on its own (as draped on the 175 cm / chest 101 cm body) ───────────
-export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, label }: { item: LabItem; size: string; gridDir: string; compact?: boolean; url?: string; label?: string }) {
+// skin: a pants product's colour textures (cleaned flat photos, ColourSwatches.pantsColourFiles) + light correction
+export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, label, skin }: { item: LabItem; size: string; gridDir: string; compact?: boolean; url?: string; label?: string; skin?: { front: string; back: string; tint?: number[] | null } | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -247,7 +248,11 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
             o.morphTargetInfluences?.fill(0);           // the file's default weights are 1: show the plain 175 / 101 drape
             const m = o.material.clone(); m.side = THREE.DoubleSide; m.roughness = 0.95; m.metalness = 0;
             const side = /front/.test(m.name) ? 'front' : /back/.test(m.name) ? 'back' : null;
-            if (side && item.pantsTex) {
+            if (side && skin) {
+              const t = new THREE.TextureLoader().load(skin[side]); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+              m.map = t; texs.push(t);
+              if (skin.tint) m.color.setRGB(skin.tint[0], skin.tint[1], skin.tint[2]);
+            } else if (side && item.pantsTex) {
               const t = new THREE.CanvasTexture(item.pantsTex[side]); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
               m.map = t; texs.push(t);
             } else if (side && item.tex) {
@@ -532,11 +537,11 @@ function TryOn({ can, size, why, onClick }: { can: boolean; size: string; why: s
 // ─── pants window: 2D photos, 3D of each simulated size, size chart with the fit on your body, Try it on ───
 export type PantsChart = { waist: number; hip: number; length: number; opening: number; rise?: number };
 export type PantsSizeFit = { verdict: string; color: string; ease: number; detail?: string } | null;
-export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError }: {
+export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError, skin }: {
   item: LabItem | null; onClose: () => void; sizes: string[]; chart: Record<string, PantsChart>; fits: Record<string, PantsSizeFit>;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;
   glb: (size: string) => string; size: string; body: { height: number; chest: number; waist: number }; note: string;
-  onCheckFit: (it: LabItem, size: string) => void;
+  onCheckFit: (it: LabItem, size: string) => void; skin?: { front: string; back: string; tint?: number[] | null } | null;
 } & SizeRecordProps) {
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
@@ -595,7 +600,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                         style={{ backgroundColor: viewSize === s ? C.navy : C.cream, color: viewSize === s ? 'white' : C.navy }}>{s}</button>
                     ))}
                   </div>
-                  <Shirt3D item={item} size={viewSize} gridDir="" url={glb(viewSize)} label={`Size ${viewSize} as simulated on the 175 cm body · drag to rotate`} />
+                  <Shirt3D key={skin?.front ?? 'own'} item={item} size={viewSize} gridDir="" url={glb(viewSize)} skin={skin} label={`Size ${viewSize} as simulated on the 175 cm body · drag to rotate`} />
                 </>
               )}
             </div>

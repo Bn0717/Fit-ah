@@ -29,7 +29,7 @@ import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, typ
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
 import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
-import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour } from './ColourSwatches';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour, type PantsColours } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
@@ -1531,6 +1531,7 @@ function FitLab() {
     )}
     {openPants && pm && bodyNow && (
       <PantsModal recommended={recommendBottom(openPants)} savedSize={sizeRecords.sizes[openPants.id]} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openPants} onClose={() => setOpenPants(null)} sizes={Object.keys(pm.sims)}
+        skin={openProduct && openProduct.id === openPants.id ? (f => f && { ...f, tint: pantsTint(openProduct as unknown as PantsColours, topColour) })(pantsColourFiles(openProduct as unknown as PantsColours, topColour)) : null}
         chart={Object.fromEntries(Object.entries(pm.sims).map(([z, J]) => [z, ({ ...J.chart, waist: J.chart.elastic_waist ?? J.chart.waist, ...openPants.chart?.[z] }) as PantsChart]))} fits={pantsFits} glb={pm.glb}
         fav={favs.includes(openPants.id)} onFav={() => toggleFav(openPants.id)} match={pantsMatch(openPants)}
         size={jeansSize ?? 'L'} body={{ height, chest: bodyNow.chest, waist: bodyNow.waist }} note={pm.note} onCheckFit={wearBottom} />
