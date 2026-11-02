@@ -47,6 +47,46 @@ export function applyTopColour(parts: any[] | undefined, p: ShirtProduct | null 
   }
 }
 
+// the fabric colour multiplier that shows a plain-fabric shirt product (simulated in base_hex) as `hex`
+export function topTint(p: ShirtProduct | null | undefined, hex: string | null): number[] | null {
+  if (!p?.base_hex || !hex) return null;
+  const b = hexToLinear(p.base_hex), t = fabricFor(hexToLinear(hex));
+  return [t[0] / b[0], t[1] / b[1], t[2] / b[2]];
+}
+
+// The wardrobe item window: try a colour (the 3D / photo previews follow), then save it as this item's colour in the
+// wardrobe (the fitting room and My fitting room show it from then on). Saved = the colour already in the wardrobe.
+export function ColourPick({ product, saved, preview, onPreview, onSave }: {
+  product: ShirtProduct; saved: string | null; preview: string | null; onPreview: (hex: string) => void; onSave: (hex: string) => void;
+}) {
+  const colours = product.colours ?? [];
+  if (colours.length < 2) return null;
+  const cur = preview ?? saved;
+  const dirty = !!preview && preview !== saved;
+  const nameOf = (h: string | null) => colours.find(c => c.hex === h)?.name ?? '';
+  return (
+    <div className="mb-4 rounded-xl p-3" style={{ backgroundColor: '#FFF8F0', border: '1px solid #F6D7B0' }}>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-bold" style={{ color: NAVY }}>Colour</span>
+        <span className="min-w-0 truncate text-xs" style={{ color: NAVY }}>{nameOf(cur)}{saved && !dirty ? ' · in your wardrobe' : ''}</span>
+      </div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Colour">
+        {colours.map(c => (
+          <button key={c.hex + c.name} role="radio" aria-checked={c.hex === cur} aria-label={c.name} title={c.name}
+            onClick={() => onPreview(c.hex)} className="h-8 w-8 shrink-0 rounded-full transition"
+            style={{ background: c.hex, boxShadow: c.hex === cur ? `0 0 0 2px #fff, 0 0 0 4px ${NAVY}` : 'inset 0 0 0 1px rgba(0,0,0,0.15)' }} />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button onClick={() => cur && onSave(cur)} disabled={!dirty} className="min-h-[40px] rounded-lg px-4 text-sm font-semibold text-white"
+          style={{ backgroundColor: NAVY, opacity: dirty ? 1 : 0.4 }}>{dirty ? `Save ${nameOf(cur).replace(/^\d+\s*/, '')}` : 'Saved'}</button>
+        {dirty && <button onClick={() => saved && onPreview(saved)} className="min-h-[40px] rounded-lg px-3 text-sm" style={{ color: NAVY }}>Undo</button>}
+        <span className="text-xs" style={{ color: NAVY, opacity: 0.6 }}>Same fit in every colour</span>
+      </div>
+    </div>
+  );
+}
+
 export function ColourSwatches({ product, chosen, onPick, size = 28 }: {
   product: ShirtProduct; chosen: Record<string, string>; onPick: (id: string, hex: string) => void; size?: number;
 }) {
@@ -70,14 +110,14 @@ export function ColourSwatches({ product, chosen, onPick, size = 28 }: {
 
 // ── pants colours (blender/pants_colours.py): each colour is its own photo texture lined up on the same pattern,
 // so the fit is unchanged; the colour the pants were simulated in (base) keeps the texture inside the 3D file ──
-export type PantsColour = { code: string; name: string; hex: string; front?: string; back?: string; base?: boolean };
+export type PantsColour = { code: string; name: string; hex: string; front?: string; back?: string; base?: boolean; card?: string };
 export type PantsColours = { id: string; dir: string; colours?: PantsColour[]; base_colour?: string };
 
 // the swatch row's view of a pants product (same component as the shirts)
 export function pantsSwatches(p: PantsColours): ShirtProduct | null {
   const base = p.colours?.find(c => c.base);
   if (!base || (p.colours?.length ?? 0) < 2) return null;
-  return { id: p.id, colours: p.colours!.map(c => ({ hex: c.hex, name: c.name, code: c.code })), base_hex: base.hex } as unknown as ShirtProduct;
+  return { id: p.id, dir: p.dir, colours: p.colours!.map(c => ({ hex: c.hex, name: c.name, code: c.code, card: c.card })), base_hex: base.hex } as unknown as ShirtProduct;
 }
 
 // the chosen colour's texture files (none chosen: the base colour's cleaned files, whose edges have no white photo
@@ -105,4 +145,85 @@ export function loadPantsColour(THREE: any, files: { front: string; back: string
     t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
   }));
   return Promise.all([one(files.front), one(files.back)]).then(([front, back]) => ({ front, back }));
+}
+
+// ── wardrobe card in a chosen colour: that colour's own flat photo (card) when the brand has one, else the product's
+// card recoloured in the browser (plain fabric: garment pixels scaled in linear light from the base colour to the
+// chosen one; the white card background round the garment is kept) ──
+const cardCache: Record<string, Promise<string>> = {};
+const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+const toSrgb = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+export function recolouredCard(url: string, baseHex: string, hex: string): Promise<string> {
+  const key = `${url}|${baseHex}|${hex}`;
+  return (cardCache[key] ||= new Promise<string>((res, rej) => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const W = Math.min(img.naturalWidth, 600), H = Math.round(img.naturalHeight * W / img.naturalWidth);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d')!; g.drawImage(img, 0, 0, W, H);
+      const d = g.getImageData(0, 0, W, H), px = d.data;
+      const b = hexToLinear(baseHex), t = hexToLinear(hex), k = [t[0] / b[0], t[1] / b[1], t[2] / b[2]];
+      // background = the pure-white (255) pixels joined to the photo's edge (flood fill); near-white pixels inside the
+      // garment are its highlights (a white base tee is full of them) and must take the new colour too
+      const n = W * H, bg = new Uint8Array(n), stack: number[] = [];
+      const white = (j: number) => px[j * 4] === 255 && px[j * 4 + 1] === 255 && px[j * 4 + 2] === 255;
+      const seed = (j: number) => { if (!bg[j] && white(j)) { bg[j] = 1; stack.push(j); } };
+      for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x); }
+      for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1); }
+      while (stack.length) {
+        const j = stack.pop()!, x = j % W;
+        if (x > 0) seed(j - 1); if (x < W - 1) seed(j + 1); if (j >= W) seed(j - W); if (j < n - W) seed(j + W);
+      }
+      // the garment's outline: white highlights on the very edge join the background and leave white nicks; closing
+      // the garment shape (grow then shrink by R px) gives them back to the garment
+      const R = Math.max(2, Math.round(W / 150));
+      const grow = (src: Uint8Array, v: number) => {                                // square max (v=1) / min (v=0) filter
+        const a = new Uint8Array(n), out = new Uint8Array(n);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let hit = 0;
+          for (let d = -R; d <= R && !hit; d++) { const xx = x + d; if (xx >= 0 && xx < W && src[y * W + xx] === v) hit = 1; }
+          a[y * W + x] = hit ? v : 1 - v;
+        }
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let hit = 0;
+          for (let d = -R; d <= R && !hit; d++) { const yy = y + d; if (yy >= 0 && yy < H && a[yy * W + x] === v) hit = 1; }
+          out[y * W + x] = hit ? v : 1 - v;
+        }
+        return out;
+      };
+      const garment = new Uint8Array(n); for (let j = 0; j < n; j++) garment[j] = bg[j] ? 0 : 1;
+      const shape = grow(grow(garment, 1), 0);
+      for (let j = 0; j < n; j++) bg[j] = shape[j] ? 0 : 1;
+      for (let i = 0; i < px.length; i += 4) {
+        if (bg[i >> 2]) continue;                                                    // background
+        for (let c = 0; c < 3; c++) px[i + c] = Math.round(255 * Math.min(toSrgb(Math.min(toLin(px[i + c] / 255) * k[c], 1)), 1));
+      }
+      // soft edge: an outline pixel mixes with the white background by the share of background round it (3×3)
+      const src = new Uint8ClampedArray(px);
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const j = y * W + x; if (bg[j]) continue;
+        let nb = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) nb += bg[j + dy * W + dx];
+        if (!nb) continue;
+        const f = nb / 9; for (let c = 0; c < 3; c++) px[j * 4 + c] = Math.round(src[j * 4 + c] * (1 - f) + 255 * f);
+      }
+      g.putImageData(d, 0, 0); res(cv.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = rej; img.src = url;
+  }));
+}
+// the card image for a product colour (null: the product's own card is right, e.g. its base colour)
+export function colourCard(p: ShirtProduct & { dir?: string }, hex: string | null, productCard: string): string | Promise<string> | null {
+  if (!hex || !p.colours) return null;
+  const c = p.colours.find(x => x.hex === hex);
+  if (!c) return null;
+  if (c.card && p.dir) return `${p.dir}/${c.card}`;
+  if (!p.base_hex || hex === p.base_hex) return null;
+  return recolouredCard(productCard, p.base_hex, hex);
+}
+
+// a garment the user added with colours (garmentColour.ts): the same shape as a brand product's colours, so the swatch
+// row, saving, the card and the 3D recolouring work the same; its base colour is the photo's own colour
+export function userColourProduct(it: { id: string; colours?: { name: string; hex: string }[] } | null | undefined): ShirtProduct | null {
+  if (!it?.colours || it.colours.length < 2) return null;
+  return { id: it.id, base_hex: it.colours[0].hex, colours: it.colours.map(c => ({ name: c.name, hex: c.hex })) } as unknown as ShirtProduct;
 }
