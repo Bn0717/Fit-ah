@@ -31,7 +31,8 @@ import { jeansState, wornBody, type PantsData, type JeansState } from '../fit-la
 import { syncWardrobe } from '../fit-lab/wardrobeCloud';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getAvatar, saveAvatar, saveSkinTone } from '@/lib/firebase/firestore';
-import { SKIN_TONES, isSkinTone, type SkinToneId } from '../fit-lab/skinTone';
+import { isSkinTone, type SkinToneId } from '../fit-lab/skinTone';
+import { SkinTonePicker } from '../fit-lab/SkinTonePicker';
 import { useStored, type Outfit } from '../fit-lab/WardrobeExtras';
 import { uploadUserPhoto } from '@/lib/firebase/storage';
 import { scanBody, type ScanResult } from '@/lib/mediapipe/bodyScan';
@@ -733,26 +734,6 @@ function BodyPanel({ body, setBody, saved, dirty, saving, fromScan, wRange, shRa
 }
 
 // Skin tone of the 3D body: the Monk Skin Tone Scale (10 tones) or the model's own skin. Saved as soon as it is tapped.
-function SkinTonePicker({ value, onChange }: { value: SkinToneId | null; onChange: (id: SkinToneId | null) => void }) {
-  return (
-    <div role="radiogroup" aria-label="Skin tone of your 3D body">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-xs font-semibold" style={{ color: C.ink }}>Skin tone</span>
-        <button role="radio" aria-checked={value === null} onClick={() => onChange(null)} className="rounded-md px-1 text-[11px] font-semibold"
-          style={{ color: value === null ? C.navy : C.mute, textDecoration: value === null ? 'underline' : 'none' }}>Original</button>
-      </div>
-      <div className="grid grid-cols-10 gap-1">
-        {SKIN_TONES.map((t, i) => (
-          <button key={t.id} role="radio" aria-checked={value === t.id} aria-label={`Skin tone ${i + 1} of ${SKIN_TONES.length}`} title={`Tone ${i + 1}`}
-            onClick={() => onChange(t.id)} className="aspect-square w-full rounded-full transition"
-            style={{ background: t.hex, boxShadow: value === t.id ? `0 0 0 2px #fff, 0 0 0 4px ${C.navy}` : 'inset 0 0 0 1px rgba(0,0,0,0.12)' }} />
-        ))}
-      </div>
-      <p className="mt-1 text-[10px]" style={{ color: C.mute }}>Monk Skin Tone Scale. Only changes how your 3D body looks, not the fit.</p>
-    </div>
-  );
-}
-
 function Measure({ label, value, min, max, typeMin, typeMax, onChange, pm, disabled = false }: {
   label: string; value: number; min: number; max: number; typeMin: number; typeMax: number; onChange: (v: number) => void; pm?: number; disabled?: boolean;
 }) {

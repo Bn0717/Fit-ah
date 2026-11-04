@@ -12,7 +12,7 @@
 
 import { ModelSkeleton } from '@/components/ui/Skeleton';
 import { WardrobeSkeleton } from '@/components/ui/PageSkeletons';
-import { getAvatar } from '@/lib/firebase/firestore';
+import { getAvatar, saveSkinTone } from '@/lib/firebase/firestore';
 import { SavedSizeControl } from './SavedSizeControl';
 import { useSizePreferences } from './useSizePreferences';
 import { initialSize, recommendedTop, recommendedBottom, brandBodySize } from './sizePreferences';
@@ -28,7 +28,8 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
-import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
+import { applySkinTone, isSkinTone, realisticSkin, type SkinToneId } from './skinTone';
+import { SkinTonePicker } from './SkinTonePicker';
 import { type GarmentColour } from './garmentColour';
 import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, colourCard, userColourProduct, topTint, type PantsColour, type PantsColours } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
@@ -191,6 +192,14 @@ function FitLab() {
   const [outfits, setOutfits] = useStored<Outfit[]>('fitlab_outfits', []);
   const [guide, setGuide] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // skin tone of the 3D body: picked here or on the Profile page, saved to the account straight away
+  const [skinTone, setSkinTone] = useState<SkinToneId | null>(null);
+  const pickSkinTone = async (id: SkinToneId | null) => {
+    const S = sceneRef.current; setSkinTone(id);
+    S.skinTone = id; applySkinTone(S.bodyRoot, id); applySkinTone(S.walk?.group, id);
+    const r = await saveSkinTone(userId, id);
+    setToast(r.success ? 'Skin tone saved' : 'Could not save the skin tone. Please try again.');
+  };
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 4500); return () => clearTimeout(t); }, [toast]);
   // the fitting room is a page on top of the wardrobe: the phone's back gesture / browser back closes it
   // (Next's own history state is kept in the pushed entry, so its router is not disturbed)
@@ -224,7 +233,7 @@ function FitLab() {
       setHasProfile(true);
       // skin tone (set on the Profile page): the static and the walking body, now and when they load later
       const S = sceneRef.current, tone = isSkinTone(profile.skinTone) ? profile.skinTone : null;
-      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone);
+      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone); setSkinTone(tone);
     });
     return () => { alive = false; };
   }, [userId]);
@@ -1388,7 +1397,7 @@ function FitLab() {
                       style={shirtOn && size === s ? { background: C.navy, color: '#fff' } : { background: C.cream }}>{s}</button>
                   ))}
                 </div>
-                {topProduct && <div className="mt-3"><ColourSwatches product={topProduct} chosen={topColour} onPick={pickTopColour} /></div>}
+                {(p => p && <div className="mt-3"><ColourSwatches product={p} chosen={topColour} onPick={pickTopColour} /></div>)(topProduct ?? userColourProduct(items.find(i => i.id === activeId)))}
                 {meta?.walk && <div className="mt-2 text-xs" style={{ opacity: 0.6 }}>
                   {SIZES.some(s => !meta.walk!.sizes[s]) && <> · still simulating: {SIZES.filter(s => !meta.walk!.sizes[s]).join(', ')}</>}
                 </div>}
@@ -1428,6 +1437,8 @@ function FitLab() {
                 {pantsId !== 'xin' && product?.id === pantsId && pantsSwatches(product) && (
                   <ColourSwatches product={pantsSwatches(product)!} chosen={topColour} onPick={pickTopColour} />
                 )}
+                {/* your own pants in the other colours you gave them (recoloured photo) */}
+                {pantsId === 'xin' && (up => up && <ColourSwatches product={up} chosen={topColour} onPick={pickTopColour} />)(userColourProduct(pantsItems.find(p => p.id === pantsSkin)))}
                 {pants && <p className="text-xs" style={{ opacity: 0.6 }}>{pants.name}, {pantsId === 'xin' ? 'rigid 100 % cotton denim' : product?.fabric.replace('_', ' ')}, estimated{pantsId === 'xin' || Object.keys(pants.drop?.[jeansSize ?? ''] ?.bodies ?? pants.sizes[jeansSize ?? '']?.bodies ?? {}).length > 1 ? ' fit preview' : ' (preview: 175 cm / chest 101 cm body only)'}{elasticW ? ', elastic waist' : jeansVariant !== 'held' && (belt ? ', held by a belt' : jeansHide ? '' : ', nothing holding them up but the body')}</p>}
                 {jeansNow && (
                   <div className="text-sm space-y-1">
@@ -1456,6 +1467,7 @@ function FitLab() {
 
               <section className="rounded-2xl p-5 shadow-sm space-y-4" style={{ background: '#fff' }}>
                 <h2 className="font-semibold">Body</h2>
+                <SkinTonePicker value={skinTone} onChange={pickSkinTone} />
                 {walking && <p className="text-xs" style={{ opacity: 0.7 }}>The catwalk uses the {walkBody?.height} cm / chest {walkBody?.chest} cm body. Stop the animation to adjust the body size.</p>}
                 {meta && <>
                   <Slider label="Height" disabled={walking} value={height} min={meta.heights[0]} max={meta.heights[meta.heights.length - 1]} onChange={setHeight} />
