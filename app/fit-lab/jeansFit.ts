@@ -88,6 +88,9 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     if ((dropped > 5 && band < body.waist - 2) || (dropped > 15 && band < body.hip - 2)) report('undersized waistband passed through body');
     if (variant === 'drop' && dropped > 30 && !((sample.body_girth_at_waistband_cm ?? 0) > 0)) report('waistband left valid torso region');
   }
+  // a rigid waistband more than 5 cm (~6 %) smaller than your waist cannot be buttoned at all (belt or not): the sim then
+  // squashes the band into layers. Too small, not drawn
+  if (!elastic && 2 * J.chart.waist < bodyW - 5) qualityIssues.push('body: undersized waistband passed through body');
   const cantPullOn = qualityIssues.length > 0;
   // the only problem is a waistband smaller than the body: say "too small", not "unavailable"
   const undersized = cantPullOn && qualityIssues.every(q => q.endsWith('undersized waistband passed through body'));
