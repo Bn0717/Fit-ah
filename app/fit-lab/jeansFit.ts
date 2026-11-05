@@ -63,7 +63,13 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   const variant: JeansVariant = elastic ? (pants.belt ? 'belt' : 'held') : pants.drop && pants.belt ? (belt ? 'belt' : 'drop') : 'held';
   const J = variant === 'held' ? pants.sizes[size] : pants[variant]?.[size];
   if (!J) return null;
-  const jw = Object.fromEntries(Object.entries(w).filter(([, v]) => v > 1e-6));
+  // at the edge of the bodies these pants were simulated on, the blend can lean a few % on a neighbour body they
+  // were not (chest 92 exactly: 4 % on chest 84). Under 10 % in all, that neighbour is dropped and the rest
+  // re-weighted; more than that and the body is really outside the simulated range ("not available")
+  const all = Object.fromEntries(Object.entries(w).filter(([, v]) => v > 1e-6));
+  const missing = Object.entries(all).filter(([k]) => !J.bodies[k]).reduce((t, [, v]) => t + v, 0);
+  const jw = missing > 0 && missing < 0.1
+    ? Object.fromEntries(Object.entries(all).filter(([k]) => J.bodies[k]).map(([k, v]) => [k, v / (1 - missing)])) : all;
   const simulated = Object.keys(jw).every(k => J.bodies[k]);
   // Validate every contributing simulation BEFORE interpolation. A failed corner cannot
   // become a valid preview by averaging its boolean flag or collapsing measurements.

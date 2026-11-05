@@ -670,7 +670,12 @@ function FitLab() {
     const setMorphs = (mesh: any, isJeans = false) => {
       const dict = mesh.morphTargetDictionary || {};
       mesh.morphTargetInfluences?.fill(0);
-      for (const [k, v] of Object.entries(w)) if (k in dict) mesh.morphTargetInfluences[dict[k]] = v;
+      // a body this garment was not simulated on (a few % at the edge of its range) is dropped and the rest
+      // re-weighted, like jeansState does, so the shape and the fit numbers match
+      // (the centre body is the file's base shape, not a named target)
+      const miss = Object.entries(w).filter(([k]) => k !== meta.centre && !(k in dict)).reduce((t, [, v]) => t + v, 0);
+      const scale = miss > 0 && miss < 0.1 ? 1 / (1 - miss) : 1;
+      for (const [k, v] of Object.entries(w)) if (k in dict) mesh.morphTargetInfluences[dict[k]] = v * scale;
       if (isJeans) {                                    // waist x belly versions, incl. the combined bodies
         for (const [n, x] of Object.entries(jeansVarWeights(vw, n => n in dict))) mesh.morphTargetInfluences[dict[n]] = x;
         return;

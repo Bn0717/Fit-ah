@@ -24,6 +24,7 @@
    "stretch_p95": 3.39,
    "floor_cm": -1.7,
    "hem_on_floor_frac": 0.019,
+   "put_on_failed": false,
    "drop_cm": 6.3
   },
   "h160_c101": {
@@ -38,6 +39,7 @@
    "stretch_p95": 3.51,
    "floor_cm": -1.7,
    "hem_on_floor_frac": 0.006,
+   "put_on_failed": false,
    "drop_cm": 3.7
   },
   "h160_c110": {
@@ -48,10 +50,11 @@
    "crotch_drop_cm": 12.0,
    "hem_lowest_cm": -1.4,
    "seam_gap_mean_cm": 0.017,
-   "stretch_p50": 0.64,
-   "stretch_p95": 3.79,
+   "stretch_p50": 0.41,
+   "stretch_p95": 4.8,
    "floor_cm": -1.7,
    "hem_on_floor_frac": 0.005,
+   "put_on_failed": false,
    "drop_cm": -0.3
   },
   "h160_c116": {
@@ -66,6 +69,7 @@
    "stretch_p95": 3.88,
    "floor_cm": -1.7,
    "hem_on_floor_frac": 0.02,
+   "put_on_failed": false,
    "drop_cm": 0.2
   },
   "h165_c92": {
@@ -80,6 +84,7 @@
    "stretch_p95": 3.54,
    "floor_cm": -1.8,
    "hem_on_floor_frac": 0.009,
+   "put_on_failed": false,
    "drop_cm": 6.6
   },
   "h165_c101": {
@@ -94,6 +99,7 @@
    "stretch_p95": 3.53,
    "floor_cm": -1.8,
    "hem_on_floor_frac": 0.016,
+   "put_on_failed": false,
    "drop_cm": 4.4
   },
   "h165_c110": {
@@ -108,6 +114,7 @@
    "stretch_p95": 3.84,
    "floor_cm": -1.8,
    "hem_on_floor_frac": 0.019,
+   "put_on_failed": false,
    "drop_cm": -0.2
   },
   "h165_c116": {
@@ -122,6 +129,7 @@
    "stretch_p95": 3.81,
    "floor_cm": -1.8,
    "hem_on_floor_frac": 0.016,
+   "put_on_failed": false,
    "drop_cm": 0.1
   },
   "h175_c92": {
@@ -136,6 +144,7 @@
    "stretch_p95": 3.34,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.008,
+   "put_on_failed": false,
    "drop_cm": 5.3
   },
   "h175_c101": {
@@ -150,6 +159,7 @@
    "stretch_p95": 3.7,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 1.6
   },
   "h175_c110": {
@@ -164,6 +174,7 @@
    "stretch_p95": 3.86,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.014,
+   "put_on_failed": false,
    "drop_cm": 1.0
   },
   "h175_c116": {
@@ -174,10 +185,11 @@
    "crotch_drop_cm": 3.9,
    "hem_lowest_cm": 3.2,
    "seam_gap_mean_cm": 0.023,
-   "stretch_p50": 0.91,
-   "stretch_p95": 4.72,
+   "stretch_p50": 0.43,
+   "stretch_p95": 4.08,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": -1.6
   },
   "h185_c92": {
@@ -192,6 +204,7 @@
    "stretch_p95": 3.2,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 3.5
   },
   "h185_c101": {
@@ -206,6 +219,7 @@
    "stretch_p95": 4.06,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 0.3
   },
   "h185_c110": {
@@ -220,6 +234,7 @@
    "stretch_p95": 4.13,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 1.0
   },
   "h185_c116": {
@@ -234,6 +249,7 @@
    "stretch_p95": 4.13,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 0.0
   },
   "h190_c92": {
@@ -244,10 +260,11 @@
    "crotch_drop_cm": 9.1,
    "hem_lowest_cm": 4.2,
    "seam_gap_mean_cm": 0.012,
-   "stretch_p50": 0.83,
-   "stretch_p95": 3.43,
+   "stretch_p50": 0.62,
+   "stretch_p95": 3.35,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 3.4
   },
   "h190_c101": {
@@ -262,6 +279,7 @@
    "stretch_p95": 4.1,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 1.2
   },
   "h190_c110": {
@@ -276,6 +294,7 @@
    "stretch_p95": 4.12,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 0.0
   },
   "h190_c116": {
@@ -290,6 +309,7 @@
    "stretch_p95": 4.23,
    "floor_cm": -2.0,
    "hem_on_floor_frac": 0.0,
+   "put_on_failed": false,
    "drop_cm": 0.0
   }
  },
@@ -306,6 +326,7 @@
    "stretch_p95": 3.15,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.008,
+   "put_on_failed": false,
    "drop_cm": 4.0
   },
   "w86": {
@@ -316,10 +337,11 @@
    "crotch_drop_cm": 11.0,
    "hem_lowest_cm": -1.4,
    "seam_gap_mean_cm": 0.018,
-   "stretch_p50": 0.8,
-   "stretch_p95": 3.97,
+   "stretch_p50": 0.53,
+   "stretch_p95": 4.46,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.001,
+   "put_on_failed": false,
    "drop_cm": 4.5
   },
   "bm": {
@@ -330,10 +352,11 @@
    "crotch_drop_cm": 8.4,
    "hem_lowest_cm": -1.6,
    "seam_gap_mean_cm": 0.027,
-   "stretch_p50": 0.71,
-   "stretch_p95": 3.8,
+   "stretch_p50": 0.42,
+   "stretch_p95": 3.41,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.001,
+   "put_on_failed": false,
    "drop_cm": 1.8
   },
   "bp": {
@@ -348,6 +371,7 @@
    "stretch_p95": 3.33,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.005,
+   "put_on_failed": false,
    "drop_cm": 4.2
   },
   "w70bm": {
@@ -362,6 +386,7 @@
    "stretch_p95": 3.34,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.007,
+   "put_on_failed": false,
    "drop_cm": 4.2
   },
   "w70bp": {
@@ -376,6 +401,7 @@
    "stretch_p95": 3.26,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.005,
+   "put_on_failed": false,
    "drop_cm": 4.5
   },
   "w86bm": {
@@ -390,6 +416,7 @@
    "stretch_p95": 4.66,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.008,
+   "put_on_failed": false,
    "drop_cm": 6.6
   },
   "w86bp": {
@@ -404,6 +431,7 @@
    "stretch_p95": 4.01,
    "floor_cm": -1.9,
    "hem_on_floor_frac": 0.001,
+   "put_on_failed": false,
    "drop_cm": 9.6
   }
  }
