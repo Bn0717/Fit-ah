@@ -118,12 +118,12 @@ test('actual 183/102 interpolation cannot dilute its known failed corner',()=>{
  assert.match(state.reason,/Simulation unavailable/);
 });
 test('undersized Xin M falling through body is unavailable instead of labelled too big',()=>{
- const state=jeansState(meta,meta.jeans,'M',false,184,116,53,null,0);
+ const state=jeansState(meta,meta.jeans,'M',false,184,115,53,null,0);
  assert.equal(state.hide,true);assert.match(state.now.label,/unavailable/);assert.doesNotMatch(state.now.label,/Too big|falls down/);
  assert.ok(state.qualityIssues.some(r=>/passed through body|valid torso/.test(r)));
 });
 test('Xin L on the same body retains a tight-waist preview when its source simulations are sound',()=>{
- const state=jeansState(meta,meta.jeans,'L',false,184,116,53,null,0);
+ const state=jeansState(meta,meta.jeans,'L',false,184,115,53,null,0);
  assert.equal(state.hide,false);assert.match(state.now.label,/Tight at the waist/);
 });
 test('shorts S 190/116 uses elastic extension for both label and contact colour',()=>{
