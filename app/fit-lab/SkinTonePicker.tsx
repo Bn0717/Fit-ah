@@ -13,7 +13,7 @@ export function SkinTonePicker({ value, onChange }: { value: SkinToneId | null; 
         <button role="radio" aria-checked={value === null} onClick={() => onChange(null)} className="rounded-md px-1 text-[11px] font-semibold"
           style={{ color: value === null ? NAVY : '#6b7280', textDecoration: value === null ? 'underline' : 'none' }}>Original</button>
       </div>
-      <div className="grid grid-cols-10 gap-1">
+      <div className="grid max-w-[340px] grid-cols-10 gap-1">
         {SKIN_TONES.map((t, i) => (
           <button key={t.id} role="radio" aria-checked={value === t.id} aria-label={`Skin tone ${i + 1} of ${SKIN_TONES.length}`} title={`Tone ${i + 1}`}
             onClick={() => onChange(t.id)} className="aspect-square w-full rounded-full transition"
