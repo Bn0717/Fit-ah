@@ -81,12 +81,16 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
       if (sample.crotch_drop_cm < -5) report('crotch above body');
       if (sample.hem_lowest_cm > J.chart.rise) report('legs did not dress');
     }
-    if (variant === 'drop' && (sample.drop_cm ?? 0) > 30) {
-      if (2 * J.chart.waist < body.waist || 2 * J.chart.waist < body.hip) report('undersized waistband passed through body');
-      if (!((sample.body_girth_at_waistband_cm ?? 0) > 0)) report('waistband left valid torso region');
-    }
+    // a rigid waistband can only slide down past body parts smaller than it: below the waist it must be bigger than
+    // the waist, far down (past the seat) bigger than the hips too. The cloth sim sometimes lets a too-small band
+    // pass through the body (27inch on 160 cm / chest 132 fell 27 cm to the thighs): that result is not real
+    const dropped = variant === 'drop' ? sample.drop_cm ?? 0 : 0, band = 2 * J.chart.waist;
+    if ((dropped > 5 && band < body.waist - 2) || (dropped > 15 && band < body.hip - 2)) report('undersized waistband passed through body');
+    if (variant === 'drop' && dropped > 30 && !((sample.body_girth_at_waistband_cm ?? 0) > 0)) report('waistband left valid torso region');
   }
   const cantPullOn = qualityIssues.length > 0;
+  // the only problem is a waistband smaller than the body: say "too small", not "unavailable"
+  const undersized = cantPullOn && qualityIssues.every(q => q.endsWith('undersized waistband passed through body'));
   // waist / belly versions exist for the centre body only: elsewhere a changed waist or belly would be a guess
   const moved = (['w70', 'w86', 'bm', 'bp'] as Variant[]).some(v => vw[v] > 0.05);
   const noSim = looseElastic || !simulated || (!lock && moved && (w[meta.centre] ?? 0) < 0.5);
@@ -100,7 +104,8 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     const extra = J.chart.length - (jv(b => b.waistband_height_cm) - jv(b => b.floor_cm ?? -1.7));
     let label: string, tone: JeansNow['tone'];
     const rel = elastic ? 2 * ew! : 0, st = elastic ? (bw - rel) / rel : 0;
-    if (cantPullOn) { label = 'Simulation unavailable for this size and body'; tone = 'red'; }
+    if (undersized) { label = 'Too small at the waist: try a larger size'; tone = 'red'; }
+    else if (cantPullOn) { label = 'Simulation unavailable for this size and body'; tone = 'red'; }
     else if (elastic && tooSmall) { label = 'Outside the simulated elastic range: try a larger size'; tone = 'red'; }
     else if (elastic && noSim) { label = looseElastic ? 'Loose elastic waist: preview unavailable' : 'Not simulated for this body yet'; tone = looseElastic ? 'blue' : 'amber'; }
     else if (elastic && bw < rel - 4) { label = `Loose: the elastic is ${(rel - bw).toFixed(0)} cm bigger than your waist and may slide down`; tone = 'blue'; }
@@ -123,7 +128,8 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     now = { chart: J.chart, waistEase: elastic ? rel - bw : e, elasticExtension: elastic ? st : null, elasticLimit: elastic ? stretch - 1 : null, relaxedWaist: elastic ? rel : 2 * J.chart.waist, lengthFit: extra > 4 && jv(b => b.hem_lowest_cm) <= 0.5 ? 'pooling' : !elastic && extra <= 4 && jv(b => b.hem_lowest_cm) > 6 ? 'short' : 'neutral', hipEase: eh, hem: jv(b => b.hem_lowest_cm), drop, extra, bodyWaist: bw, bodyHip: bh, label, tone };
   }
   // short, plain words for shoppers
-  const reason = cantPullOn ? `Simulation unavailable for this size and body. Try another size.`
+  const reason = undersized ? `Too small to close at the waist. Try a larger size.`
+    : cantPullOn ? `Simulation unavailable for this size and body. Try another size.`
     : elastic && tooSmall ? `Outside the simulated elastic range. Try a larger size.`
     : looseElastic ? `The relaxed elastic waist is larger than your waist. A slipping preview is not available.`
     : noSim ? (simulated ? 'Not available for your exact shape yet: we have tried these on bodies with your height, but not yet with your waist / belly. Tap below to see them with a natural waist and belly.' : 'Not available for your body size yet.')
