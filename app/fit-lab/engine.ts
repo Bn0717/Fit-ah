@@ -331,19 +331,31 @@ export function refreshStaticNormals(parts: any[]) {
   }
 }
 
+// pantsPos: pants positions already worked out on the CPU (pantsBlend.ts, placed relative to the body), per part;
+// null / missing = the plain morph mix.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyStaticLayers(shirts: any[], pants: any[], shirtVisible: boolean) {
+export function applyStaticLayers(shirts: any[], pants: any[], shirtVisible: boolean, pantsPos: (Float32Array | null)[] = []) {
   for (const parts of [shirts, pants]) if (parts.length && !parts[0].staticSurface) prepareStaticSurface(parts);
   if (!shirtVisible || !shirts.length || !pants.length) {
-    for (const p of [...shirts, ...pants]) if (p.layered) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reset = (p: any) => {
+      if (!p.layered) return;
       const g = p.mesh.geometry;
       g.attributes.position.array.set(p.basePos); g.attributes.position.needsUpdate = true;
       g.attributes.normal.array.set(p.baseNormal); g.attributes.normal.needsUpdate = true;
       p.layered = false;
-    }
+    };
+    shirts.forEach(reset);
+    pants.forEach((p, i) => {
+      const q = pantsPos[i];
+      if (!q) { reset(p); return; }
+      const pos = p.mesh.geometry.attributes.position; pos.array.set(q); pos.needsUpdate = true;
+      p.mesh.morphTargetInfluences?.fill(0); p.layered = true;
+    });
+    if (pantsPos.some(Boolean)) refreshStaticNormals(pants);
     return;
   }
-  const all = [...shirts, ...pants], positions = all.map(p => cpuMorphed(p.mesh, p.basePos));
+  const all = [...shirts, ...pants], positions = all.map((p, i) => i >= shirts.length && pantsPos[i - shirts.length] ? pantsPos[i - shirts.length]!.slice() : cpuMorphed(p.mesh, p.basePos));
   layerShirtOverPants(positions.slice(0, shirts.length), positions.slice(shirts.length));
   all.forEach((p, i) => {
     const pos = p.mesh.geometry.attributes.position; pos.array.set(positions[i]); pos.needsUpdate = true;
