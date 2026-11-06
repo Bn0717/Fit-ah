@@ -91,7 +91,7 @@ export interface GridMeta {
   jeans?: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim> };
 }
 export type JeansBody = { waistband_height_cm: number; natural_waist_height_cm: number; body_girth_at_waistband_cm?: number; hem_lowest_cm: number; crotch_drop_cm: number;
-    stretch_p50: number; floor_cm?: number; hem_on_floor_frac?: number; drop_cm?: number; seam_gap_mean_cm?: number;
+    stretch_p50: number; stretch_p95?: number; floor_cm?: number; hem_on_floor_frac?: number; drop_cm?: number; seam_gap_mean_cm?: number;
     put_on_failed?: boolean };   // the simulation could not get them on (a leg stuck at the thigh)
 // variants = the same jeans simulated on the centre body's slim / full waist and flat / round belly versions
 // chart.elastic_waist: relaxed elastic (flat cm) of an elastic-waist product; chart.waist is then the fabric width

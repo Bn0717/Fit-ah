@@ -8,6 +8,15 @@ import { solveBody, blend, VARIANTS, jeansVarWeights, elasticFit, type ProductWa
 export type PantsData = { walk?: ProductWalk; name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim>;
   elasticStretch?: number | null };   // elastic waist: stretches up to this x relaxed
 export type JeansVariant = 'held' | 'drop' | 'belt';
+// Rigid-waist pants (jeans, chinos): the most fabric stretch (95th percentile of the change in fabric area vs the flat
+// pattern, %) a simulation may show and still be drawn. Normal results sit at 3-5 % (folds and weave shear count a
+// little); every result above ~7.5 % looked broken when checked by eye on 6 Nov 2026 (crumpled thighs, white flaps
+// at the hem: output/qa/review/tiles_fin), while real denim stretches ~0-3 % (rigid) to ~10-25 % (comfort stretch)
+// only under heavy load. Elastic-waist pants (shorts, joggers) are other fabrics: no limit until measured.
+export const RIGID_STRETCH_LIMIT = 7.5;
+// a contributing simulation counts only when it carries at least this share of the blend (a 5 % share of a broken
+// neighbour barely shows, and would otherwise hide the pants over a wide band of the sliders)
+const STRETCH_SHARE = 0.15;
 export interface JeansNow {
   chart: JeansSim['chart']; waistEase: number; hipEase: number; hem: number; drop: number; extra: number;
   bodyWaist: number; bodyHip: number; elasticExtension: number | null; elasticLimit: number | null; relaxedWaist: number; lengthFit: 'pooling' | 'short' | 'neutral'; label: string; tone: 'red' | 'amber' | 'green' | 'blue';
@@ -82,6 +91,7 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     if (!body) { report('missing body measurements'); continue; }
     if (sample.put_on_failed) report('dressing failed');
     if ((sample.seam_gap_mean_cm ?? 0) > 0.25) report('seam separation');
+    if (!elastic && (jw[key] ?? 0) >= STRETCH_SHARE && (sample.stretch_p95 ?? 0) > RIGID_STRETCH_LIMIT) report('over-stretched fabric');
     if (![sample.waistband_height_cm, sample.hem_lowest_cm, sample.crotch_drop_cm].every(Number.isFinite)) report('invalid measurements');
     if (J.chart.length >= 80) {
       if (sample.crotch_drop_cm < -5) report('crotch above body');
@@ -100,6 +110,11 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   const cantPullOn = qualityIssues.length > 0;
   // the only problem is a waistband smaller than the body: say "too small", not "unavailable"
   const undersized = cantPullOn && qualityIssues.every(q => q.endsWith('undersized waistband passed through body'));
+  // over-stretched denim on a body the waistband is (nearly) too small for = really too tight; on a looser fit the
+  // stretch is a simulation fault (a glitch), not the fit: "unavailable", never "too tight"
+  const tightEase = 2 * J.chart.waist - bodyW;
+  const overTight = cantPullOn && !undersized && tightEase < 2
+    && qualityIssues.every(q => q.endsWith('over-stretched fabric') || q.endsWith('undersized waistband passed through body'));
   // waist / belly versions exist for the centre body only: elsewhere a changed waist or belly would be a guess
   const moved = (['w70', 'w86', 'bm', 'bp'] as Variant[]).some(v => vw[v] > 0.05);
   const noSim = looseElastic || !simulated || (!lock && moved && (w[meta.centre] ?? 0) < 0.5);
@@ -114,6 +129,7 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     let label: string, tone: JeansNow['tone'];
     const rel = elastic ? 2 * ew! : 0, st = elastic ? (bw - rel) / rel : 0;
     if (undersized) { label = 'Too small at the waist: try a larger size'; tone = 'red'; }
+    else if (overTight) { label = 'Too tight: try a larger size'; tone = 'red'; }
     else if (cantPullOn) { label = 'Simulation unavailable for this size and body'; tone = 'red'; }
     else if (elastic && tooSmall) { label = 'Outside the simulated elastic range: try a larger size'; tone = 'red'; }
     else if (elastic && noSim) { label = looseElastic ? 'Loose elastic waist: preview unavailable' : 'Not simulated for this body yet'; tone = looseElastic ? 'blue' : 'amber'; }
@@ -138,6 +154,7 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   }
   // short, plain words for shoppers
   const reason = undersized ? `Too small to close at the waist. Try a larger size.`
+    : overTight ? `Too tight on your body: the fabric would have to stretch more than denim can. Try a larger size.`
     : cantPullOn ? `Simulation unavailable for this size and body. Try another size.`
     : elastic && tooSmall ? `Outside the simulated elastic range. Try a larger size.`
     : looseElastic ? `The relaxed elastic waist is larger than your waist. A slipping preview is not available.`
