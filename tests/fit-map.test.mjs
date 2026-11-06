@@ -136,6 +136,23 @@ test('over-stretched denim: too tight on a body the waistband barely fits, a fau
  const near=jeansState(meta,meta.jeans,'M',false,175,102,null,null,0);
  assert.ok(!near.qualityIssues.some(r=>r.endsWith('over-stretched fabric')));
 });
+test('tape measurements: the advice uses the shopper\'s own waist, hips and inside leg when given',()=>{
+ const body=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0);
+ assert.equal(body.now.basis,'body');
+ // the same body, but a tape waist 1 cm over the L waistband: tight, and called borderline
+ const L=2*meta.jeans.drop.L.chart.waist;
+ const t1=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+1});
+ assert.equal(t1.now.basis,'tape');assert.match(t1.now.label,/Tight at the waist \(borderline/);assert.equal(t1.now.borderline,true);
+ // 4 cm over: plainly tight; 8 cm over: too small to close (not drawn)
+ assert.match(jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+4}).now.label,/^Tight at the waist: try a larger size/);
+ const t3=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+8});assert.equal(t3.hide,true);assert.match(t3.reason,/Too small/);
+ // hips bigger than the chart's: tight at the hips (only judged from a tape)
+ const H=2*meta.jeans.drop.L.chart.hip;
+ assert.match(jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L-4,hip:H+5}).now.label,/Tight at the hips/);
+ // inside leg 10 cm shorter than the pants' inseam: they pile up on the shoes
+ const I=meta.jeans.drop.L.chart.inseam, t5=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{inseam:I-10});
+ assert.equal(t5.now.lengthFit,'pooling');assert.equal(Math.round(t5.now.extra),10);
+});
 test('elastic-waist shorts are not judged by the denim stretch limit',()=>{
  for(const [h,c] of [[176,101],[160,92]])assert.ok(!jeansState(meta,shorts,'S',false,h,c,null,null,0).qualityIssues.some(r=>r.endsWith('over-stretched fabric')));
 });

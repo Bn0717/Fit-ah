@@ -33,7 +33,7 @@ import { SkinTonePicker } from './SkinTonePicker';
 import { type GarmentColour } from './garmentColour';
 import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, colourCard, userColourProduct, topTint, type PantsColour, type PantsColours } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
-import { jeansState, wornBody, type PantsData } from './jeansFit';
+import { jeansState, wornBody, type PantsData, type TapeMeasures } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
 // a pants photo swap: new photos on the simulated Xin jeans (pantsSwap.ts)
@@ -135,6 +135,8 @@ function FitLab() {
   const [chest, setChest] = useState(101);
   const [shoulder, setShoulder] = useState<number | null>(null);   // null = this body's natural value
   const [waist, setWaist] = useState<number | null>(null);
+  // the shopper's own tape measurements (Profile page), when given: the pants advice uses them (jeansFit.ts)
+  const [tapeM, setTapeM] = useState<TapeMeasures>({});
   const preWalkBody = useRef<{ height: number; chest: number; shoulder: number | null; waist: number | null } | null>(null);
   const savedBody = useRef<{ height: number; chest: number; shoulder: number; waist: number } | null>(null);
   const [walking, setWalking] = useState(false);
@@ -231,6 +233,7 @@ function FitLab() {
       savedBody.current = saved;
       setHeight(saved.height); setChest(saved.chest); setWaist(saved.waist); setShoulder(saved.shoulder);
       setHasProfile(true);
+      if (profile.tape) setTapeM(profile.tape);
       // skin tone (set on the Profile page): the static and the walking body, now and when they load later
       const S = sceneRef.current, tone = isSkinTone(profile.skinTone) ? profile.skinTone : null;
       S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone); setSkinTone(tone);
@@ -248,7 +251,7 @@ function FitLab() {
   const wb = meta ? wornBody(meta, pantsData, jeansSize, height, chest, shoulderNow, shirtLock ? null : waist, shirtLock ? 0 : belly)
     : { waist, belly, lock: false, snap: false };
   const jeansLock = wb.lock, waistNow = wb.waist, bellyNow = wb.belly;
-  const jst = meta ? jeansState(meta, pantsData, jeansSize, belt, height, chest, shoulderNow, waistNow, bellyNow) : null;
+  const jst = meta ? jeansState(meta, pantsData, jeansSize, belt, height, chest, shoulderNow, waistNow, bellyNow, tapeM) : null;
   const elasticW = jeansSize ? pants?.sizes[jeansSize]?.chart.elastic_waist : undefined;
   const noSim = !!jst?.noSim;
   const jeansVariant: 'held' | 'drop' | 'belt' = jst?.variant ?? 'held';

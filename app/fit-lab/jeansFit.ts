@@ -17,8 +17,16 @@ export const RIGID_STRETCH_LIMIT = 7.5;
 // a contributing simulation counts only when it carries at least this share of the blend (a 5 % share of a broken
 // neighbour barely shows, and would otherwise hide the pants over a wide band of the sliders)
 const STRETCH_SHARE = 0.15;
+// the shopper's own tape measurements (cm, all the way round / crotch to floor), when they gave them: the fit advice
+// uses these instead of the 3D body's (estimated from height + chest, ~3-4 cm off at the waist for many people)
+export type TapeMeasures = { waist?: number | null; hip?: number | null; inseam?: number | null };
+// a tape measure is ~1-2 cm off (self-measured waist / hips read ~1 cm small): a fit this close to the limit is
+// called borderline rather than certain
+export const TAPE_ERROR = 2;
 export interface JeansNow {
   chart: JeansSim['chart']; waistEase: number; hipEase: number; hem: number; drop: number; extra: number;
+  basis: 'tape' | 'body';   // the waist / hips the advice is about: the shopper's tape, or the 3D body's
+  borderline: boolean;      // within a tape measure's error of the next fit band
   bodyWaist: number; bodyHip: number; elasticExtension: number | null; elasticLimit: number | null; relaxedWaist: number; lengthFit: 'pooling' | 'short' | 'neutral'; label: string; tone: 'red' | 'amber' | 'green' | 'blue';
 }
 export interface JeansState {
@@ -53,7 +61,7 @@ export function wornBody(meta: GridMeta, pants: PantsData | null, size: string |
 }
 
 export function jeansState(meta: GridMeta, pants: PantsData | null, size: string | null, belt: boolean,
-  height: number, chest: number, shoulder: number | null, waist: number | null, belly: number): JeansState | null {
+  height: number, chest: number, shoulder: number | null, waist: number | null, belly: number, tape: TapeMeasures = {}): JeansState | null {
   if (!pants || !size || !pants.sizes[size]) return null;
   const hasVar = !!(pants.belt?.[size]?.variants && pants.drop?.[size]?.variants);
   const lock = !hasVar;
@@ -63,6 +71,8 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   // "drop" result: the held simulation is the worn one); too small only past the elastic's stretch
   const ew = pants.sizes[size].chart.elastic_waist, elastic = !!ew, stretch = pants.elasticStretch ?? 1.3;
   const bodyW = tapeAt(meta, 'waist', w, vw);
+  const tW = tape.waist && tape.waist > 0 ? tape.waist : null, tH = tape.hip && tape.hip > 0 ? tape.hip : null;
+  const tI = tape.inseam && tape.inseam > 0 ? tape.inseam : null;
   // Only the configured elastic range has an explicit capacity here. Rigid denim has no
   // validated closure limit: the old -2 cm cutoff falsely hid otherwise available simulations.
   const tooSmall = elastic ? bodyW > 2 * ew! * stretch + 1e-6 : false;
@@ -106,13 +116,13 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   }
   // a rigid waistband more than 5 cm (~6 %) smaller than your waist cannot be buttoned at all (belt or not): the sim then
   // squashes the band into layers. Too small, not drawn
-  if (!elastic && 2 * J.chart.waist < bodyW - 5) qualityIssues.push('body: undersized waistband passed through body');
+  if (!elastic && 2 * J.chart.waist < (tW ?? bodyW) - 5) qualityIssues.push('body: undersized waistband passed through body');
   const cantPullOn = qualityIssues.length > 0;
   // the only problem is a waistband smaller than the body: say "too small", not "unavailable"
   const undersized = cantPullOn && qualityIssues.every(q => q.endsWith('undersized waistband passed through body'));
   // over-stretched denim on a body the waistband is (nearly) too small for = really too tight; on a looser fit the
   // stretch is a simulation fault (a glitch), not the fit: "unavailable", never "too tight"
-  const tightEase = 2 * J.chart.waist - bodyW;
+  const tightEase = 2 * J.chart.waist - (tW ?? bodyW);
   const overTight = cantPullOn && !undersized && tightEase < 2
     && qualityIssues.every(q => q.endsWith('over-stretched fabric') || q.endsWith('undersized waistband passed through body'));
   // waist / belly versions exist for the centre body only: elsewhere a changed waist or belly would be a guess
@@ -121,7 +131,7 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   const hide = cantPullOn || tooSmall || noSim;
   let now: JeansNow | null = null;
   if (simulated) {
-    const bw = tapeAt(meta, 'waist', jw, vw), bh = tapeAt(meta, 'hip', jw, vw);
+    const bw = tW ?? tapeAt(meta, 'waist', jw, vw), bh = tH ?? tapeAt(meta, 'hip', jw, vw);
     const e = 2 * J.chart.waist - bw, eh = 2 * J.chart.hip - bh;
     const jv = (f: (b: JeansBody) => number) => jeansVal(meta, J, jw, vw, f);
     const drop = variant === 'drop' ? jv(b => b.drop_cm ?? 0) : 0;
@@ -142,7 +152,9 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
       tone = grade === 'unknown' ? 'amber' : st < 0 ? 'blue' : grade === 'too tight' ? 'red' : grade === 'tight' || grade === 'snug' ? 'amber' : 'green';
     }
     else if (noSim) { label = 'Not simulated for this body yet'; tone = 'amber'; }
-    else if (e < 0) { label = 'Tight at the waist: try a larger size'; tone = 'red'; }
+    else if (e < 0) { label = e > -TAPE_ERROR ? 'Tight at the waist (borderline: under 2 cm): a larger size is safer' : 'Tight at the waist: try a larger size'; tone = 'red'; }
+    // hips only judged on the shopper's own tape (the 3D bodies' hips are estimated): rigid denim cannot stretch round them
+    else if (tH !== null && J.chart.hip && eh < 0) { label = eh > -TAPE_ERROR ? 'Tight at the hips (borderline: under 2 cm): a larger size is safer' : 'Tight at the hips: try a larger size'; tone = 'red'; }
     else if (drop > 30) { label = 'Too big: falls down without a belt'; tone = 'red'; }
     // a waistband that is not loose but still slides has slipped under a belly, not fallen off loose hips
     else if (drop > 4) { label = e < 6 ? `Slides ${drop.toFixed(0)} cm down under the belly (try the belt)` : `Too big at the waist: slides ${drop.toFixed(0)} cm down onto the hips (try the belt)`; tone = 'blue'; }
@@ -150,7 +162,14 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
     else if (e < 2) { label = 'Snug at the waist'; tone = 'amber'; }
     else if (e < 6) { label = 'Comfortable at the waist'; tone = 'green'; }
     else { label = 'Loose at the waist (needs a belt)'; tone = 'blue'; }
-    now = { chart: J.chart, waistEase: elastic ? rel - bw : e, elasticExtension: elastic ? st : null, elasticLimit: elastic ? stretch - 1 : null, relaxedWaist: elastic ? rel : 2 * J.chart.waist, lengthFit: extra > 4 && jv(b => b.hem_lowest_cm) <= 0.5 ? 'pooling' : !elastic && extra <= 4 && jv(b => b.hem_lowest_cm) > 6 ? 'short' : 'neutral', hipEase: eh, hem: jv(b => b.hem_lowest_cm), drop, extra, bodyWaist: bw, bodyHip: bh, label, tone };
+    // length: the shopper's inside leg against the chart's when both are known (crotch to floor vs crotch to hem),
+    // else what the simulation shows
+    const tapeExtra = tI !== null && J.chart.inseam ? J.chart.inseam - tI : null;
+    const lengthFit: JeansNow['lengthFit'] = tapeExtra !== null ? (tapeExtra > 4 ? 'pooling' : !elastic && tapeExtra < -6 ? 'short' : 'neutral')
+      : extra > 4 && jv(b => b.hem_lowest_cm) <= 0.5 ? 'pooling' : !elastic && extra <= 4 && jv(b => b.hem_lowest_cm) > 6 ? 'short' : 'neutral';
+    const borderline = !elastic && (Math.abs(e) < TAPE_ERROR || (tH !== null && !!J.chart.hip && Math.abs(eh) < TAPE_ERROR));
+    now = { chart: J.chart, waistEase: elastic ? rel - bw : e, elasticExtension: elastic ? st : null, elasticLimit: elastic ? stretch - 1 : null, relaxedWaist: elastic ? rel : 2 * J.chart.waist, lengthFit, hipEase: eh, hem: tapeExtra !== null ? -tapeExtra : jv(b => b.hem_lowest_cm), drop, extra: tapeExtra ?? extra, bodyWaist: bw, bodyHip: bh, label, tone,
+      basis: tW !== null || tH !== null ? 'tape' : 'body', borderline };
   }
   // short, plain words for shoppers
   const reason = undersized ? `Too small to close at the waist. Try a larger size.`
