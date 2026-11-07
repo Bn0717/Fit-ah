@@ -295,7 +295,10 @@ def repair(size,mode):
             loc,normal,_,distance=tree.find_nearest(Vector(p))
             return float((Vector(p)-loc).dot(normal))
         try:new[:]=protect_waist(old,new,waist_spec,faces,tree)
-        except AssertionError as error:raise ValueError(f'{size} {mode} {name}: {error}') from error
+        except AssertionError as error:
+            # The finish would move the waistband too far here: keep the simulated waistband as it is.
+            new[:]=old;finish_report.append(dict(pose=name,kept_unfinished=str(error)))
+            print(f'WAIST_KEPT {size} {mode} {name}: {error}',flush=True);continue
         moved=np.flatnonzero(np.linalg.norm(new-old,axis=1)>1e-10)
         before=np.array([clearance(old[i]) for i in moved]);after=np.array([clearance(new[i]) for i in moved])
         # Refresh only changed clearance samples. Directional strain remains source-simulation data.
