@@ -245,6 +245,109 @@ export function placeOnBody(S: BodySurface, P: Float32Array, sims: { a: PantsAnc
   return risky;
 }
 
+// ── keeping the hem's volume ──
+// Two simulations pile the hem up in folds at different places; mixing them half and half flattens both piles. Xin
+// XL at chest 101: 165 cm and 175 cm each gave a 56-57 cm hem, their mix at 170 cm only 43 cm, so the hem went
+// wide - narrow - wide as the height slider moved. Fix: below the knee, every 2 cm band of each leg is widened back
+// (never narrowed) to the width the simulations had on their own, mixed by the same weights. Width = mean sideways
+// distance of the band's points from the middle of the body's leg (or shoe) at that height, so the front and back
+// pants parts can be handled one at a time.
+const HEM_TOP = 0.5, HEM_FADE = 0.12, HEM_BIN = 0.02, HEM_MAX_GAIN = 1.5;
+const HEM_NB = Math.ceil(HEM_TOP / HEM_BIN);
+export type HemBands = Int16Array;   // per pants point: band (height bin * 2 + leg), or -1 above the knee
+
+// bands from the pants' own shape (the centre simulation), so a point stays in its band whatever the body
+export function hemBands(base: ArrayLike<number>): HemBands {
+  const n = base.length / 3, id = new Int16Array(n).fill(-1);
+  for (let i = 0; i < n; i++) {
+    const y = base[i * 3 + 1];
+    if (y < HEM_TOP) id[i] = Math.max(0, Math.floor(y / HEM_BIN)) * 2 + (base[i * 3] > 0 ? 1 : 0);
+  }
+  return id;
+}
+
+// middle of each leg (skin + shoe) per 2 cm of height, from the body surface points P: [x, z] per (bin * 2 + leg)
+export function legAxis(P: ArrayLike<number>): Float32Array {
+  const ax = new Float32Array(HEM_NB * 4), cnt = new Float32Array(HEM_NB * 2);
+  for (let i = 0; i < P.length; i += 3) {
+    const y = P[i + 1]; if (y >= HEM_TOP || y < 0) continue;
+    const b = Math.floor(y / HEM_BIN) * 2 + (P[i] > 0 ? 1 : 0);
+    ax[b * 2] += P[i]; ax[b * 2 + 1] += P[i + 2]; cnt[b]++;
+  }
+  for (let b = 0; b < HEM_NB * 2; b++) if (cnt[b]) { ax[b * 2] /= cnt[b]; ax[b * 2 + 1] /= cnt[b]; }
+  // empty bins (no body there): copy the nearest filled bin below, else above, of the same leg
+  for (let leg = 0; leg < 2; leg++) {
+    let last = -1;
+    for (let k = 0; k < HEM_NB; k++) { const b = k * 2 + leg; if (cnt[b]) last = b; else if (last >= 0) { ax[b * 2] = ax[last * 2]; ax[b * 2 + 1] = ax[last * 2 + 1]; cnt[b] = -1; } }
+    last = -1;
+    for (let k = HEM_NB - 1; k >= 0; k--) { const b = k * 2 + leg; if (cnt[b] > 0) last = b; else if (!cnt[b] && last >= 0) { ax[b * 2] = ax[last * 2]; ax[b * 2 + 1] = ax[last * 2 + 1]; } }
+  }
+  return ax;
+}
+
+function axisAt(ax: Float32Array, y: number, leg: number): [number, number] {
+  const b = Math.min(HEM_NB - 1, Math.max(0, Math.floor(y / HEM_BIN))) * 2 + leg;
+  return [ax[b * 2], ax[b * 2 + 1]];
+}
+
+// how far each band reaches out from the leg's middle (pants points on the body of axis ax): its outline, like a
+// tape round the hem touches the outer folds only. Round the leg in 16 directions, the farthest point in each,
+// averaged over the directions the pants cover. All pants parts (front, back) together: one width per band, so
+// the parts are widened alike and the side seams stay closed.
+const SECT = 16;
+export function hemWidths(parts: { pos: ArrayLike<number>; bands: HemBands }[], ax: Float32Array): Float32Array {
+  const far = new Float32Array(HEM_NB * 2 * SECT);
+  for (const { pos, bands } of parts) for (let i = 0; i < bands.length; i++) {
+    const b = bands[i]; if (b < 0) continue;
+    const [mx, mz] = axisAt(ax, pos[i * 3 + 1], b & 1), dx = pos[i * 3] - mx, dz = pos[i * 3 + 2] - mz;
+    const s = Math.min(SECT - 1, Math.floor((Math.atan2(dz, dx) / (2 * Math.PI) + 0.5) * SECT)), k = b * SECT + s;
+    far[k] = Math.max(far[k], Math.hypot(dx, dz));
+  }
+  const r = new Float32Array(HEM_NB * 2);
+  for (let b = 0; b < r.length; b++) {
+    let s = 0, n = 0;
+    for (let j = 0; j < SECT; j++) if (far[b * SECT + j] > 0) { s += far[b * SECT + j]; n++; }
+    r[b] = n >= 3 ? s / n : 0;
+  }
+  return r;
+}
+
+// widen each band of the pants parts (on the body of axis ax) back to target (the simulations' own widths, mixed)
+export function keepHemVolume(parts: { pos: Float32Array; bands: HemBands }[], ax: Float32Array, target: Float32Array) {
+  const now = hemWidths(parts, ax), g = new Float32Array(HEM_NB * 2).fill(1);
+  for (let b = 0; b < g.length; b++) if (now[b] > 1e-4 && target[b] > 0) g[b] = Math.min(HEM_MAX_GAIN, Math.max(1, target[b] / now[b]));
+  // smooth along the leg (no ridge between bands) and fade out towards the knee
+  const gs = new Float32Array(g.length);
+  for (let k = 0; k < HEM_NB; k++) for (let leg = 0; leg < 2; leg++) {
+    let s = 0, n = 0;
+    for (let j = Math.max(0, k - 1); j <= Math.min(HEM_NB - 1, k + 1); j++) { s += g[j * 2 + leg]; n++; }
+    const top = (k + 0.5) * HEM_BIN, fade = Math.min(1, Math.max(0, (HEM_TOP - top) / HEM_FADE));
+    gs[k * 2 + leg] = 1 + (s / n - 1) * fade;
+  }
+  for (const { pos, bands } of parts) for (let i = 0; i < bands.length; i++) {
+    const b = bands[i]; if (b < 0 || gs[b] === 1) continue;
+    const [mx, mz] = axisAt(ax, pos[i * 3 + 1], b & 1);
+    pos[i * 3] = mx + (pos[i * 3] - mx) * gs[b]; pos[i * 3 + 2] = mz + (pos[i * 3 + 2] - mz) * gs[b];
+  }
+}
+
+// One call for the viewers and the checks, after placeOnBody: widen the lower legs back. parts: each pants part's
+// placed points (changed in place), its centre-simulation points, and its points in simulation `key`; sims: the
+// mixed simulations (weight + their body surface points); P: the shown body. cache: kept by the caller per pants.
+export type HemPart = { pos: Float32Array; base: ArrayLike<number>; sim: (key: string) => ArrayLike<number> };
+export function restoreHem(parts: HemPart[], P: ArrayLike<number>, sims: { key: string; w: number; body: () => ArrayLike<number> }[],
+  cache: { bands?: HemBands[]; widths?: Record<string, Float32Array> }) {
+  const live = sims.filter(s => s.w > 1e-6);
+  if (live.length < 2 || !parts.length) return;      // one simulation: shown exactly as simulated
+  const bands = cache.bands ??= parts.map(p => hemBands(p.base)), W = cache.widths ??= {};
+  const target = new Float32Array(HEM_NB * 2);
+  for (const s of live) {
+    const r = W[s.key] ??= hemWidths(parts.map((p, j) => ({ pos: p.sim(s.key), bands: bands[j] })), legAxis(s.body()));
+    for (let b = 0; b < target.length; b++) target[b] += s.w * r[b];
+  }
+  keepHemVolume(parts.map((p, j) => ({ pos: p.pos, bands: bands[j] })), legAxis(P), target);
+}
+
 // ── website glue (fitting room + profile viewer): three.js objects, typed loosely like the viewers do ──
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const GRID_KEY = /^h\d+_c\d+$/;
@@ -302,5 +405,19 @@ export function bodyRelativePants(S: any, part: any, centre: string): Float32Arr
   const bodyVar = Object.keys(bw).some(n => !GRID_KEY.test(n) && !/^sh/.test(n));
   const all = hasVar || bodyVar;
   pushOutOfBody(surf, all ? surfaceAt(surf, bw) : P, out, all ? Array.from({ length: out.length / 3 }, (_, i) => i) : risky);
+  // for restoreHem across all parts (bodyRelativePantsAll)
+  part.hemNow = { surf, P, pw, sim: (k: string) => { const p = base.slice(), d = delta(k); if (d) for (let i = 0; i < p.length; i++) p[i] += d[i]; return p; } };
   return out;
+}
+
+// All parts of one pants (front, back...) placed with bodyRelativePants, then the lower legs widened back together
+// (restoreHem: a mix of simulations flattens the folds piled at the hem). What the viewers call.
+export function bodyRelativePantsAll(S: any, parts: any[], centre: string): (Float32Array | null)[] {
+  const outs = parts.map(p => bodyRelativePants(S, p, centre));
+  if (!parts.length || outs.some(o => !o)) return outs;
+  const h0 = parts[0].hemNow, J = parts[0].jeansHem ??= {};
+  if (J.surf !== h0.surf) { J.surf = h0.surf; J.cache = {}; }
+  restoreHem(parts.map((p, j) => ({ pos: outs[j]!, base: p.basePos, sim: p.hemNow.sim })), h0.P,
+    Object.entries(h0.pw as Record<string, number>).map(([k, w]) => ({ key: k, w, body: () => surfaceAt(h0.surf, { [k]: 1 }) })), J.cache);
+  return outs;
 }

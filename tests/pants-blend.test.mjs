@@ -83,3 +83,30 @@ test('Xin jeans M: exact on simulated bodies, no skin through the denim between 
   }
   assert.ok(worst <= 3, `denim points inside the skin: ${worst}`);
 });
+
+// two simulations put the same fabric at different places round the leg: mixed point by point it cuts the corner
+// and the hem shrinks;
+// restoreHem widens it back to the simulations' own outline (and never narrows a single simulation)
+test('restoreHem keeps the hem as wide as the simulations it mixes', () => {
+  // the same fabric ring, turned round the leg by `turn` (radians) in the second simulation
+  const leg = (turn, r = 0.09) => {
+    const p = [];
+    for (let y = 0.03; y < 0.45; y += 0.02) for (let k = 0; k < 48; k++) {
+      const t = (k / 48) * 2 * Math.PI + (y < 0.3 ? turn : 0);
+      p.push(0.1 + r * Math.cos(t), y, r * Math.sin(t));
+    }
+    return Float32Array.from(p);
+  };
+  const body = []; for (let y = 0; y < 0.5; y += 0.01) for (let k = 0; k < 12; k++) { const t = k / 12 * 2 * Math.PI; body.push(0.1 + 0.05 * Math.cos(t), y, 0.05 * Math.sin(t)); }
+  const P = Float32Array.from(body), a = leg(0), b = leg(1.2);
+  const mix = a.map((v, i) => 0.5 * v + 0.5 * b[i]);
+  const bands = B.hemBands(a), ax = B.legAxis(P), own = B.hemWidths([{ pos: a, bands }], ax), before = B.hemWidths([{ pos: mix, bands }], ax);
+  const band = 6 * 2 + 1;                       // 12-14 cm up, the leg at x > 0
+  assert.ok(before[band] < own[band] - 0.01, 'the plain mix is narrower');
+  const out = mix.slice();
+  const sim = k => (k === 'a' ? a : b);
+  B.restoreHem([{ pos: out, base: a, sim }], P, [{ key: 'a', w: 0.5, body: () => P }, { key: 'b', w: 0.5, body: () => P }], {});
+  assert.ok(Math.abs(B.hemWidths([{ pos: out, bands }], ax)[band] - own[band]) < 0.005, 'widened back to the simulations');
+  const one = a.slice(); B.restoreHem([{ pos: one, base: a, sim }], P, [{ key: 'a', w: 1, body: () => P }], {});
+  assert.deepEqual(one, a);
+});

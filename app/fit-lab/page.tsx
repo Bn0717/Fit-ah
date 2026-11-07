@@ -31,7 +31,7 @@ import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_I
 import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
 import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
-import { bodyRelativePants } from './pantsBlend';
+import { bodyRelativePantsAll } from './pantsBlend';
 import { jeansState, wornBody, type PantsData } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
@@ -700,7 +700,7 @@ function FitLab() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jeansParts: any[] = jg && typeof jg !== 'string' ? jg.userData.parts : [];
     // pants placed relative to the body surface: no skin through the denim, no squeezed legs between bodies
-    applyStaticLayers(shirtParts, jeansParts, shirtOn, jeansParts.map(p => bodyRelativePants(S, p, meta.centre)));
+    applyStaticLayers(shirtParts, jeansParts, shirtOn, bodyRelativePantsAll(S, jeansParts, meta.centre));
   }, [meta, height, chest, shoulderNow, waistNow, shirtKey, mode, ready, jeansKey, bellyNow, jeansHide, shirtOn]);
 
   // ── numbers for the panel (blended from the simulated grid points) ───────────────

@@ -15,7 +15,7 @@ import { xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GON, XIN } from './paths';
 import { applySkinTone, realisticSkin, type SkinToneId } from './skinTone';
 import { hideCoveredFeet } from './bodyCover';
-import { bodyRelativePants } from './pantsBlend';
+import { bodyRelativePantsAll } from './pantsBlend';
 import { applyTopColour, loadPantsColour } from './ColourSwatches';
 
 
@@ -432,7 +432,7 @@ export default function FitViewer({ meta, height, chest, shoulder, waist, size, 
       col.needsUpdate = true;
     }
     // pants placed relative to the body surface: no skin through the denim, no squeezed legs between bodies
-    applyStaticLayers(shirtParts, jeansParts, showShirt, jeansParts.map(p => bodyRelativePants(S, p, meta.centre)));
+    applyStaticLayers(shirtParts, jeansParts, showShirt, bodyRelativePantsAll(S, jeansParts, meta.centre));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, height, chest, shoulder, waist, belly, size, shirtDir, mode, ready, jeans?.url, jeans?.elastic?.extension, jeans?.elastic?.limit, jOn, showShirt]);
 

@@ -35,7 +35,7 @@ const shown = (size, h, c) => { const st = jeansState(meta, PD, size, variant ==
 // the website's pants at one body (all parts joined), or null where any needed neighbour was not simulated / failed
 function sitePants(parts, data, w) {
   for (const k of Object.keys(w)) if (w[k] > 1e-6 && (!data.bodies[k] || data.bodies[k].put_on_failed)) return null;
-  const P = B.surfaceAt(S, w), out = [];
+  const P = B.surfaceAt(S, w), out = [], hem = [];
   for (const J of parts) {
     const dict = J.morphTargetDictionary, base = J.geometry.attributes.position.array, mt = J.geometry.morphAttributes.position;
     const sim = k => { const o = base.slice(); if (k in dict) { const d = mt[dict[k]].array; for (let i = 0; i < o.length; i++) o[i] += d[i]; } return o; };
@@ -43,8 +43,10 @@ function sitePants(parts, data, w) {
     J.anchors ??= {}; const anc = k => J.anchors[k] ??= B.anchorPants(S, B.surfaceAt(S, { [k]: 1 }), sim(k));
     const pos = new Float32Array(base.length);
     const risky = B.placeOnBody(S, P, Object.entries(w).map(([k, x]) => ({ a: anc(k in dict ? k : meta.centre), w: x })), raw, pos);
-    B.pushOutOfBody(S, P, pos, risky); out.push(pos);
+    B.pushOutOfBody(S, P, pos, risky); out.push(pos); hem.push({ pos, base, sim });
   }
+  // as the website does (bodyRelativePantsAll); HEM_RAW=1 in the environment = without, for comparing
+  if (!process.env.HEM_RAW) B.restoreHem(hem, P, Object.entries(w).map(([k, x]) => ({ key: k, w: x, body: () => B.surfaceAt(S, { [k]: 1 }) })), parts.hemCache ??= {});
   const all = new Float32Array(out.reduce((a, x) => a + x.length, 0)); let n = 0; for (const x of out) { all.set(x, n); n += x.length; }
   return all;
 }
