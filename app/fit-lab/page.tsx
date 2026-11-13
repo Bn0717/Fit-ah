@@ -1121,7 +1121,10 @@ function FitLab() {
         note: openPants.id === 'xin' ? 'Chart from the brand. Every size was cloth-simulated on real body shapes, so "Check My Fit" shows where the waistband sits, how the legs hang and where the hem lands on your body.'
           : 'Same cut as the Xin jeans: your photos are wrapped on the Xin simulation, so sizes, drape and fit are those of the Xin jeans.' } : null)
     : openProduct && openProduct.id === openPants?.id ? { sims: openProduct.belt, glb: (z: string) => `${openProduct.dir}/belt/jeans_${z}.glb.gz`,
-        note: 'Its own cloth simulation, built automatically from the brand size chart and photos; so far on the 175 cm / chest 101 cm body only.' } : null;
+        // one body simulated so far (a new product's preview run) vs. the whole grid of body shapes
+        note: Object.keys(Object.values(openProduct.belt ?? {})[0]?.bodies ?? {}).length > 1
+          ? 'Its own cloth simulation, built automatically from the brand size chart and photos, on every body shape in the fitting room.'
+          : 'Its own cloth simulation, built automatically from the brand size chart and photos; so far on the 175 cm / chest 101 cm body only.' } : null;
   const pantsFits = Object.fromEntries(Object.entries(pm?.sims ?? {}).map(([z]) => {
     if (!meta || !pm) return [z, null];
     const state = jeansState(meta, { name: openPants?.name ?? 'Pants', sizes: pm.sims, belt: pm.sims,
