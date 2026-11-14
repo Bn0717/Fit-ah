@@ -91,7 +91,7 @@ export interface GridMeta {
   jeans?: { name: string; sizes: Record<string, JeansSim>; drop?: Record<string, JeansSim>; belt?: Record<string, JeansSim> };
 }
 export type JeansBody = { waistband_height_cm: number; natural_waist_height_cm: number; body_girth_at_waistband_cm?: number; hem_lowest_cm: number; crotch_drop_cm: number;
-    stretch_p50: number; floor_cm?: number; hem_on_floor_frac?: number; drop_cm?: number; seam_gap_mean_cm?: number;
+    stretch_p50: number; stretch_p95?: number; floor_cm?: number; hem_on_floor_frac?: number; drop_cm?: number; seam_gap_mean_cm?: number;
     put_on_failed?: boolean };   // the simulation could not get them on (a leg stuck at the thigh)
 // variants = the same jeans simulated on the centre body's slim / full waist and flat / round belly versions
 // chart.elastic_waist: relaxed elastic (flat cm) of an elastic-waist product; chart.waist is then the fabric width
@@ -247,16 +247,17 @@ export function applyFrame(t: WalkTrack, f: number, fit: boolean, fabric: keyof 
 export function refreshWalkNormals(t: WalkTrack) {
   const g = t.mesh.geometry, pos = g.attributes.position, a = pos.array as Float32Array, vid = t.vid;
   g.attributes.position.needsUpdate = true;
-  // normals accumulated per Blender vertex, so UV seams (split vertices) stay smooth
-  const acc = t.acc; acc.fill(0);
+  // normals accumulated per Blender vertex, so UV seams (split vertices) stay smooth (folds: see foldAwareNormals)
+  const acc = t.acc;
   const idx = g.index.array, nrm = g.attributes.normal;
-  for (let k = 0; k < idx.length; k += 3) {
-    const A = idx[k] * 3, B = idx[k + 1] * 3, Cc = idx[k + 2] * 3;
-    const ux = a[B] - a[A], uy = a[B + 1] - a[A + 1], uz = a[B + 2] - a[A + 2];
-    const vx = a[Cc] - a[A], vy = a[Cc + 1] - a[A + 1], vz = a[Cc + 2] - a[A + 2];
-    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    for (const v of [vid[idx[k]], vid[idx[k + 1]], vid[idx[k + 2]]]) { acc[v * 3] += nx; acc[v * 3 + 1] += ny; acc[v * 3 + 2] += nz; }
-  }
+  foldAwareNormals(acc.length / 3, acc, f => {
+    for (let k = 0; k < idx.length; k += 3) {
+      const A = idx[k] * 3, B = idx[k + 1] * 3, Cc = idx[k + 2] * 3;
+      const ux = a[B] - a[A], uy = a[B + 1] - a[A + 1], uz = a[B + 2] - a[A + 2];
+      const vx = a[Cc] - a[A], vy = a[Cc + 1] - a[A + 1], vz = a[Cc + 2] - a[A + 2];
+      f(vid[idx[k]], vid[idx[k + 1]], vid[idx[k + 2]], uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+    }
+  });
   for (let i = 0; i < pos.count; i++) {
     const v = vid[i] * 3, l = Math.hypot(acc[v], acc[v + 1], acc[v + 2]) || 1;
     nrm.setXYZ(i, acc[v] / l, acc[v + 1] / l, acc[v + 2] / l);
@@ -301,25 +302,59 @@ export function prepareStaticSurface(parts: any[]) {
   return surface;
 }
 
+// Smooth normals = face normals summed per shared vertex. Where the cloth folds back on itself (a hem tucked
+// under on the shoe, a cuff), the faces of the two sides cancel and the plain sum is a sideways normal, which
+// lights a band of triangles dark (the "blocky patch" at the hem). Such vertices (sum much shorter than the
+// sum of the face-normal lengths) take the normal of the larger side of the fold instead.
+type FaceVisitor = (f: (va: number, vb: number, vc: number, nx: number, ny: number, nz: number) => void) => void;
+function foldAwareNormals(count: number, acc: Float32Array, eachFace: FaceVisitor) {
+  const len = new Float32Array(count); acc.fill(0);
+  eachFace((va, vb, vc, nx, ny, nz) => {
+    const l = Math.hypot(nx, ny, nz);
+    for (const v of [va, vb, vc]) { const o = v * 3; acc[o] += nx; acc[o + 1] += ny; acc[o + 2] += nz; len[v] += l; }
+  });
+  const fold = new Uint8Array(count); let folds = 0;
+  for (let v = 0; v < count; v++) {
+    const o = v * 3;
+    if (len[v] > 0 && Math.hypot(acc[o], acc[o + 1], acc[o + 2]) < 0.6 * len[v]) { fold[v] = 1; folds++; acc[o] = acc[o + 1] = acc[o + 2] = 0; }
+  }
+  if (!folds) return;
+  const seed = new Float32Array(count * 3), other = new Float32Array(count * 3), seeded = new Uint8Array(count);
+  eachFace((va, vb, vc, nx, ny, nz) => {
+    for (const v of [va, vb, vc]) {
+      if (!fold[v]) continue;
+      const o = v * 3;
+      if (!seeded[v]) { seeded[v] = 1; seed[o] = nx; seed[o + 1] = ny; seed[o + 2] = nz; }
+      const t = nx * seed[o] + ny * seed[o + 1] + nz * seed[o + 2] >= 0 ? acc : other;
+      t[o] += nx; t[o + 1] += ny; t[o + 2] += nz;
+    }
+  });
+  for (let v = 0; v < count; v++) {
+    const o = v * 3;
+    if (fold[v] && Math.hypot(other[o], other[o + 1], other[o + 2]) > Math.hypot(acc[o], acc[o + 1], acc[o + 2])) {
+      acc[o] = other[o]; acc[o + 1] = other[o + 1]; acc[o + 2] = other[o + 2];
+    }
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function refreshStaticNormals(parts: any[]) {
   if (!parts.length) return;
   const surface = parts[0].staticSurface ?? prepareStaticSurface(parts);
-  const acc = surface.acc as Float32Array; acc.fill(0);
-  for (const part of parts) {
-    const g = part.mesh.geometry, a = g.attributes.position.array, idx = g.index?.array;
-    const vertexCount = g.attributes.position.count;
-    for (let k = 0, end = idx?.length ?? vertexCount; k < end; k += 3) {
-      const ia = idx ? idx[k] : k, ib = idx ? idx[k + 1] : k + 1, ic = idx ? idx[k + 2] : k + 2;
-      const A = ia * 3, B = ib * 3, C = ic * 3;
-      const ux = a[B] - a[A], uy = a[B + 1] - a[A + 1], uz = a[B + 2] - a[A + 2];
-      const vx = a[C] - a[A], vy = a[C + 1] - a[A + 1], vz = a[C + 2] - a[A + 2];
-      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-      for (const i of [ia, ib, ic]) {
-        const v = part.smoothGroups[i] * 3; acc[v] += nx; acc[v + 1] += ny; acc[v + 2] += nz;
+  const acc = surface.acc as Float32Array;
+  foldAwareNormals(acc.length / 3, acc, f => {
+    for (const part of parts) {
+      const g = part.mesh.geometry, a = g.attributes.position.array, idx = g.index?.array, sg = part.smoothGroups;
+      const vertexCount = g.attributes.position.count;
+      for (let k = 0, end = idx?.length ?? vertexCount; k < end; k += 3) {
+        const ia = idx ? idx[k] : k, ib = idx ? idx[k + 1] : k + 1, ic = idx ? idx[k + 2] : k + 2;
+        const A = ia * 3, B = ib * 3, C = ic * 3;
+        const ux = a[B] - a[A], uy = a[B + 1] - a[A + 1], uz = a[B + 2] - a[A + 2];
+        const vx = a[C] - a[A], vy = a[C + 1] - a[A + 1], vz = a[C + 2] - a[A + 2];
+        f(sg[ia], sg[ib], sg[ic], uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
       }
     }
-  }
+  });
   for (const part of parts) {
     const normal = part.mesh.geometry.attributes.normal;
     for (let i = 0; i < normal.count; i++) {
@@ -331,19 +366,31 @@ export function refreshStaticNormals(parts: any[]) {
   }
 }
 
+// pantsPos: pants positions already worked out on the CPU (pantsBlend.ts, placed relative to the body), per part;
+// null / missing = the plain morph mix.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyStaticLayers(shirts: any[], pants: any[], shirtVisible: boolean) {
+export function applyStaticLayers(shirts: any[], pants: any[], shirtVisible: boolean, pantsPos: (Float32Array | null)[] = []) {
   for (const parts of [shirts, pants]) if (parts.length && !parts[0].staticSurface) prepareStaticSurface(parts);
   if (!shirtVisible || !shirts.length || !pants.length) {
-    for (const p of [...shirts, ...pants]) if (p.layered) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reset = (p: any) => {
+      if (!p.layered) return;
       const g = p.mesh.geometry;
       g.attributes.position.array.set(p.basePos); g.attributes.position.needsUpdate = true;
       g.attributes.normal.array.set(p.baseNormal); g.attributes.normal.needsUpdate = true;
       p.layered = false;
-    }
+    };
+    shirts.forEach(reset);
+    pants.forEach((p, i) => {
+      const q = pantsPos[i];
+      if (!q) { reset(p); return; }
+      const pos = p.mesh.geometry.attributes.position; pos.array.set(q); pos.needsUpdate = true;
+      p.mesh.morphTargetInfluences?.fill(0); p.layered = true;
+    });
+    if (pantsPos.some(Boolean)) refreshStaticNormals(pants);
     return;
   }
-  const all = [...shirts, ...pants], positions = all.map(p => cpuMorphed(p.mesh, p.basePos));
+  const all = [...shirts, ...pants], positions = all.map((p, i) => i >= shirts.length && pantsPos[i - shirts.length] ? pantsPos[i - shirts.length]!.slice() : cpuMorphed(p.mesh, p.basePos));
   layerShirtOverPants(positions.slice(0, shirts.length), positions.slice(shirts.length));
   all.forEach((p, i) => {
     const pos = p.mesh.geometry.attributes.position; pos.array.set(positions[i]); pos.needsUpdate = true;
@@ -402,7 +449,7 @@ export interface ShirtProduct {
   shirt_var_grid?: Record<string, Record<string, Partial<Record<Variant, ShirtNums>>>>;
   intended_fit?: 'Regular' | 'Oversized' | 'Slim' | null; fabric?: string;
   body_size?: Record<string, { chest?: number[]; waist?: number[] }> | null;   // brand's body size chart (cm ranges)
-  colours?: { hex: string; name: string; code?: string }[];   // the brand's colours (plain fabrics: recoloured)
+  colours?: { hex: string; name: string; code?: string; card?: string }[];   // the brand's colours (plain fabrics: recoloured); card = that colour's flat photo on white
   base_hex?: string | null;                                   // the colour of the simulated texture
   simulated?: Record<string, string[]>;           // per size: the grid bodies it was simulated on
 }

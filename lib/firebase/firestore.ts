@@ -45,6 +45,16 @@ export const saveSkinTone = async (userId: string, skinTone: string | null) => {
   }
 };
 
+// Only the tape measurements (waist, hips, inside leg in cm; null = not given), saved as soon as they are typed
+export const saveTape = async (userId: string, tape: { waist: number | null; hip: number | null; inseam: number | null }) => {
+  try {
+    await setDoc(doc(db, 'users', userId, 'avatar', 'data'), { tape, updatedAt: serverTimestamp() }, { merge: true });
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
 export const getAvatar = async (userId: string): Promise<ParametricAvatar | null> => {
   try {
     const avatarRef = doc(db, 'users', userId, 'avatar', 'data');

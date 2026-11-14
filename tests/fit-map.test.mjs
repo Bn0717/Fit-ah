@@ -91,7 +91,7 @@ const {jeansState}=await import(`data:text/javascript;base64,${Buffer.from(sizin
 const meta=JSON.parse(readFileSync(new URL('../public/models/fitlab/bodies/grid/meta.json',import.meta.url),'utf8'));
 test('a clean synthetic simulation is not hidden by an arbitrary 2cm waistband deficit',()=>{
   const clean=structuredClone(meta.jeans);
-  for(const sample of Object.values(clean.belt.M.bodies)){sample.put_on_failed=false;sample.seam_gap_mean_cm=0;sample.crotch_drop_cm=Math.max(-2,sample.crotch_drop_cm);sample.hem_lowest_cm=Math.min(15,sample.hem_lowest_cm);}
+  for(const sample of Object.values(clean.belt.M.bodies)){sample.put_on_failed=false;sample.seam_gap_mean_cm=0;sample.stretch_p95=4;sample.crotch_drop_cm=Math.max(-2,sample.crotch_drop_cm);sample.hem_lowest_cm=Math.min(15,sample.hem_lowest_cm);}
   for(const chest of [101,102,103,104]){
     const state=jeansState(meta,clean,'M',true,183,chest,48,null,0);
     assert.equal(state.hide,false,`unexpected hidden jeans at chest ${chest}`);
@@ -117,13 +117,49 @@ test('actual 183/102 interpolation cannot dilute its known failed corner',()=>{
  assert.equal(state.hide,true);assert.ok(state.qualityIssues.some(r=>r.startsWith('h185_c110:')));
  assert.match(state.reason,/Simulation unavailable/);
 });
-test('undersized Xin M falling through body is unavailable instead of labelled too big',()=>{
- const state=jeansState(meta,meta.jeans,'M',false,184,116,53,null,0);
- assert.equal(state.hide,true);assert.match(state.now.label,/unavailable/);assert.doesNotMatch(state.now.label,/Too big|falls down/);
+test('undersized Xin M falling through body is too small / unavailable, never labelled too big',()=>{
+ const state=jeansState(meta,meta.jeans,'M',false,184,115,53,null,0);
+ // the waistband is 5+ cm smaller than this waist: "too small" (the fit), not "unavailable" (a simulation fault), 13 Nov 2026
+ assert.equal(state.hide,true);assert.match(state.now.label,/Too small at the waist|unavailable/);assert.doesNotMatch(state.now.label,/Too big|falls down/);
  assert.ok(state.qualityIssues.some(r=>/passed through body|valid torso/.test(r)));
 });
+test('over-stretched denim: too tight on a body the waistband barely fits, a fault (not a fit) on a looser one',()=>{
+ // Xin M drop at 165 / chest 116: 8.8 % stretch (was 165 / chest 110 at 19 %, crumpled, until the 9 Nov 2026
+ // feet-free re-run brought that body down to 5.8 %: output/qa/review/tiles_fin/xin_drop_M_h165_c110.png)
+ const tight=jeansState(meta,meta.jeans,'M',false,165,116,null,null,0);
+ assert.equal(tight.hide,true);assert.ok(tight.qualityIssues.some(r=>r==='h165_c116: over-stretched fabric'));
+ // the same broken result on a body the waistband fits loosely is never called "too tight"
+ const loose=structuredClone(meta.jeans);loose.drop.M.chart={...loose.drop.M.chart,waist:loose.drop.M.chart.waist+6};
+ const s2=jeansState(meta,loose,'M',false,165,116,null,null,0);
+ assert.equal(s2.hide,true);assert.doesNotMatch(s2.now.label,/Too tight/);assert.match(s2.now.label,/unavailable/);
+ // a clean result next to it stays drawn: Xin M drop at 175 / chest 101 (4.3 %)
+ assert.equal(jeansState(meta,meta.jeans,'M',false,175,101,null,null,0).hide,false);
+ // a broken neighbour with a small share of the blend does not hide the pants
+ const near=jeansState(meta,meta.jeans,'M',false,175,102,null,null,0);
+ assert.ok(!near.qualityIssues.some(r=>r.endsWith('over-stretched fabric')));
+});
+test('tape measurements: the advice uses the shopper\'s own waist, hips and inside leg when given',()=>{
+ const body=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0);
+ assert.equal(body.now.basis,'body');
+ // the same body, but a tape waist 1 cm over the L waistband: tight, and called borderline
+ const L=2*meta.jeans.drop.L.chart.waist;
+ const t1=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+1});
+ assert.equal(t1.now.basis,'tape');assert.match(t1.now.label,/Tight at the waist \(borderline/);assert.equal(t1.now.borderline,true);
+ // 4 cm over: plainly tight; 8 cm over: too small to close (not drawn)
+ assert.match(jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+4}).now.label,/^Tight at the waist: try a larger size/);
+ const t3=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L+8});assert.equal(t3.hide,true);assert.match(t3.reason,/Too small/);
+ // hips bigger than the chart's: tight at the hips (only judged from a tape)
+ const H=2*meta.jeans.drop.L.chart.hip;
+ assert.match(jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{waist:L-4,hip:H+5}).now.label,/Tight at the hips/);
+ // inside leg 10 cm shorter than the pants' inseam: they pile up on the shoes
+ const I=meta.jeans.drop.L.chart.inseam, t5=jeansState(meta,meta.jeans,'L',false,175,101,null,null,0,{inseam:I-10});
+ assert.equal(t5.now.lengthFit,'pooling');assert.equal(Math.round(t5.now.extra),10);
+});
+test('elastic-waist shorts are not judged by the denim stretch limit',()=>{
+ for(const [h,c] of [[176,101],[160,92]])assert.ok(!jeansState(meta,shorts,'S',false,h,c,null,null,0).qualityIssues.some(r=>r.endsWith('over-stretched fabric')));
+});
 test('Xin L on the same body retains a tight-waist preview when its source simulations are sound',()=>{
- const state=jeansState(meta,meta.jeans,'L',false,184,116,53,null,0);
+ const state=jeansState(meta,meta.jeans,'L',false,184,115,53,null,0);
  assert.equal(state.hide,false);assert.match(state.now.label,/Tight at the waist/);
 });
 test('shorts S 190/116 uses elastic extension for both label and contact colour',()=>{

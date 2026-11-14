@@ -12,7 +12,7 @@
 
 import { ModelSkeleton } from '@/components/ui/Skeleton';
 import { WardrobeSkeleton } from '@/components/ui/PageSkeletons';
-import { getAvatar } from '@/lib/firebase/firestore';
+import { getAvatar, saveSkinTone } from '@/lib/firebase/firestore';
 import { SavedSizeControl } from './SavedSizeControl';
 import { useSizePreferences } from './useSizePreferences';
 import { initialSize, recommendedTop, recommendedBottom, brandBodySize } from './sizePreferences';
@@ -28,14 +28,16 @@ import { applyStaticLayers, elasticBandColor, blendFitAttribute, selectWalk, loa
 import { WardrobeGrid, AddItemModal, ItemModal, PantsModal, type PantsChart, type PantsSizeFit, loadStored, storeItem, unstoreItem, type LabItem, type SizeFit } from './Wardrobe';
 import { XIN_GRID_DIR, xinWalkAssets } from './xinAssets';
 import { BODY_GRID_DIR, BODY_WALK_DIR, GRID_META_URL, PRODUCTS_INDEX_URL, TOPS_INDEX_URL, GON as GON_FILES, XIN } from './paths';
-import { applySkinTone, isSkinTone, realisticSkin } from './skinTone';
-import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, type PantsColour } from './ColourSwatches';
+import { applySkinTone, isSkinTone, realisticSkin, type SkinToneId } from './skinTone';
+import { SkinTonePicker } from './SkinTonePicker';
+import { type GarmentColour } from './garmentColour';
+import { useTopColours, currentHex, applyTopColour, ColourSwatches, pantsSwatches, pantsColourFiles, loadPantsColour, pantsTint, colourCard, userColourProduct, topTint, type PantsColour, type PantsColours } from './ColourSwatches';
 import { hideCoveredFeet } from './bodyCover';
-import { jeansState, wornBody, type PantsData } from './jeansFit';
+import { jeansState, wornBody, type PantsData, type TapeMeasures } from './jeansFit';
 import { useStored, matchChart, notSimText, OutfitCard, UserGuideModal, type Outfit, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 // a pants product made by blender/new_pants.sh (public/models/fitlab/brands/<brand>/<id>/product.json, listed in brands/index.json)
 // a pants photo swap: new photos on the simulated Xin jeans (pantsSwap.ts)
-type PantsItem = { id: string; brand: string; name: string; frontUrl: string; backUrl: string; tex?: { front: PantsResult; back: PantsResult }; chart?: SizeChartData };
+type PantsItem = { colours?: GarmentColour[]; id: string; brand: string; name: string; frontUrl: string; backUrl: string; tex?: { front: PantsResult; back: PantsResult }; chart?: SizeChartData };
 const PANTS_REF = XIN.outline;
 // OFF for now (user wants to see any pants on the Xin pattern); set true to refuse a different cut again
 const CHECK_SAME_CUT = false;
@@ -133,6 +135,8 @@ function FitLab() {
   const [chest, setChest] = useState(101);
   const [shoulder, setShoulder] = useState<number | null>(null);   // null = this body's natural value
   const [waist, setWaist] = useState<number | null>(null);
+  // the shopper's own tape measurements (Profile page), when given: the pants advice uses them (jeansFit.ts)
+  const [tapeM, setTapeM] = useState<TapeMeasures>({});
   const preWalkBody = useRef<{ height: number; chest: number; shoulder: number | null; waist: number | null } | null>(null);
   const savedBody = useRef<{ height: number; chest: number; shoulder: number; waist: number } | null>(null);
   const [walking, setWalking] = useState(false);
@@ -190,6 +194,14 @@ function FitLab() {
   const [outfits, setOutfits] = useStored<Outfit[]>('fitlab_outfits', []);
   const [guide, setGuide] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // skin tone of the 3D body: picked here or on the Profile page, saved to the account straight away
+  const [skinTone, setSkinTone] = useState<SkinToneId | null>(null);
+  const pickSkinTone = async (id: SkinToneId | null) => {
+    const S = sceneRef.current; setSkinTone(id);
+    S.skinTone = id; applySkinTone(S.bodyRoot, id); applySkinTone(S.walk?.group, id);
+    const r = await saveSkinTone(userId, id);
+    setToast(r.success ? 'Skin tone saved' : 'Could not save the skin tone. Please try again.');
+  };
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 4500); return () => clearTimeout(t); }, [toast]);
   // the fitting room is a page on top of the wardrobe: the phone's back gesture / browser back closes it
   // (Next's own history state is kept in the pushed entry, so its router is not disturbed)
@@ -221,9 +233,10 @@ function FitLab() {
       savedBody.current = saved;
       setHeight(saved.height); setChest(saved.chest); setWaist(saved.waist); setShoulder(saved.shoulder);
       setHasProfile(true);
+      if (profile.tape) setTapeM(profile.tape);
       // skin tone (set on the Profile page): the static and the walking body, now and when they load later
       const S = sceneRef.current, tone = isSkinTone(profile.skinTone) ? profile.skinTone : null;
-      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone);
+      S.skinTone = tone; applySkinTone(S.bodyRoot, tone); applySkinTone(S.walk?.group, tone); setSkinTone(tone);
     });
     return () => { alive = false; };
   }, [userId]);
@@ -238,7 +251,7 @@ function FitLab() {
   const wb = meta ? wornBody(meta, pantsData, jeansSize, height, chest, shoulderNow, shirtLock ? null : waist, shirtLock ? 0 : belly)
     : { waist, belly, lock: false, snap: false };
   const jeansLock = wb.lock, waistNow = wb.waist, bellyNow = wb.belly;
-  const jst = meta ? jeansState(meta, pantsData, jeansSize, belt, height, chest, shoulderNow, waistNow, bellyNow) : null;
+  const jst = meta ? jeansState(meta, pantsData, jeansSize, belt, height, chest, shoulderNow, waistNow, bellyNow, tapeM) : null;
   const elasticW = jeansSize ? pants?.sizes[jeansSize]?.chart.elastic_waist : undefined;
   const noSim = !!jst?.noSim;
   const jeansVariant: 'held' | 'drop' | 'belt' = jst?.variant ?? 'held';
@@ -564,7 +577,8 @@ function FitLab() {
     }
     // a pants product in another colour: that colour's photo textures (same pattern, same fit)
     const prod = pantsId !== 'xin' && product?.id === pantsId ? product : null;
-    S.pantsTint = pantsTint(prod, topColour);
+    const upants = !prod ? userColourProduct(it) : null;
+    S.pantsTint = prod ? pantsTint(prod, topColour) : upants ? topTint(upants, currentHex(upants, topColour)) : null;
     const files = prod ? pantsColourFiles(prod, topColour) : null;
     if (files) {
       const want = files.front;
@@ -636,9 +650,19 @@ function FitLab() {
   // ── shirt product colour: plain fabrics are recoloured from the simulated texture's colour ───────────
   useEffect(() => {
     const grp = sceneRef.current.shirts?.[shirtKey];
-    if (!grp || typeof grp === 'string' || !topProduct) return;
-    applyTopColour(grp.userData.parts, topProduct, currentHex(topProduct, topColour));
-  }, [shirtKey, topColour, topProduct, ready]);
+    if (!grp || typeof grp === 'string') return;
+    if (topProduct) { applyTopColour(grp.userData.parts, topProduct, currentHex(topProduct, topColour)); return; }
+    // a user's own shirt in another of its colours (recoloured photo); none chosen / no colours: as photographed
+    const up = userColourProduct(items.find(i => i.id === activeId));
+    const t = up ? topTint(up, currentHex(up, topColour)) : null;
+    for (const part of grp.userData.parts ?? []) {
+      if (part.isJeans) continue;
+      const f = part.fabric;
+      f.userData.ownColor ||= f.color.clone();                       // the material's own colour (e.g. the Gon tee's)
+      if (t) f.color.setRGB(t[0], t[1], t[2]); else f.color.copy(f.userData.ownColor);
+      f.needsUpdate = true;
+    }
+  }, [shirtKey, topColour, topProduct, ready, activeId, items]);
 
   // ── apply sliders: morph weights on body + shirt, blended fit map ───────────────
   useEffect(() => {
@@ -649,7 +673,12 @@ function FitLab() {
     const setMorphs = (mesh: any, isJeans = false) => {
       const dict = mesh.morphTargetDictionary || {};
       mesh.morphTargetInfluences?.fill(0);
-      for (const [k, v] of Object.entries(w)) if (k in dict) mesh.morphTargetInfluences[dict[k]] = v;
+      // a body this garment was not simulated on (a few % at the edge of its range) is dropped and the rest
+      // re-weighted, like jeansState does, so the shape and the fit numbers match
+      // (the centre body is the file's base shape, not a named target)
+      const miss = Object.entries(w).filter(([k]) => k !== meta.centre && !(k in dict)).reduce((t, [, v]) => t + v, 0);
+      const scale = miss > 0 && miss < 0.1 ? 1 / (1 - miss) : 1;
+      for (const [k, v] of Object.entries(w)) if (k in dict) mesh.morphTargetInfluences[dict[k]] = v * scale;
       if (isJeans) {                                    // waist x belly versions, incl. the combined bodies
         for (const [n, x] of Object.entries(jeansVarWeights(vw, n => n in dict))) mesh.morphTargetInfluences[dict[n]] = x;
         return;
@@ -776,18 +805,18 @@ function FitLab() {
     if (CHECK_SAME_CUT && worst > SAME_CUT_MAX) return `These pants differ from the Xin cut by ${(worst * 100).toFixed(0)} % in shape (leg width / crotch height), so the sizes would be wrong. They need their own simulation (a new style), not a photo swap.`;
     return { id, brand, name, frontUrl: URL.createObjectURL(front), backUrl: URL.createObjectURL(back), tex: { front: tf, back: tb } };
   };
-  const addItem = async (d: { brand: string; name: string; front: File; back: File; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string; savedSize?: string }) => {
+  const addItem = async (d: { brand: string; name: string; front: File; back: File; kind?: 'shirt' | 'pants'; chart?: SizeChartData; chartMode?: string; savedSize?: string; colours?: GarmentColour[] }) => {
     const id = `item_${crypto.randomUUID()}`;
     if (d.kind === 'pants') {
       try {
         const it = await buildPants(id, d.brand, d.name, d.front, d.back);
         if (typeof it === 'string') return it;
-        const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'pants' as const, chart: d.chart, chartMode: d.chartMode };
+        const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, created: Date.now(), kind: 'pants' as const, chart: d.chart, chartMode: d.chartMode, ...(d.colours ? { colours: d.colours } : {}) };
         await saveWardrobeItem(userId, record);
         let sizeWarning = '';
         if (d.savedSize) { try { await sizeRecords.saveSize(id, d.savedSize); } catch { sizeWarning = ' Its size could not sync. Open the item to retry.'; } }
         await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
-        setPantsItems(x => [...x, { ...it, chart: d.chart }]);
+        setPantsItems(x => [...x, { ...it, chart: d.chart, colours: d.colours }]);
         setToast(`Added "${d.name}". Tap it to try it on.${sizeWarning}`);
         return null;
       } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
@@ -796,12 +825,12 @@ function FitLab() {
       const it = await buildItem(id, d.brand, d.name, d.front, d.back);
       if (typeof it === 'string') return it;
       if (!it.tex) return 'Could not prepare this shirt for the fitting room.';
-      const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, uv: await saveUvMap(it.tex.front, it.tex.back), created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode };
+      const record = { id, ownerId: userId, brand: d.brand, name: d.name, front: d.front, back: d.back, uv: await saveUvMap(it.tex.front, it.tex.back), created: Date.now(), kind: 'shirt' as const, chart: d.chart, chartMode: d.chartMode, ...(d.colours ? { colours: d.colours } : {}) };
       await saveWardrobeItem(userId, record);
       let sizeWarning = '';
       if (d.savedSize) { try { await sizeRecords.saveSize(id, d.savedSize); } catch { sizeWarning = ' Its size could not sync. Open the item to retry.'; } }
       await storeItem({ ...record, cloudSynced: true }).catch(() => undefined);
-      setItems(x => [...x, { ...it, chart: d.chart }]);
+      setItems(x => [...x, { ...it, chart: d.chart, colours: d.colours }]);
       setToast(`Added "${d.name}". Tap it to try it on.${sizeWarning}`);
       return null;
     } catch (e) { return (e as Error).message || 'Could not use these photos.'; }
@@ -841,8 +870,8 @@ function FitLab() {
             const it = await buildPants(r.id, r.brand, r.name, r.front, r.back);
             if (typeof it === 'string') throw new Error(it);
             if (!stop) setPantsItems(x => x.some(y => y.id === it.id)
-              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart } : y)
-              : [...x, { ...it, chart: r.chart }]);
+              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart, colours: r.colours } : y)
+              : [...x, { ...it, chart: r.chart, colours: r.colours }]);
           } else {
             const cached = await restoreUvMap(r);
             const it = cached
@@ -850,8 +879,8 @@ function FitLab() {
               : await buildItem(r.id, r.brand, r.name, r.front, r.back);
             if (typeof it === 'string') throw new Error(it);
             if (!stop) setItems(x => x.some(y => y.id === it.id)
-              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart } : y)
-              : [...x, { ...it, chart: r.chart }]);
+              ? x.map(y => y.id === it.id ? { ...it, chart: r.chart, colours: r.colours } : y)
+              : [...x, { ...it, chart: r.chart, colours: r.colours }]);
             if (!cached && it.tex) {
               const uv = await saveUvMap(it.tex.front, it.tex.back);
               const updated = { ...r, uv };
@@ -1092,7 +1121,10 @@ function FitLab() {
         note: openPants.id === 'xin' ? 'Chart from the brand. Every size was cloth-simulated on real body shapes, so "Check My Fit" shows where the waistband sits, how the legs hang and where the hem lands on your body.'
           : 'Same cut as the Xin jeans: your photos are wrapped on the Xin simulation, so sizes, drape and fit are those of the Xin jeans.' } : null)
     : openProduct && openProduct.id === openPants?.id ? { sims: openProduct.belt, glb: (z: string) => `${openProduct.dir}/belt/jeans_${z}.glb.gz`,
-        note: 'Its own cloth simulation, built automatically from the brand size chart and photos; so far on the 175 cm / chest 101 cm body only.' } : null;
+        // one body simulated so far (a new product's preview run) vs. the whole grid of body shapes
+        note: Object.keys(Object.values(openProduct.belt ?? {})[0]?.bodies ?? {}).length > 1
+          ? 'Its own cloth simulation, built automatically from the brand size chart and photos, on every body shape in the fitting room.'
+          : 'Its own cloth simulation, built automatically from the brand size chart and photos; so far on the 175 cm / chest 101 cm body only.' } : null;
   const pantsFits = Object.fromEntries(Object.entries(pm?.sims ?? {}).map(([z]) => {
     if (!meta || !pm) return [z, null];
     const state = jeansState(meta, { name: openPants?.name ?? 'Pants', sizes: pm.sims, belt: pm.sims,
@@ -1194,6 +1226,7 @@ function FitLab() {
                 info={it => { const z = sizesOfTop(it); return `${topProductOf(it)?.intended_fit === 'Oversized' ? 'Oversized T-shirt' : 'Short Sleeve Shirt'} · ${z.length} sizes (${z[0]}–${z[z.length - 1]})`; }} items={shownTops} activeId={shirtOn ? activeId : ''} loadingIds={tab === 'all' ? loadingIds.filter(id => !pantsLoading.includes(id)) : []} onOpen={setOpenItem}
                 onAdd={tab === 'all' ? () => setAddKind('shirt') : undefined} onDelete={it => it.builtin ? hideBuiltin(it, true) : removeItem(it)}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={topWarn}
+                colourOf={it => { const p = topProductOf(it) ?? userColourProduct(it), h = p && (p.colours?.length ?? 0) > 1 ? currentHex(p, topColour) : null; return h ? { hex: h, name: p!.colours!.find(c => c.hex === h)?.name ?? '', card: colourCard(p!, h, it.frontUrl) } : null; }}
                 subtitle=""
                 hiddenCount={tab === 'all' ? items.filter(it => hidden.includes(it.id)).length : 0} onRestore={() => saveHidden(hidden.filter(id => !items.some(it => it.id === id)))} />
             )}
@@ -1202,6 +1235,7 @@ function FitLab() {
                 addLabel="Add Bottom" onAdd={tab === 'all' ? () => setAddKind('pants') : undefined} items={shownBots} activeId={bottomOn} loadingIds={tab === 'all' ? pantsLoading : []} onOpen={setOpenPants}
                 onDelete={it => { const p = pantsItems.find(x => x.id === it.id); if (p) removePants(p); else hideBuiltin(it, false); }}
                 favs={favs} onFav={it => toggleFav(it.id)} warn={botWarn}
+                colourOf={it => { const up = userColourProduct(pantsItems.find(p => p.id === it.id)); if (up) { const h = currentHex(up, topColour); return h ? { hex: h, name: up.colours!.find(c => c.hex === h)?.name ?? '', card: colourCard(up, h, it.frontUrl) } : null; } const pc = sizeCatalog[it.id] as unknown as PantsColours | undefined; if (!pc?.colours || pc.colours.length < 2) return null; const c = pc.colours.find(x => x.hex === topColour[it.id]) ?? pc.colours.find(x => x.base); return c ? { hex: c.hex, name: c.name, card: c.card ? `${pc.dir}/${c.card}` : null } : null; }}
                 hiddenCount={tab === 'all' ? bottoms.filter(it => hidden.includes(it.id)).length : 0} onRestore={() => saveHidden(hidden.filter(id => !bottoms.some(it => it.id === id)))}
                 info={it => it.id === 'xin' ? 'Denim pants · M–2XL' : pantsItems.some(p => p.id === it.id) ? 'Pants · Xin cut, photo swap · M–2XL' : 'Pants · own simulation'}
                 badge="Wearing" />
@@ -1374,7 +1408,7 @@ function FitLab() {
                       style={shirtOn && size === s ? { background: C.navy, color: '#fff' } : { background: C.cream }}>{s}</button>
                   ))}
                 </div>
-                {topProduct && <div className="mt-3"><ColourSwatches product={topProduct} chosen={topColour} onPick={pickTopColour} /></div>}
+                {(p => p && <div className="mt-3"><ColourSwatches product={p} chosen={topColour} onPick={pickTopColour} /></div>)(topProduct ?? userColourProduct(items.find(i => i.id === activeId)))}
                 {meta?.walk && <div className="mt-2 text-xs" style={{ opacity: 0.6 }}>
                   {SIZES.some(s => !meta.walk!.sizes[s]) && <> · still simulating: {SIZES.filter(s => !meta.walk!.sizes[s]).join(', ')}</>}
                 </div>}
@@ -1414,6 +1448,8 @@ function FitLab() {
                 {pantsId !== 'xin' && product?.id === pantsId && pantsSwatches(product) && (
                   <ColourSwatches product={pantsSwatches(product)!} chosen={topColour} onPick={pickTopColour} />
                 )}
+                {/* your own pants in the other colours you gave them (recoloured photo) */}
+                {pantsId === 'xin' && (up => up && <ColourSwatches product={up} chosen={topColour} onPick={pickTopColour} />)(userColourProduct(pantsItems.find(p => p.id === pantsSkin)))}
                 {pants && <p className="text-xs" style={{ opacity: 0.6 }}>{pants.name}, {pantsId === 'xin' ? 'rigid 100 % cotton denim' : product?.fabric.replace('_', ' ')}, estimated{pantsId === 'xin' || Object.keys(pants.drop?.[jeansSize ?? ''] ?.bodies ?? pants.sizes[jeansSize ?? '']?.bodies ?? {}).length > 1 ? ' fit preview' : ' (preview: 175 cm / chest 101 cm body only)'}{elasticW ? ', elastic waist' : jeansVariant !== 'held' && (belt ? ', held by a belt' : jeansHide ? '' : ', nothing holding them up but the body')}</p>}
                 {jeansNow && (
                   <div className="text-sm space-y-1">
@@ -1442,6 +1478,7 @@ function FitLab() {
 
               <section className="rounded-2xl p-5 shadow-sm space-y-4" style={{ background: '#fff' }}>
                 <h2 className="font-semibold">Body</h2>
+                <SkinTonePicker value={skinTone} onChange={pickSkinTone} />
                 {walking && <p className="text-xs" style={{ opacity: 0.7 }}>The catwalk uses the {walkBody?.height} cm / chest {walkBody?.chest} cm body. Stop the animation to adjust the body size.</p>}
                 {meta && <>
                   <Slider label="Height" disabled={walking} value={height} min={meta.heights[0]} max={meta.heights[meta.heights.length - 1]} onChange={setHeight} />
@@ -1525,12 +1562,16 @@ function FitLab() {
       }} open={!!addKind} kind={addKind ?? 'shirt'} onClose={() => setAddKind(null)} onSubmit={addItem}
       refChart={addKind === 'pants' ? pantsRef : shirtRef} refName={addKind === 'pants' ? 'Xin jeans' : 'Gon Tee'} />
     {meta && bodyNow && (
-      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)} chart={(topProductOf(openItem)?.chart as unknown as Partial<typeof meta.chart>) ?? (openItem?.chart as unknown as Partial<typeof meta.chart>) ?? baseMeta!.chart} sizeFit={topFitOf(openItem)} size={size} gridDir={openItem?.topDir ? `${openItem.topDir}/grid` : GON_FILES.grid}
+      <ItemModal recommended={recommendTop(openItem)} savedSize={openItem ? sizeRecords.sizes[openItem.id] : null} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openItem} onClose={() => setOpenItem(null)}
+        colour={(p => p && (p.colours?.length ?? 0) > 1 ? { product: p, saved: currentHex(p, topColour), onSave: (h: string) => { pickTopColour(p.id, h); setToast(`Saved: ${openItem?.name ?? p.name} in ${p.colours?.find(c => c.hex === h)?.name ?? 'this colour'}`); } } : undefined)(topProductOf(openItem) ?? userColourProduct(openItem))} chart={(topProductOf(openItem)?.chart as unknown as Partial<typeof meta.chart>) ?? (openItem?.chart as unknown as Partial<typeof meta.chart>) ?? baseMeta!.chart} sizeFit={topFitOf(openItem)} size={size} gridDir={openItem?.topDir ? `${openItem.topDir}/grid` : GON_FILES.grid}
         fav={!!openItem && favs.includes(openItem.id)} onFav={() => openItem && toggleFav(openItem.id)} match={topMatch(openItem)}
         body={{ height, chest: bodyNow.chest, waist: bodyNow.waist, shoulder: bodyNow.shoulder }} onCheckFit={checkFit} />
     )}
     {openPants && pm && bodyNow && (
       <PantsModal recommended={recommendBottom(openPants)} savedSize={sizeRecords.sizes[openPants.id]} onSaveSize={sizeRecords.saveSize} sizeSyncError={sizeRecords.error} item={openPants} onClose={() => setOpenPants(null)} sizes={Object.keys(pm.sims)}
+        colour={(pc => pc ? { product: pantsSwatches(pc)!, saved: topColour[pc.id] ?? pc.colours?.find(c => c.base)?.hex ?? null, skinFor: (h: string | null) => (f => f && { ...f, tint: pantsTint(pc, { [pc.id]: h ?? '' }) })(pantsColourFiles(pc, { [pc.id]: h ?? '' })), onSave: (h: string) => { pickTopColour(pc.id, h); setToast(`Saved: ${openPants.name} in ${pc.colours?.find(c => c.hex === h)?.name ?? 'this colour'}`); } } : undefined)(openProduct && openProduct.id === openPants.id && pantsSwatches(openProduct as unknown as PantsColours) ? openProduct as unknown as PantsColours : null)
+          ?? (up => up ? { product: up, saved: currentHex(up, topColour), onSave: (h: string) => { pickTopColour(up.id, h); setToast(`Saved: ${openPants.name} in ${up.colours?.find(c => c.hex === h)?.name ?? 'this colour'}`); } } : undefined)(userColourProduct(pantsItems.find(p => p.id === openPants.id)))}
+        skin={openProduct && openProduct.id === openPants.id ? (f => f && { ...f, tint: pantsTint(openProduct as unknown as PantsColours, topColour) })(pantsColourFiles(openProduct as unknown as PantsColours, topColour)) : null}
         chart={Object.fromEntries(Object.entries(pm.sims).map(([z, J]) => [z, ({ ...J.chart, waist: J.chart.elastic_waist ?? J.chart.waist, ...openPants.chart?.[z] }) as PantsChart]))} fits={pantsFits} glb={pm.glb}
         fav={favs.includes(openPants.id)} onFav={() => toggleFav(openPants.id)} match={pantsMatch(openPants)}
         size={jeansSize ?? 'L'} body={{ height, chest: bodyNow.chest, waist: bodyNow.waist }} note={pm.note} onCheckFit={wearBottom} />
