@@ -118,10 +118,14 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   // squashes the band into layers. Too small, not drawn
   if (!elastic && 2 * J.chart.waist < (tW ?? bodyW) - 5) qualityIssues.push('body: undersized waistband passed through body');
   const cantPullOn = qualityIssues.length > 0;
-  // the only problem is a waistband smaller than the body: say "too small", not "unavailable"
-  const undersized = cantPullOn && qualityIssues.every(q => q.endsWith('undersized waistband passed through body'));
+  // a waistband smaller than the body is the fit itself, not a simulation fault: say "too small", not "unavailable".
+  // When the band cannot be buttoned at all (the 'body:' entry), whatever else went wrong in the simulation (legs
+  // stuck, over-stretched) is a consequence of forcing it on (size M on a 190 cm / chest 132 body, 13 Nov 2026)
+  const undersized = cantPullOn && (qualityIssues.includes('body: undersized waistband passed through body')
+    || qualityIssues.every(q => q.endsWith('undersized waistband passed through body')));
   // over-stretched denim on a body the waistband is (nearly) too small for = really too tight; on a looser fit the
-  // stretch is a simulation fault (a glitch), not the fit: "unavailable", never "too tight"
+  // stretch is a simulation fault (a glitch), not the fit: "unavailable", never "too tight". A dressing failure is
+  // never turned into a fit claim either (tests/fit-map.test.mjs "solver failures remain unavailable")
   const tightEase = 2 * J.chart.waist - (tW ?? bodyW);
   const overTight = cantPullOn && !undersized && tightEase < 2
     && qualityIssues.every(q => q.endsWith('over-stretched fabric') || q.endsWith('undersized waistband passed through body'));

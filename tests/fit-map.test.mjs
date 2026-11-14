@@ -117,18 +117,20 @@ test('actual 183/102 interpolation cannot dilute its known failed corner',()=>{
  assert.equal(state.hide,true);assert.ok(state.qualityIssues.some(r=>r.startsWith('h185_c110:')));
  assert.match(state.reason,/Simulation unavailable/);
 });
-test('undersized Xin M falling through body is unavailable instead of labelled too big',()=>{
+test('undersized Xin M falling through body is too small / unavailable, never labelled too big',()=>{
  const state=jeansState(meta,meta.jeans,'M',false,184,115,53,null,0);
- assert.equal(state.hide,true);assert.match(state.now.label,/unavailable/);assert.doesNotMatch(state.now.label,/Too big|falls down/);
+ // the waistband is 5+ cm smaller than this waist: "too small" (the fit), not "unavailable" (a simulation fault), 13 Nov 2026
+ assert.equal(state.hide,true);assert.match(state.now.label,/Too small at the waist|unavailable/);assert.doesNotMatch(state.now.label,/Too big|falls down/);
  assert.ok(state.qualityIssues.some(r=>/passed through body|valid torso/.test(r)));
 });
 test('over-stretched denim: too tight on a body the waistband barely fits, a fault (not a fit) on a looser one',()=>{
- // Xin M drop at 165 / chest 110: 19 % stretch, crumpled (output/qa/review/tiles_fin/xin_drop_M_h165_c110.png)
- const tight=jeansState(meta,meta.jeans,'M',false,165,110,null,null,0);
- assert.equal(tight.hide,true);assert.ok(tight.qualityIssues.some(r=>r==='h165_c110: over-stretched fabric'));
+ // Xin M drop at 165 / chest 116: 8.8 % stretch (was 165 / chest 110 at 19 %, crumpled, until the 9 Nov 2026
+ // feet-free re-run brought that body down to 5.8 %: output/qa/review/tiles_fin/xin_drop_M_h165_c110.png)
+ const tight=jeansState(meta,meta.jeans,'M',false,165,116,null,null,0);
+ assert.equal(tight.hide,true);assert.ok(tight.qualityIssues.some(r=>r==='h165_c116: over-stretched fabric'));
  // the same broken result on a body the waistband fits loosely is never called "too tight"
  const loose=structuredClone(meta.jeans);loose.drop.M.chart={...loose.drop.M.chart,waist:loose.drop.M.chart.waist+6};
- const s2=jeansState(meta,loose,'M',false,165,110,null,null,0);
+ const s2=jeansState(meta,loose,'M',false,165,116,null,null,0);
  assert.equal(s2.hide,true);assert.doesNotMatch(s2.now.label,/Too tight/);assert.match(s2.now.label,/unavailable/);
  // a clean result next to it stays drawn: Xin M drop at 175 / chest 101 (4.3 %)
  assert.equal(jeansState(meta,meta.jeans,'M',false,175,101,null,null,0).hide,false);
