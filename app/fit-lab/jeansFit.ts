@@ -27,6 +27,7 @@ export interface JeansNow {
   chart: JeansSim['chart']; waistEase: number; hipEase: number; hem: number; drop: number; extra: number;
   basis: 'tape' | 'body';   // the waist / hips the advice is about: the shopper's tape, or the 3D body's
   borderline: boolean;      // within a tape measure's error of the next fit band
+  waistMatched?: boolean;   // slip + hem numbers come from simulations on bodies with the shopper's own (tape) waist
   bodyWaist: number; bodyHip: number; elasticExtension: number | null; elasticLimit: number | null; relaxedWaist: number; lengthFit: 'pooling' | 'short' | 'neutral'; label: string; tone: 'red' | 'amber' | 'green' | 'blue';
 }
 export interface JeansState {
@@ -137,7 +138,25 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
   if (simulated) {
     const bw = tW ?? tapeAt(meta, 'waist', jw, vw), bh = tH ?? tapeAt(meta, 'hip', jw, vw);
     const e = 2 * J.chart.waist - bw, eh = 2 * J.chart.hip - bh;
-    const jv = (f: (b: JeansBody) => number) => jeansVal(meta, J, jw, vw, f);
+    // The shopper's own waist (tape) can differ a lot from the 3D body's at this height + chest (a 172 cm / chest 94
+    // man: body 74 cm, his tape 82). How far the pants slip and where the hem ends then come from the simulations on
+    // bodies with HIS waist (same height, the chest whose body has that waist), not from the slimmer / fuller picture
+    // body: on a tester's own body the waist-matched numbers agreed (slip 0 vs 0, hem 9 vs 10 cm) where the picture
+    // body's said "slides 6 cm" (15 Nov 2026, docs/plans/HANDOFF.md). The picture itself still shows the slider body.
+    let tw: Record<string, number> | null = null;
+    if (!elastic && tW !== null && Math.abs(bodyW - tW) > 2 && Object.values(vw).every(v => !(v > 0.05))) {   // (not with the waist / belly sliders moved)
+      const cs = meta.chests, lo = Math.min(...cs), hi = Math.max(...cs); let best: [number, number] | null = null;
+      for (let c2 = lo; c2 <= hi + 1e-6; c2 += 0.5) {
+        const w2 = solveBody(meta, height, c2, shoulder, null, 0).w, d = Math.abs(tapeAt(meta, 'waist', w2, vw) - tW);
+        if (!best || d < best[0] - 1e-6 || (Math.abs(d - best[0]) <= 1e-6 && Math.abs(c2 - chest) < Math.abs(best[1] - chest))) best = [d, c2];
+      }
+      if (best && best[0] <= 1.5) {
+        const w2 = Object.fromEntries(Object.entries(solveBody(meta, height, best[1], shoulder, null, 0).w).filter(([, v]) => v > 1e-6));
+        // only when every one of those simulations exists and dressed properly
+        if (Object.keys(w2).every(k => J.bodies[k] && !J.bodies[k].put_on_failed)) tw = w2;
+      }
+    }
+    const jv = (f: (b: JeansBody) => number) => jeansVal(meta, J, tw ?? jw, vw, f);
     const drop = variant === 'drop' ? jv(b => b.drop_cm ?? 0) : 0;
     const extra = J.chart.length - (jv(b => b.waistband_height_cm) - jv(b => b.floor_cm ?? -1.7));
     let label: string, tone: JeansNow['tone'];
@@ -173,7 +192,7 @@ export function jeansState(meta: GridMeta, pants: PantsData | null, size: string
       : extra > 4 && jv(b => b.hem_lowest_cm) <= 0.5 ? 'pooling' : !elastic && extra <= 4 && jv(b => b.hem_lowest_cm) > 6 ? 'short' : 'neutral';
     const borderline = !elastic && (Math.abs(e) < TAPE_ERROR || (tH !== null && !!J.chart.hip && Math.abs(eh) < TAPE_ERROR));
     now = { chart: J.chart, waistEase: elastic ? rel - bw : e, elasticExtension: elastic ? st : null, elasticLimit: elastic ? stretch - 1 : null, relaxedWaist: elastic ? rel : 2 * J.chart.waist, lengthFit, hipEase: eh, hem: tapeExtra !== null ? -tapeExtra : jv(b => b.hem_lowest_cm), drop, extra: tapeExtra ?? extra, bodyWaist: bw, bodyHip: bh, label, tone,
-      basis: tW !== null || tH !== null ? 'tape' : 'body', borderline };
+      basis: tW !== null || tH !== null ? 'tape' : 'body', borderline, waistMatched: !!tw };
   }
   // short, plain words for shoppers
   const reason = undersized ? `Too small to close at the waist. Try a larger size.`

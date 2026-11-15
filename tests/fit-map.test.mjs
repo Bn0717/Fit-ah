@@ -218,3 +218,13 @@ test('an elastic band larger than the body cannot use an artificially pinned hel
  const state=jeansState(meta,shorts,'2XL',false,160,92,null,null,0);
  assert.equal(state.hide,true);assert.equal(state.noSim,true);assert.match(state.reason,/slipping preview/);assert.doesNotMatch(state.now.label,/Comfortable|holds them up/);
 });
+test('tape waist far from the 3D body: slip and hem come from the simulations on bodies with that waist',()=>{
+ // 175 cm / chest 92: the 3D body's waist is ~74 cm. A shopper who measures 84 cm is judged on the waist-84 bodies
+ const plain=jeansState(meta,meta.jeans,'L',false,175,92,null,null,0);
+ const taped=jeansState(meta,meta.jeans,'L',false,175,92,null,null,0,{waist:84});
+ assert.ok(!plain.now.waistMatched);assert.equal(taped.now.waistMatched,true);
+ const at110=jeansState(meta,meta.jeans,'L',false,175,110,null,null,0);
+ assert.ok(Math.abs(taped.now.drop-at110.now.drop)<1.0,'slip follows the waist-matched bodies');
+ // a tape waist close to the body's changes nothing
+ assert.ok(!jeansState(meta,meta.jeans,'L',false,175,92,null,null,0,{waist:plain.now.bodyWaist+1}).now.waistMatched);
+});
