@@ -13,6 +13,24 @@ import type { ParametricAvatar } from '@/lib/types/avatar';
 import { StyleOverlay } from '@/components/items/FitRecommendationModal';
 import { SizeChartEditor, notSimText, type SizeChartData, type SizeMatch } from './WardrobeExtras';
 import { SavedSizeControl } from './SavedSizeControl';
+import { ColourPick, topTint, colourCard } from './ColourSwatches';
+import { photoColour, nameOf, parsePalette, type GarmentColour } from './garmentColour';
+import type { ShirtProduct } from './engine';
+// a wardrobe photo that can show a chosen colour: card = that colour's photo (url) or a recoloured one (promise)
+function CardImg({ card, src, ...rest }: { card: string | Promise<string> | null; src: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
+  const [url, setUrl] = useState<string | null>(typeof card === 'string' ? card : null);
+  useEffect(() => {
+    let alive = true;
+    if (!card) { setUrl(null); return; }
+    if (typeof card === 'string') { setUrl(card); return; }
+    card.then(u => { if (alive) setUrl(u); }).catch(() => { if (alive) setUrl(null); });
+    return () => { alive = false; };
+  }, [card]);
+  // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+  return <img src={url ?? src} {...rest} />;
+}
+// a product's colours in the item window: the colour saved in the wardrobe and how to save another
+type ColourProps = { product: ShirtProduct; saved: string | null; onSave: (hex: string) => void };
 import { initialSize } from './sizePreferences';
 import { loadPacked } from './engine';
 
@@ -26,6 +44,7 @@ export interface LabItem {
   tex?: { front: Result; back: Result };            // aligned photos (not set for the original Gon Tee)
   pantsTex?: { front: HTMLCanvasElement; back: HTMLCanvasElement };   // pants photo swap, drawn into the Xin texture frame
   chart?: SizeChartData;                            // its own size chart (added items; none = the simulated chart)
+  colours?: GarmentColour[];                        // added items: the photo's colour first, then other colours of it
   topDir?: string;                                  // a shirt product (brands/tops.json): its own simulated sizes in <topDir>
 }
 export type SizeFit = Record<Size, { verdict: string; color: string; ease: number } | null>;
@@ -36,10 +55,11 @@ export { storeItem, unstoreItem, loadStored } from './wardrobeStorage';
 // one wardrobe section (Tops, Bottoms): its own cards and its own add button. Touch first: the ☆ and ✕ buttons are
 // always visible (no hover on a phone) and 36 px+ to tap; 2 cards a row on a phone, up to 5 on a wide screen.
 export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loadingIds, title = 'TOPS', subtitle = 'Same cut as the TNT CO Gon Tee · every size cloth-simulated',
-  addLabel = 'Add Top', info = () => 'Short Sleeve Shirt · 4 sizes', badge = 'Wearing', hiddenCount = 0, onRestore, favs = [], onFav, warn = () => null, empty, sizeSummary }: {
+  addLabel = 'Add Top', info = () => 'Short Sleeve Shirt · 4 sizes', badge = 'Wearing', hiddenCount = 0, onRestore, favs = [], onFav, warn = () => null, empty, sizeSummary, colourOf }: {
   items: LabItem[]; activeId: string; onOpen: (it: LabItem) => void; onAdd?: () => void; onDelete: (it: LabItem) => void; loadingIds: string[];
   title?: string; subtitle?: string; addLabel?: string; info?: (it: LabItem) => string; badge?: string;
   hiddenCount?: number; onRestore?: () => void; favs?: string[]; onFav?: (it: LabItem) => void;
+  colourOf?: (it: LabItem) => { hex: string; name: string; card?: string | Promise<string> | null } | null;   // the colour saved in the wardrobe (products with colours)
   warn?: (it: LabItem) => string | null;   // e.g. "Not simulated" for an item with a different size chart
   empty?: string; sizeSummary?: (item: LabItem) => { recommended: string | null; saved?: string | null };
 }) {
@@ -75,7 +95,7 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
               </button>
               <div className="relative aspect-square overflow-hidden bg-white md:aspect-[3/4]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={it.frontUrl} alt={it.name} loading="lazy" className="h-full w-full object-contain p-1.5 [transform:scale(1.3)] md:p-2 md:[transform:scale(1.45)]" />
+                <CardImg card={colourOf?.(it)?.card ?? null} src={it.frontUrl} data-card-of={it.id} alt={it.name} loading="lazy" className="h-full w-full object-contain p-1.5 [transform:scale(1.3)] md:p-2 md:[transform:scale(1.45)]" />
                 <div className="absolute inset-0 hidden items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 md:flex" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
                   <span className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-bold" style={{ color: C.navy }}>View Details</span>
                 </div>
@@ -89,6 +109,9 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
                 <p className="truncate text-[10px] font-bold uppercase tracking-wide md:hidden" style={{ color: C.navy, opacity: 0.55 }}>{it.brand}</p>
                 <span className="mb-1 hidden max-w-full truncate rounded-full px-3 py-0.5 text-xs font-bold md:inline-block" style={{ backgroundColor: C.pink, color: C.navy }}>{it.brand}</span>
                 <h3 className="truncate text-xs font-semibold leading-snug md:text-sm" style={{ color: C.navy }}>{it.name}</h3>
+                {(c => c && <p className="flex min-w-0 items-center gap-1 text-[10px] md:text-xs" style={{ color: C.navy }}>
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.hex, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.2)' }} />
+                  <span className="truncate">{c.name.replace(/^\d+\s*/, '')}</span></p>)(colourOf?.(it) ?? null)}
                 <p className="hidden truncate text-xs md:block" style={{ color: C.navy, opacity: 0.5 }}>{info(it)}</p>
               </div>
             </div>
@@ -106,11 +129,69 @@ export function WardrobeGrid({ items, activeId, onOpen, onAdd, onDelete, loading
 }
 
 // ─── add item ────────────────────────────────────────────────────────────────────
+// Colours of a garment a user adds. The first is the colour of their front photo (found and named automatically, the
+// name can be changed). More colours of the same garment: pick one, or type names / codes ("olive, #2f4f4f, cream");
+// in the fitting room they recolour the photo (plain fabrics).
+function ColourInput({ photo, value, onChange }: { photo: File | null; value: GarmentColour[]; onChange: (c: GarmentColour[]) => void }) {
+  const [text, setText] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [pick, setPick] = useState('#3264b8');
+  useEffect(() => {
+    let alive = true;
+    if (!photo) { onChange(value.filter(c => !c.fromPhoto)); return; }
+    photoColour(photo).then(hex => {
+      if (!alive) return;
+      const rest = value.filter(c => !c.fromPhoto);
+      onChange(hex ? [{ name: nameOf(hex), hex, fromPhoto: true }, ...rest] : rest);
+      setNote(hex ? null : 'Could not find the garment colour in the photo: add it below.');
+    });
+    return () => { alive = false; };
+  }, [photo]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const add = (cs: GarmentColour[]) => onChange([...value, ...cs.filter(c => !value.some(v => v.hex === c.hex))]);
+  const addText = () => {
+    const r = parsePalette(text);
+    add(r.colours); setText('');
+    setNote(r.unknown.length ? `Not recognised: ${r.unknown.join(', ')}. Use a colour name (e.g. olive, light blue) or a code like #2f4f4f.` : null);
+  };
+  const field = 'min-h-[44px] w-full rounded-lg border-2 px-3 text-base sm:text-sm';
+  return (
+    <div className="space-y-2 rounded-xl p-3" style={{ backgroundColor: C.cream, border: `1px solid ${C.peach}` }}>
+      <div className="text-sm font-bold" style={{ color: C.navy }}>Colours</div>
+      <p className="text-xs" style={{ color: C.navy, opacity: 0.65 }}>
+        {value.some(c => c.fromPhoto) ? 'The colour of your photo is found automatically; rename it if you like.' : 'Add the front photo: its colour is found automatically.'}
+        {' '}Does this garment come in more colours? Add them too (works best on plain fabrics).
+      </p>
+      <ul className="space-y-2">
+        {value.map((c, i) => (
+          <li key={c.hex + i} className="flex min-w-0 items-center gap-2">
+            <span className="h-7 w-7 shrink-0 rounded-full" style={{ background: c.hex, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.2)' }} />
+            <input value={c.name} aria-label={`Colour ${i + 1} name`} onChange={e => onChange(value.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              className="min-h-[36px] min-w-0 flex-1 rounded-lg border px-2 text-sm" style={{ borderColor: C.peach, color: C.navy }} />
+            <span className="shrink-0 text-[10px]" style={{ color: C.navy, opacity: 0.55 }}>{c.fromPhoto ? 'from photo' : c.hex}</span>
+            {!c.fromPhoto && <button onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label={`Remove ${c.name}`} className="h-8 w-8 shrink-0 rounded-full text-sm" style={{ color: C.navy }}>✕</button>}
+          </li>
+        ))}
+      </ul>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addText(); } }}
+          placeholder="Type colours: olive, cream, #2f4f4f" aria-label="Type colours" className={`${field} flex-[1_1_12rem]`} style={{ borderColor: C.peach, backgroundColor: 'white', color: C.navy }} />
+        <button onClick={addText} disabled={!text.trim()} className="min-h-[44px] shrink-0 rounded-lg px-3 text-sm font-semibold" style={{ backgroundColor: C.navy, color: 'white', opacity: text.trim() ? 1 : 0.4 }}>Add</button>
+        <div className="flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg border-2 px-2 text-sm" style={{ borderColor: C.peach, color: C.navy }}>
+          <input type="color" value={pick} onChange={e => setPick(e.target.value)} aria-label="Pick a colour" className="h-7 w-9 cursor-pointer border-0 bg-transparent p-0" />
+          <button type="button" onClick={() => add([{ name: nameOf(pick), hex: pick }])} className="min-h-[36px] font-semibold">Add picked</button>
+        </div>
+      </div>
+      {note && <p className="text-xs" style={{ color: C.red }}>{note}</p>}
+    </div>
+  );
+}
+
 export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName, recommendSize }: {
   open: boolean; onClose: () => void; kind: 'shirt' | 'pants'; refChart: SizeChartData; refName: string;
   recommendSize: (kind: 'shirt' | 'pants', chart: SizeChartData) => string | null;
-  onSubmit: (d: { brand: string; name: string; front: File; back: File; kind: 'shirt' | 'pants'; chart?: SizeChartData; chartMode: string; savedSize?: string }) => Promise<string | null>;
+  onSubmit: (d: { brand: string; name: string; front: File; back: File; kind: 'shirt' | 'pants'; chart?: SizeChartData; chartMode: string; savedSize?: string; colours?: GarmentColour[] }) => Promise<string | null>;
 }) {
+  const [colours, setColours] = useState<GarmentColour[]>([]);
   const [brand, setBrand] = useState('TNT CO');
   const [savedSize, setSavedSize] = useState('');
   const [name, setName] = useState('');
@@ -126,10 +207,10 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName,
   const submit = async () => {
     if (!front || !back) return;
     setBusy(true); setErr(null);
-    const e = await onSubmit({ brand: brand.trim(), name: name.trim(), front, back, kind,
+    const e = await onSubmit({ brand: brand.trim(), name: name.trim(), front, back, kind, colours: colours.length ? colours : undefined,
       chart: chart.mode === 'default' ? undefined : chart.chart, chartMode: chart.mode, savedSize: Object.keys(chart.mode === 'default' ? refChart : chart.chart).includes(savedSize) ? savedSize : undefined });
     setBusy(false);
-    if (e) setErr(e); else { setName(''); setFront(null); setBack(null); onClose(); }
+    if (e) setErr(e); else { setName(''); setFront(null); setBack(null); setColours([]); onClose(); }
   };
   const photo = (label: string, f: File | null, set: (f: File | null) => void, side: string) => (
     <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-xs"
@@ -167,6 +248,7 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName,
             {photo('Front photo', front, setFront, 'front')}
             {photo('Back photo', back, setBack, 'back')}
           </div>
+          <ColourInput photo={front} value={colours} onChange={setColours} />
           <SizeChartEditor kind={kind} refChart={refChart} refName={refName} value={chart} onChange={setChart} />
           <p className="text-xs" style={{ color: C.navy }}>Recommended: <strong>{recommendSize(kind, chart.mode === 'default' ? refChart : chart.chart) ?? 'No supported size recommendation'}</strong></p>
           <label className="block space-y-2 text-xs font-semibold" style={{ color: C.navy }}><span>Your size (optional)</span><select aria-label="Your size for new clothing" value={Object.keys(chart.mode === 'default' ? refChart : chart.chart).includes(savedSize) ? savedSize : ''} onChange={e => setSavedSize(e.target.value)} className={field} style={{ borderColor: C.peach, backgroundColor: C.cream }}><option value="">Not set</option>{Object.keys(chart.mode === 'default' ? refChart : chart.chart).map(size => <option key={size} value={size}>{size}</option>)}</select><span className="block font-normal opacity-60">Record the size you own or plan to buy. You can change it later.</span></label>
@@ -186,7 +268,8 @@ export function AddItemModal({ open, onClose, onSubmit, kind, refChart, refName,
 const GLB_CACHE: Record<string, Promise<any>> = {};
 
 // ─── 3D view of the simulated shirt on its own (as draped on the 175 cm / chest 101 cm body) ───────────
-export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, label }: { item: LabItem; size: string; gridDir: string; compact?: boolean; url?: string; label?: string }) {
+// skin: a pants product's colour textures (cleaned flat photos, ColourSwatches.pantsColourFiles) + light correction
+export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, label, skin, tint }: { item: LabItem; size: string; gridDir: string; compact?: boolean; url?: string; label?: string; skin?: { front: string; back: string; tint?: number[] | null } | null; tint?: number[] | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -247,13 +330,22 @@ export function Shirt3D({ item, size, gridDir, compact = false, url: fileUrl, la
             o.morphTargetInfluences?.fill(0);           // the file's default weights are 1: show the plain 175 / 101 drape
             const m = o.material.clone(); m.side = THREE.DoubleSide; m.roughness = 0.95; m.metalness = 0;
             const side = /front/.test(m.name) ? 'front' : /back/.test(m.name) ? 'back' : null;
-            if (side && item.pantsTex) {
+            if (side && skin) {
+              const t = new THREE.TextureLoader().load(skin[side]); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+              m.map = t; texs.push(t);
+              if (skin.tint) m.color.setRGB(skin.tint[0], skin.tint[1], skin.tint[2]);
+            } else if (side && item.pantsTex) {
               const t = new THREE.CanvasTexture(item.pantsTex[side]); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
               m.map = t; texs.push(t);
             } else if (side && item.tex) {
               const t = new THREE.CanvasTexture(item.tex[side].canvas); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
               m.map = t; texs.push(t);
               if (m.sheenColor) m.sheenColor.setRGB(...item.tex.front.fabric.map(v => 0.9 * v));
+            }
+            if (side && tint) {
+              // shown in another of its colours (plain fabric: recoloured on top of its own texture, ColourSwatches.topTint)
+              m.color.setRGB(tint[0], tint[1], tint[2]);
+              if (m.sheenColor) m.sheenColor.setRGB(0.9 * Math.min(tint[0], 1), 0.9 * Math.min(tint[1], 1), 0.9 * Math.min(tint[2], 1));
             }
             o.material = m;
           });
@@ -384,12 +476,17 @@ type SizeRecordProps = {
   onSaveSize: (id: string, size: string | null) => Promise<void>; sizeSyncError?: string | null;
 };
 
-export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError }: {
+export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError, colour }: {
   item: LabItem | null; onClose: () => void; chart: Partial<Chart>; sizeFit: SizeFit; size: Size; gridDir: string;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;   // sizes of its own chart that match the simulation
   body: { height: number; chest: number; waist: number; shoulder: number | null };
   onCheckFit: (it: LabItem, size: Size) => void;
+  colour?: ColourProps;
 } & SizeRecordProps) {
+  const [tryHex, setTryHex] = useState<string | null>(null);
+  useEffect(() => { setTryHex(null); }, [item?.id]);
+  const shownHex = tryHex ?? colour?.saved ?? null;
+  const tint = colour ? topTint(colour.product, shownHex) : null;
   const SIZES = (Object.keys(chart).length ? Object.keys(chart) : ['S', 'M', 'L', 'XL']) as Size[];   // this item's sizes
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
@@ -448,7 +545,7 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                   </div>
                   <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
+<CardImg card={colour ? colourCard(colour.product, shownHex, side === 'front' ? item.frontUrl : item.backUrl, side === 'front') : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
                 </>
               ) : (
@@ -459,12 +556,13 @@ export function ItemModal({ item, onClose, chart, sizeFit, size, gridDir, body, 
                         style={{ backgroundColor: viewSize === s ? C.navy : C.cream, color: viewSize === s ? 'white' : C.navy }}>{s}</button>
                     ))}
                   </div>
-                  <Shirt3D item={item} size={viewSize} gridDir={gridDir} />
+                  <Shirt3D key={shownHex ?? 'own'} item={item} size={viewSize} gridDir={gridDir} tint={tint} />
                 </>
               )}
             </div>
 
             <div>
+              {colour && <ColourPick product={colour.product} saved={colour.saved} preview={tryHex} onPreview={setTryHex} onSave={h => { colour.onSave(h); setTryHex(null); }} />}
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
               <SavedSizeControl itemId={item.id} name={item.name} sizes={Object.keys(item.chart ?? chart)} recommended={recommended} savedSize={savedSize} previewSize={viewSize} onSave={onSaveSize} syncError={sizeSyncError} />
               <GarmentSizeChart
@@ -532,12 +630,17 @@ function TryOn({ can, size, why, onClick }: { can: boolean; size: string; why: s
 // ─── pants window: 2D photos, 3D of each simulated size, size chart with the fit on your body, Try it on ───
 export type PantsChart = { waist: number; hip: number; length: number; opening: number; rise?: number };
 export type PantsSizeFit = { verdict: string; color: string; ease: number; detail?: string } | null;
-export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError }: {
+export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body, note, onCheckFit, fav, onFav, match, recommended, savedSize, onSaveSize, sizeSyncError, skin, colour }: {
   item: LabItem | null; onClose: () => void; sizes: string[]; chart: Record<string, PantsChart>; fits: Record<string, PantsSizeFit>;
   fav?: boolean; onFav?: () => void; match?: Record<string, SizeMatch> | null;
   glb: (size: string) => string; size: string; body: { height: number; chest: number; waist: number }; note: string;
-  onCheckFit: (it: LabItem, size: string) => void;
+  onCheckFit: (it: LabItem, size: string) => void; skin?: { front: string; back: string; tint?: number[] | null } | null;
+  colour?: ColourProps & { skinFor?: (hex: string | null) => { front: string; back: string; tint?: number[] | null } | null };
 } & SizeRecordProps) {
+  const [tryHex, setTryHex] = useState<string | null>(null);
+  useEffect(() => { setTryHex(null); }, [item?.id]);
+  const shownSkin = colour?.skinFor && tryHex ? colour.skinFor(tryHex) : skin;
+  const pantsTintNow = colour && !colour.skinFor ? topTint(colour.product, tryHex ?? colour.saved) : null;   // a user's own pants: recoloured
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [viewSize, setViewSize] = useState(size);
@@ -584,7 +687,7 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                   </div>
                   <div className="flex h-[clamp(240px,38dvh,360px)] items-center justify-center overflow-hidden rounded-xl sm:h-auto sm:aspect-[3/4]" style={{ backgroundColor: 'white', border: `2px solid ${C.peach}` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
+                    <CardImg card={colour ? colourCard(colour.product, tryHex ?? colour.saved, side === 'front' ? item.frontUrl : item.backUrl, side === 'front') : null} src={side === 'front' ? item.frontUrl : item.backUrl} alt={`${item.name} ${side}`} className="h-full w-full object-contain" />
                   </div>
                 </>
               ) : (
@@ -595,13 +698,14 @@ export function PantsModal({ item, onClose, sizes, chart, fits, glb, size, body,
                         style={{ backgroundColor: viewSize === s ? C.navy : C.cream, color: viewSize === s ? 'white' : C.navy }}>{s}</button>
                     ))}
                   </div>
-                  <Shirt3D item={item} size={viewSize} gridDir="" url={glb(viewSize)} label={`Size ${viewSize} as simulated on the 175 cm body · drag to rotate`} />
+                  <Shirt3D key={(shownSkin?.front ?? 'own') + (tryHex ?? '')} item={item} size={viewSize} gridDir="" url={glb(viewSize)} skin={shownSkin} tint={pantsTintNow} label={`Size ${viewSize} as simulated on the 175 cm body · drag to rotate`} />
                 </>
               )}
             </div>
 
             <div>
               <h3 className="mb-4 text-lg font-bold" style={{ color: C.navy }}>Size Chart</h3>
+              {colour && <ColourPick product={colour.product} saved={colour.saved} preview={tryHex} onPreview={setTryHex} onSave={h => { colour.onSave(h); setTryHex(null); }} />}
               <SavedSizeControl itemId={item.id} name={item.name} sizes={Object.keys(item.chart ?? chart)} recommended={recommended} savedSize={savedSize} previewSize={viewSize} onSave={onSaveSize} syncError={sizeSyncError} />
               <GarmentSizeChart
                 headers={['Waist (flat)', 'Hip (flat)', 'Length', 'Leg opening']}
