@@ -88,8 +88,8 @@ function View({ product, mode, size, bodyKey, centre }: { product: string; mode:
         const el = ref.current, w = el.clientWidth, h = el.clientHeight;
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(w, h);
         el.replaceChildren(renderer.domElement);
-        const scene = new THREE.Scene(); scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 1.5));
-        const d = new THREE.DirectionalLight(0xffffff, 1.6); d.position.set(1.5, 3, 3); scene.add(d);
+        const scene = new THREE.Scene(); scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc8bc, 2.4));
+        const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(1.5, 3, 3); scene.add(d);
         scene.add(build(THREE, bodyL, bodyP, p => p.mesh === 'Pants'));                 // the body's basic pants are under the product
         scene.add(build(THREE, pantsL, pantsP, () => false));
         const cam = new THREE.PerspectiveCamera(28, w / h, 0.1, 20); cam.position.set(0, 0.62, 3.1);

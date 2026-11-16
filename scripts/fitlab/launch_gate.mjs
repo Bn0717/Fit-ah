@@ -16,9 +16,14 @@ import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
 const R = new URL('../../', import.meta.url).pathname;
 const args = process.argv.slice(2); const oi = args.indexOf('--out'); const outDir = oi >= 0 ? args.splice(oi, 2)[1] : 'output/qa/launch_gate';
+// --id xin  names the product when the folder has no product.json; --glb <dir>  reads the 3D files from another folder
+// (Xin: the fit data is in xin_jeans/grid, the files the site loads are in xin_jeans/smooth/grid)
+const gi = args.indexOf('--id'); const idArg = gi >= 0 ? args.splice(gi, 2)[1] : null;
+const mi = args.indexOf('--glb'); const glbArg = mi >= 0 ? args.splice(mi, 2)[1] : null;
 if (!args[0]) { console.error('usage: node scripts/fitlab/launch_gate.mjs <public product dir>'); process.exit(2); }
 const D = args[0].startsWith('/') ? args[0] : R + args[0]; const rel = D.replace(R, '').replace(/\/$/, '');
-const id = (() => { try { return JSON.parse(readFileSync(`${D}/product.json`)).id; } catch { return rel.split('/').pop(); } })();
+const G = glbArg ? (glbArg.startsWith('/') ? glbArg : R + glbArg) : D;
+const id = idArg ?? (() => { try { return JSON.parse(readFileSync(`${D}/product.json`)).id; } catch { return rel.split('/').pop(); } })();
 const tx = f => ts.transpileModule(readFileSync(`${R}app/fit-lab/${f}`, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText;
 const eng = `data:text/javascript;base64,${Buffer.from(tx('engine.ts')).toString('base64')}`;
 const F = await import(`data:text/javascript;base64,${Buffer.from(tx('jeansFit.ts').replace(/from '\.\/engine'/, `from '${eng}'`)).toString('base64')}`);
@@ -41,9 +46,17 @@ row('Creative', '1 Model-photo match', hand.photo_match_cm != null ? `${hand.pho
 
 // 2 web: what one shopper downloads to see one size
 const mb = f => existsSync(f) ? statSync(f).size / 1e6 : null;
-const per = modes.flatMap(m => sizes.map(s => mb(`${D}/${m}/jeans_${s}.glb.gz`))).filter(x => x != null);
-const worst = per.length ? Math.max(...per) : null;
-row('Web', '2 Weight of the first picture', worst == null ? MISSING : `${worst.toFixed(1)} MB (largest size file; all ${per.length} files ${per.reduce((a, b) => a + b, 0).toFixed(0)} MB)`,
+const per = modes.flatMap(m => sizes.map(s => mb(`${G}/${m}/jeans_${s}.glb.gz`))).filter(x => x != null);
+// when the product has light widget files (scripts/fitlab/split_bodies.mjs -> public/models/fitlab/widget/<id>), the
+// first picture is the body (base + textures + one body) plus one size (base + textures + one body)
+const WID = `${R}public/models/fitlab/widget`, wdir = [id, id.replace(/_.*/, '')].map(n => `${WID}/${n}`).find(existsSync);
+const firstOf = dir => { if (!existsSync(`${dir}/base.bin.gz`)) return null; const fs = readdirSync(dir);
+  const bodyFiles = fs.filter(f => /^(h\d+_c\d+|_base)\.bin\.gz$/.test(f)).map(f => statSync(`${dir}/${f}`).size);
+  return (statSync(`${dir}/base.bin.gz`).size + fs.filter(f => /^tex_/.test(f)).reduce((a, f) => a + statSync(`${dir}/${f}`).size, 0) + Math.max(...bodyFiles)) / 1e6; };
+const wBody = firstOf(`${WID}/body`), wSizes = wdir ? modes.flatMap(m => sizes.map(s => firstOf(`${wdir}/${m}/${s}`))).filter(x => x != null) : [];
+const widgetMb = wBody != null && wSizes.length ? wBody + Math.max(...wSizes) : null;
+const worst = widgetMb ?? (per.length ? Math.max(...per) : null);
+row('Web', '2 Weight of the first picture', worst == null ? MISSING : widgetMb != null ? `${worst.toFixed(2)} MB (widget files: body + the heaviest size)` : `${worst.toFixed(1)} MB (largest size file; all ${per.length} files ${per.reduce((a, b) => a + b, 0).toFixed(0)} MB)`,
   worst != null && worst <= 1.5, 'one size under 1.5 MB', worst != null && worst > 1.5 ? 'each file carries the pants on all 40 bodies; a widget needs one body per download' : '');
 
 // 3 merch: shopper coverage (unweighted over the slider range; weight by the brand's sales-by-size mix when known)
@@ -76,12 +89,32 @@ row('Operations', '6 No hand repair', okShare == null ? MISSING : `${(100 * okSh
   okShare != null && okShare >= 0.95 && !hand.hand_repaired, '95 % dress first time, no hand repair', failed ? `${failed} failed to dress (hidden on the site as "unavailable")` : '');
 
 // 7 looks clean: split texture (the "shattered" look) + hem zig-zags across heights
-let splitWorst = 0, splitFile = '';
+// split texture = vertices that sit on the same point of the same panel but carry different texture coordinates
+// (the exporter then cuts the cloth at every vertex and the print looks shattered, Stallion 13 Nov 2026)
+const { gunzipSync } = await import('node:zlib');
+const splitShare = f => {
+  let b = readFileSync(f); if (b[0] === 0x1f && b[1] === 0x8b) b = gunzipSync(b);
+  const jl = b.readUInt32LE(12), j = JSON.parse(b.subarray(20, 20 + jl).toString()), bin = b.subarray(20 + jl + 8), dv = new DataView(bin.buffer, bin.byteOffset);
+  const K = { SCALAR: 1, VEC2: 2, VEC3: 3 }, BY = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }, GET = { 5120: 'getInt8', 5121: 'getUint8', 5122: 'getInt16', 5123: 'getUint16', 5125: 'getUint32', 5126: 'getFloat32' };
+  const raw = i => { const a = j.accessors[i], v = j.bufferViews[a.bufferView], k = K[a.type], st = v.byteStride || BY[a.componentType] * k, s0 = (v.byteOffset || 0) + (a.byteOffset || 0);
+    const o = new Float64Array(a.count * k); for (let e = 0; e < a.count; e++) for (let c = 0; c < k; c++) o[e * k + c] = dv[GET[a.componentType]](s0 + e * st + c * BY[a.componentType], true);
+    return { o, norm: a.normalized ? { 5121: 255, 5123: 65535, 5120: 127, 5122: 32767 }[a.componentType] : 1 }; };
+  let verts = 0, split = 0;
+  for (const m of j.meshes) for (const p of m.primitives) {
+    if (p.attributes.TEXCOORD_0 === undefined) continue;
+    const P = raw(p.attributes.POSITION).o, U = raw(p.attributes.TEXCOORD_0), n = P.length / 3, first = new Map();
+    for (let v = 0; v < n; v++) {
+      const k = `${P[v * 3]},${P[v * 3 + 1]},${P[v * 3 + 2]}`, f0 = first.get(k); verts++;
+      if (f0 === undefined) first.set(k, v);
+      else if (Math.abs(U.o[v * 2] - U.o[f0 * 2]) / U.norm > 0.002 || Math.abs(U.o[v * 2 + 1] - U.o[f0 * 2 + 1]) / U.norm > 0.002) split++;
+    }
+  }
+  return verts ? split / verts : 0;
+};
+let splitWorst = -1, splitFile = '';
 for (const m of modes) for (const s of sizes) {
-  const f = `${D}/${m}/jeans_${s}.glb.gz`; if (!existsSync(f)) continue;
-  let verts = 0; const uniq = new Set();
-  for (const part of readGlb(f, true)) { const p = part.geometry.attributes.position.array; verts += p.length / 3; for (let i = 0; i < p.length; i += 3) uniq.add(`${p[i].toFixed(4)},${p[i + 1].toFixed(4)},${p[i + 2].toFixed(4)}`); }
-  const ratio = verts / Math.max(uniq.size, 1); if (ratio > splitWorst) { splitWorst = ratio; splitFile = `${m} ${s}`; }
+  const f = `${G}/${m}/jeans_${s}.glb.gz`; if (!existsSync(f)) continue;
+  const r = splitShare(f); if (r > splitWorst) { splitWorst = r; splitFile = `${m} ${s}`; }
 }
 let zig = null, tighter = null;
 for (const m of modes) {
@@ -89,8 +122,8 @@ for (const m of modes) {
   const mm = (r.stdout || '').match(/(\d+) hem zig-zags > \d+ cm, (\d+) bigger-size-tighter/);
   if (mm) { zig = (zig ?? 0) + +mm[1]; tighter = (tighter ?? 0) + +mm[2]; }
 }
-const cleanOk = splitWorst > 0 && splitWorst < 1.5 && zig === 0;
-row('Everyone', '7 Looks clean', splitWorst === 0 || zig == null ? MISSING : `texture ${splitWorst < 1.5 ? 'whole' : `SPLIT (${splitWorst.toFixed(1)}x vertices, ${splitFile})`}; ${zig} hem jumps over 3 cm as height changes; ${tighter} places where a bigger size is tighter`,
+const cleanOk = splitWorst >= 0 && splitWorst < 0.05 && zig === 0;
+row('Everyone', '7 Looks clean', splitWorst < 0 || zig == null ? MISSING : `texture ${splitWorst < 0.05 ? 'whole' : `SPLIT (${(100 * splitWorst).toFixed(0)} % of vertices, ${splitFile})`}; ${zig} hem jumps over 3 cm as height changes; ${tighter} places where a bigger size is tighter`,
   cleanOk, 'texture whole, 0 hem jumps', zig ? 'hem jumps are the simulation\'s own fold chance: the "hem by rule" fix targets this' : '');
 
 const green = rows.filter(r => r.ok).length, missing = rows.filter(r => r.value === MISSING).length;
