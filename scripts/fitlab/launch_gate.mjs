@@ -66,11 +66,20 @@ for (const wb of modes.map(m => m === 'belt')) for (const s of sizes) for (let h
   const st = F.jeansState(meta, pants, s, wb, h, c, null, null, 0); tot++;
   if (st && !st.hide) shown++; else if (st && /unavailable|Not available|Not simulated/i.test(st.reason ?? '')) unavailable++;
 }
-// a body counts as covered when at least one size is shown for it
-let bodies = 0, covered = 0;
-for (let h = 160; h <= 190; h += 2) for (let c = 80; c <= 132; c += 4) { bodies++; if (sizes.some(s => modes.some(m => { const st = F.jeansState(meta, pants, s, m === 'belt', h, c, null, null, 0); return st && !st.hide; }))) covered++; }
-row('Merchandising', '3 Shopper coverage', `${(100 * covered / bodies).toFixed(0)} % of bodies get at least one size (${shown} of ${tot} body x size x belt combinations shown; ${unavailable} hidden as "unavailable")`,
-  covered / bodies >= 0.8, '80 % of bodies see at least one size', 'unweighted: every height x chest counts the same; weight by the brand\'s sales-by-size mix when known');
+// a body is ANSWERED when the widget can tell that shopper something true: a size is drawn, or every size is honestly
+// "too small / too tight" (the brand's size range ends there). It is NOT answered when the only thing we can say is
+// "unavailable / not simulated" (our gap, not the brand's).
+let bodies = 0, wearable = 0, answered = 0;
+for (let h = 160; h <= 190; h += 2) for (let c = 80; c <= 132; c += 4) {
+  bodies++; let any = false, honest = false;
+  for (const s of sizes) for (const m of modes) {
+    const st = F.jeansState(meta, pants, s, m === 'belt', h, c, null, null, 0); if (!st) continue;
+    if (!st.hide) any = true; else if (/^Too (small|tight)/.test(st.reason ?? '')) honest = true;
+  }
+  if (any) wearable++; if (any || honest) answered++;
+}
+row('Merchandising', '3 Shopper coverage', `${(100 * answered / bodies).toFixed(0)} % of bodies get an answer (${(100 * wearable / bodies).toFixed(0)} % see a size they can wear, the rest are told "too small / too tight"); ${shown} of ${tot} body x size x belt combinations drawn`,
+  answered / bodies >= 0.9, '90 % of bodies get an answer', 'unweighted: every height x chest counts the same; weight by the brand\'s sales-by-size mix when known');
 
 // 4 merch: agreement with real people
 row('Merchandising', '4 Agreement with real people', hand.ruler_agreement_pct != null ? `${hand.ruler_agreement_pct} % right size picked (${hand.ruler_people ?? '?'} people)` : MISSING,
