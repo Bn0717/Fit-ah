@@ -35,8 +35,8 @@ export default function Navbar() {
     setShowMobileMenu(false);
   }, [pathname]);
 
-  // the shop widget (/fit-widget) is embedded in a brand's own page: no app navigation
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/fit-widget') {
+  // the shop widget (/fit-widget) is embedded in a brand's own page, and /brand-upload is for brands, not shoppers: no app navigation
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/fit-widget' || pathname === '/brand-upload') {
     return null;
   }
 
