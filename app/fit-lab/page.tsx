@@ -1465,6 +1465,32 @@ function FitLab() {
                     {/* the rise is only flagged when this pants' brand did not publish it (TNT's chart has none) */}
                     {!(pantsId !== 'xin' && product && Object.values(product.source ?? {}).every(m => m.rise === 'chart')) &&
                       <div className="text-xs" style={{ opacity: 0.55 }}>Rise ({jeansNow.chart.rise} cm) is not in {pantsId !== 'xin' && product?.brand ? product.brand : 'TNT'}&apos;s size chart: estimated.</div>}
+                    {/* this size next to its neighbours on the same body: the room at the waist, the hem and the slip, so
+                        "one size up or down?" is answered by numbers (picture for look, numbers for size) */}
+                    {meta && pantsData && jeansSize && (() => {
+                      const zs = Object.keys(pantsData.sizes), i = zs.indexOf(jeansSize);
+                      const rows = zs.slice(Math.max(0, i - 1), i + 2).map(z => ({ z, st: jeansState(meta, pantsData, z, belt, height, chest, shoulderNow, waistNow, bellyNow, tapeM) }));
+                      if (rows.length < 2) return null;
+                      return (
+                        <div className="mt-2 rounded-xl p-2 text-xs" style={{ background: '#faf5ee' }}>
+                          <div className="font-semibold mb-1" style={{ opacity: 0.7 }}>Compare sizes on your body</div>
+                          {rows.map(({ z, st }) => {
+                            const n = st?.now, hidden = !st || st.hide;
+                            return (
+                              <button key={z} type="button" onClick={() => setJeansSize(z)} aria-pressed={z === jeansSize}
+                                className="w-full flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg px-2 py-1 text-left"
+                                style={{ background: z === jeansSize ? '#fff' : 'transparent', border: z === jeansSize ? '1px solid #e5dccb' : '1px solid transparent' }}>
+                                <span className="font-semibold" style={{ minWidth: '3.2rem' }}>{z}</span>
+                                <span style={{ color: n ? TONE[n.tone] : '#b91c1c' }}>{hidden ? (st?.reason ?? 'Not available').split('.')[0] : n?.label}</span>
+                                {n && !hidden && <span style={{ opacity: 0.65 }}>
+                                  waist {n.waistEase >= 0 ? '+' : ''}{n.waistEase.toFixed(1)} cm · {n.hem <= 0.5 ? 'hem on the shoes' : `hem ${n.hem.toFixed(0)} cm up`}{n.drop > 1 ? ` · slips ${n.drop.toFixed(0)} cm` : ''}
+                                </span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 {jeansSize && walking && <p className="text-xs" style={{ opacity: 0.6 }}>{pantsId !== 'xin' && product?.id === pantsId && product.walk?.sizes.includes(jeansSize)
