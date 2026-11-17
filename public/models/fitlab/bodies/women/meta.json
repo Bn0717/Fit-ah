@@ -1,0 +1,358 @@
+{
+ "heights": [
+  150,
+  155,
+  160,
+  165,
+  170,
+  180
+ ],
+ "chests": [
+  76,
+  80,
+  84,
+  88,
+  94,
+  100,
+  106
+ ],
+ "centre": "h160_c84",
+ "body": {
+  "h150_c76": {
+   "height": 150.0,
+   "chest": 76.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 36.9,
+   "inseam": 69.0
+  },
+  "h150_c80": {
+   "height": 150.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 37.5,
+   "inseam": 69.0
+  },
+  "h150_c84": {
+   "height": 150.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 38.1,
+   "inseam": 69.0
+  },
+  "h150_c88": {
+   "height": 150.0,
+   "chest": 88.0,
+   "waist": 72.0,
+   "hip": 95.0,
+   "shoulder": 38.8,
+   "inseam": 69.0
+  },
+  "h150_c94": {
+   "height": 150.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 38.3,
+   "inseam": 69.0
+  },
+  "h150_c100": {
+   "height": 150.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 38.7,
+   "inseam": 69.0
+  },
+  "h150_c106": {
+   "height": 150.0,
+   "chest": 106.0,
+   "waist": 90.0,
+   "hip": 113.7,
+   "shoulder": 38.7,
+   "inseam": 69.9
+  },
+  "h155_c76": {
+   "height": 155.0,
+   "chest": 76.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 37.6,
+   "inseam": 71.3
+  },
+  "h155_c80": {
+   "height": 155.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 38.2,
+   "inseam": 71.3
+  },
+  "h155_c84": {
+   "height": 155.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 38.8,
+   "inseam": 71.3
+  },
+  "h155_c88": {
+   "height": 155.0,
+   "chest": 88.0,
+   "waist": 72.0,
+   "hip": 95.0,
+   "shoulder": 39.4,
+   "inseam": 71.3
+  },
+  "h155_c94": {
+   "height": 155.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 39.3,
+   "inseam": 71.3
+  },
+  "h155_c100": {
+   "height": 155.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 39.9,
+   "inseam": 71.3
+  },
+  "h155_c106": {
+   "height": 155.0,
+   "chest": 106.0,
+   "waist": 90.1,
+   "hip": 113.7,
+   "shoulder": 40.1,
+   "inseam": 72.2
+  },
+  "h160_c76": {
+   "height": 160.0,
+   "chest": 76.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 38.3,
+   "inseam": 73.6
+  },
+  "h160_c80": {
+   "height": 160.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 38.9,
+   "inseam": 73.6
+  },
+  "h160_c84": {
+   "height": 160.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 39.5,
+   "inseam": 73.6
+  },
+  "h160_c88": {
+   "height": 160.0,
+   "chest": 88.0,
+   "waist": 71.9,
+   "hip": 95.0,
+   "shoulder": 40.1,
+   "inseam": 73.6
+  },
+  "h160_c94": {
+   "height": 160.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 40.3,
+   "inseam": 73.6
+  },
+  "h160_c100": {
+   "height": 160.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 40.9,
+   "inseam": 73.6
+  },
+  "h160_c106": {
+   "height": 160.0,
+   "chest": 106.0,
+   "waist": 90.1,
+   "hip": 113.7,
+   "shoulder": 41.3,
+   "inseam": 74.5
+  },
+  "h165_c76": {
+   "height": 165.0,
+   "chest": 76.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 39.0,
+   "inseam": 75.9
+  },
+  "h165_c80": {
+   "height": 165.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 39.6,
+   "inseam": 75.9
+  },
+  "h165_c84": {
+   "height": 165.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 40.1,
+   "inseam": 75.9
+  },
+  "h165_c88": {
+   "height": 165.0,
+   "chest": 88.0,
+   "waist": 72.0,
+   "hip": 95.0,
+   "shoulder": 40.8,
+   "inseam": 75.9
+  },
+  "h165_c94": {
+   "height": 165.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 41.1,
+   "inseam": 75.9
+  },
+  "h165_c100": {
+   "height": 165.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 41.8,
+   "inseam": 75.9
+  },
+  "h165_c106": {
+   "height": 165.0,
+   "chest": 106.0,
+   "waist": 90.1,
+   "hip": 113.7,
+   "shoulder": 42.3,
+   "inseam": 76.8
+  },
+  "h170_c76": {
+   "height": 170.0,
+   "chest": 76.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 39.7,
+   "inseam": 78.2
+  },
+  "h170_c80": {
+   "height": 170.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 40.3,
+   "inseam": 78.2
+  },
+  "h170_c84": {
+   "height": 170.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 40.9,
+   "inseam": 78.2
+  },
+  "h170_c88": {
+   "height": 170.0,
+   "chest": 88.0,
+   "waist": 72.0,
+   "hip": 95.0,
+   "shoulder": 41.5,
+   "inseam": 78.2
+  },
+  "h170_c94": {
+   "height": 170.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 41.9,
+   "inseam": 78.2
+  },
+  "h170_c100": {
+   "height": 170.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 42.6,
+   "inseam": 78.2
+  },
+  "h170_c106": {
+   "height": 170.0,
+   "chest": 106.0,
+   "waist": 90.0,
+   "hip": 113.0,
+   "shoulder": 43.4,
+   "inseam": 78.2
+  },
+  "h180_c76": {
+   "height": 180.0,
+   "chest": 77.0,
+   "waist": 60.0,
+   "hip": 83.0,
+   "shoulder": 41.3,
+   "inseam": 82.8
+  },
+  "h180_c80": {
+   "height": 180.0,
+   "chest": 80.0,
+   "waist": 64.0,
+   "hip": 87.0,
+   "shoulder": 41.8,
+   "inseam": 82.8
+  },
+  "h180_c84": {
+   "height": 180.0,
+   "chest": 84.0,
+   "waist": 68.0,
+   "hip": 91.0,
+   "shoulder": 42.4,
+   "inseam": 82.8
+  },
+  "h180_c88": {
+   "height": 180.0,
+   "chest": 88.0,
+   "waist": 72.0,
+   "hip": 95.0,
+   "shoulder": 43.0,
+   "inseam": 82.8
+  },
+  "h180_c94": {
+   "height": 180.0,
+   "chest": 94.0,
+   "waist": 78.0,
+   "hip": 101.0,
+   "shoulder": 43.4,
+   "inseam": 82.8
+  },
+  "h180_c100": {
+   "height": 180.0,
+   "chest": 100.0,
+   "waist": 84.0,
+   "hip": 107.0,
+   "shoulder": 44.1,
+   "inseam": 82.8
+  },
+  "h180_c106": {
+   "height": 180.0,
+   "chest": 106.0,
+   "waist": 90.0,
+   "hip": 113.0,
+   "shoulder": 44.9,
+   "inseam": 82.8
+  }
+ }
+}

@@ -9,14 +9,19 @@
 //    height + chest.
 //  - Private: the numbers typed here stay in this page; only the nearest body's file name is requested.
 //  - Kill switch: /models/fitlab/widget/<product>/off.json present = the widget shows nothing for that product.
+//  - Any product: /fit-widget?p=<folder> reads /models/fitlab/widget/<folder>/info.json (name, brand, sizes, and which
+//    body set: men's grid by default, or the women's grid: body "body_women" + its meta), so a brand's product needs
+//    no code change (16 Nov 2026, women's bodies).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jeansState, type PantsData } from '../fit-lab/jeansFit';
 import type { GridMeta } from '../fit-lab/engine';
 
 const ROOT = '/models/fitlab/widget';
-const PRODUCTS: Record<string, { name: string; brand: string; sizes: string[] }> = {
+type Info = { name: string; brand: string; sizes: string[]; body?: string; meta?: string; women?: boolean };
+const PRODUCTS: Record<string, Info> = {
   xin: { name: '"Xin" Denim Biker Pants', brand: 'TNT CO', sizes: ['M', 'L', 'XL', '2XL'] },
 };
+const MEN_META = '/models/fitlab/bodies/grid/meta.json';
 const TONE: Record<string, string> = { green: '#15803d', amber: '#b45309', red: '#b91c1c', blue: '#1d4ed8' };
 
 type Part = { mesh: string; material: string; verts: number; indices: number; index32: boolean; texture: string | null; color: number[] | null };
@@ -74,7 +79,7 @@ function build(THREE: typeof import('three'), L: Loaded, pos: ArrayBuffer, hide:
   void total; return group;
 }
 
-function View({ product, mode, size, bodyKey, centre }: { product: string; mode: string; size: string; bodyKey: string; centre: string }) {
+function View({ product, mode, size, bodyKey, centre, bodyDir }: { product: string; mode: string; size: string; bodyKey: string; centre: string; bodyDir: string }) {
   const ref = useRef<HTMLDivElement>(null); const [err, setErr] = useState('');
   useEffect(() => {
     let dead = false, raf = 0; let renderer: import('three').WebGLRenderer | null = null;
@@ -82,8 +87,8 @@ function View({ product, mode, size, bodyKey, centre }: { product: string; mode:
       try {
         const THREE = await import('three'); const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
         const file = (k: string) => k === centre ? '_base' : k;
-        const [bodyL, pantsL] = await Promise.all([loadBase(`${ROOT}/body`), loadBase(`${ROOT}/${product}/${mode}/${size}`)]);
-        const [bodyP, pantsP] = await Promise.all([loadBody(`${ROOT}/body`, file(bodyKey)), loadBody(`${ROOT}/${product}/${mode}/${size}`, file(bodyKey))]);
+        const [bodyL, pantsL] = await Promise.all([loadBase(`${ROOT}/${bodyDir}`), loadBase(`${ROOT}/${product}/${mode}/${size}`)]);
+        const [bodyP, pantsP] = await Promise.all([loadBody(`${ROOT}/${bodyDir}`, file(bodyKey)), loadBody(`${ROOT}/${product}/${mode}/${size}`, file(bodyKey))]);
         if (dead || !ref.current) return;
         const el = ref.current, w = el.clientWidth, h = el.clientHeight;
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(w, h);
@@ -99,19 +104,37 @@ function View({ product, mode, size, bodyKey, centre }: { product: string; mode:
       } catch (e) { if (!dead) setErr(String(e)); }
     })();
     return () => { dead = true; cancelAnimationFrame(raf); renderer?.dispose(); };
-  }, [product, mode, size, bodyKey, centre]);
+  }, [product, mode, size, bodyKey, centre, bodyDir]);
   return <div ref={ref} className="w-full" style={{ aspectRatio: '3 / 4', background: '#f4efe7', borderRadius: 16 }}>{err && <p className="p-3 text-xs" style={{ color: '#b91c1c' }}>{err}</p>}</div>;
 }
 
 export default function FitWidget() {
-  const product = 'xin', info = PRODUCTS[product];
+  // the product folder from ?p= (letters, digits, - and _ only: it becomes part of a file path)
+  // (read once on the client; the server renders nothing until the product's info has loaded, so no mismatch)
+  const [product] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const p = new URLSearchParams(window.location.search).get('p') ?? 'xin';
+    return /^[a-z0-9_-]{1,64}$/i.test(p) ? p : 'xin';
+  });
+  const [info, setInfo] = useState<Info | null>(null);
   const [meta, setMeta] = useState<GridMeta | null>(null); const [pants, setPants] = useState<PantsData | null>(null);
   const [off, setOff] = useState(false);
   const [height, setHeight] = useState(175), [chest, setChest] = useState(101), [waist, setWaist] = useState(''), [belt, setBelt] = useState(true);
   useEffect(() => {
+    if (!product) return;
+    const use = (j: Info | null) => {
+      setInfo(j);
+      if (j?.women) { setHeight(160); setChest(84); }   // a women's product starts on the women's centre body (160 cm, bust 84)
+    };
+    fetch(`${ROOT}/${product}/info.json`).then(r => (r.ok ? r.json() : null)).then((j: Info | null) => use(j ?? PRODUCTS[product] ?? null))
+      .catch(() => use(PRODUCTS[product] ?? null));
+  }, [product]);
+  const women = !!info?.women;
+  useEffect(() => {
+    if (!product || !info) return;
     fetch(`${ROOT}/${product}/off.json`).then(r => setOff(r.ok)).catch(() => {});
     (async () => {
-      const m: GridMeta = await (await fetch('/models/fitlab/bodies/grid/meta.json')).json();
+      const m: GridMeta = await (await fetch(info.meta ?? MEN_META)).json();
       const ld = async (mode: string) => Object.fromEntries(await Promise.all(info.sizes.map(async z => [z, await (await fetch(`${ROOT}/${product}/${mode}/${z}/fit.json`)).json()])));
       const b = await ld('belt'), d = await ld('drop');
       setMeta(m); setPants({ name: info.name, sizes: b, belt: b, drop: d } as PantsData);
@@ -120,7 +143,7 @@ export default function FitWidget() {
 
   // the nearest simulated body: by height + waist when a waist is given (pants fit at the waist), else height + chest
   const pick = useMemo(() => {
-    if (!meta || !pants) return null;
+    if (!meta || !pants || !info) return null;
     const keys = Object.keys(pants.sizes[info.sizes[0]].bodies), w = +waist > 0 ? +waist : null;
     let best: { k: string; d: number } | null = null;
     for (const k of keys) {
@@ -132,7 +155,7 @@ export default function FitWidget() {
   }, [meta, pants, height, chest, waist, info]);
 
   const rows = useMemo(() => {
-    if (!meta || !pants || !pick) return [];
+    if (!meta || !pants || !pick || !info) return [];
     const st = (z: string) => jeansState(meta, pants, z, belt, pick.body.height, pick.body.chest, null, null, 0, +waist > 0 ? { waist: +waist } : {});
     const all = info.sizes.map(z => ({ z, st: st(z) }));
     // "your size": the smallest size that is drawn and not tight; shown with the next size up (or down at the top)
@@ -143,8 +166,9 @@ export default function FitWidget() {
     return [{ ...all[i], yours: true }, ...(j >= 0 ? [{ ...all[j], yours: false }] : [])].sort((a, b) => info.sizes.indexOf(a.z) - info.sizes.indexOf(b.z));
   }, [meta, pants, pick, belt, waist, info]);
 
-  if (off) return null;
-  const mode = belt ? 'belt' : 'drop';
+  if (off || !product || !info) return null;
+  const mode = belt ? 'belt' : 'drop', bodyDir = info.body ?? 'body', bustWord = women ? 'Bust' : 'Chest';
+  const hr = meta ? [meta.heights[0], meta.heights[meta.heights.length - 1]] : [155, 195];
   return (
     <main className="mx-auto max-w-2xl p-4 space-y-3" style={{ color: '#1c1917' }}>
       <header>
@@ -152,12 +176,12 @@ export default function FitWidget() {
         <h1 className="text-lg font-semibold">{info.name}: see your size</h1>
       </header>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-        <label className="flex flex-col gap-1">Height (cm)<input type="number" min={155} max={195} value={height} onChange={e => setHeight(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
-        <label className="flex flex-col gap-1">Chest (cm)<input type="number" min={76} max={136} value={chest} onChange={e => setChest(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
+        <label className="flex flex-col gap-1">Height (cm)<input type="number" min={hr[0] - 5} max={hr[1] + 5} value={height} onChange={e => setHeight(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
+        <label className="flex flex-col gap-1">{bustWord} (cm)<input type="number" min={70} max={136} value={chest} onChange={e => setChest(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
         <label className="flex flex-col gap-1">Waist (cm, optional)<input type="number" min={55} max={125} value={waist} onChange={e => setWaist(e.target.value)} placeholder="tape" className="rounded-lg border px-2 py-1" /></label>
         <label className="flex items-end gap-2 pb-1"><input type="checkbox" checked={belt} onChange={e => setBelt(e.target.checked)} />with a belt</label>
       </div>
-      {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, chest {pick.body.chest.toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byWaist ? ' (matched to your waist)' : ''}. Your numbers stay on this page.</p>}
+      {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, {bustWord.toLowerCase()} {pick.body.chest.toFixed(0)}, hips {(pick.body.hip ?? 0).toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byWaist ? ' (matched to your waist)' : ''}. Your numbers stay on this page.</p>}
       <div className="grid grid-cols-2 gap-3">
         {rows.map(({ z, st, yours }) => {
           const n = st?.now, hidden = !st || st.hide;
@@ -165,7 +189,7 @@ export default function FitWidget() {
             <section key={z} className="space-y-1">
               <div className="flex items-baseline gap-2"><span className="font-semibold">{z}</span>{yours && <span className="text-xs rounded-full px-2" style={{ background: '#1c1917', color: '#fff' }}>suggested</span>}</div>
               {hidden || !pick ? <div className="w-full flex items-center justify-center p-3 text-center text-sm" style={{ aspectRatio: '3 / 4', background: '#f4efe7', borderRadius: 16, color: '#b91c1c' }}>{st?.reason ?? 'Not available for this body'}</div>
-                : <View product={product} mode={mode} size={z} bodyKey={pick.key} centre={meta!.centre} />}
+                : <View product={product} mode={mode} size={z} bodyKey={pick.key} centre={meta!.centre} bodyDir={bodyDir} />}
               {n && !hidden && <div className="text-xs space-y-0.5">
                 <div className="font-semibold" style={{ color: TONE[n.tone] }}>{n.label}</div>
                 <div>Waist: {n.waistEase >= 0 ? `${n.waistEase.toFixed(1)} cm of room` : `${(-n.waistEase).toFixed(1)} cm too small`}</div>
