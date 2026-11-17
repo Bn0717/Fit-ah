@@ -119,7 +119,7 @@ export default function FitWidget() {
   const [info, setInfo] = useState<Info | null>(null);
   const [meta, setMeta] = useState<GridMeta | null>(null); const [pants, setPants] = useState<PantsData | null>(null);
   const [off, setOff] = useState(false);
-  const [height, setHeight] = useState(175), [chest, setChest] = useState(101), [waist, setWaist] = useState(''), [belt, setBelt] = useState(true);
+  const [height, setHeight] = useState(175), [chest, setChest] = useState(101), [waist, setWaist] = useState(''), [hip, setHip] = useState(''), [belt, setBelt] = useState(true);
   useEffect(() => {
     if (!product) return;
     const use = (j: Info | null) => {
@@ -141,22 +141,24 @@ export default function FitWidget() {
     })().catch(() => {});
   }, [product, info]);
 
-  // the nearest simulated body: by height + waist when a waist is given (pants fit at the waist), else height + chest
+  // the nearest simulated body: by height + the tape numbers given (waist and / or hips: pants fit there), else
+  // height + chest (bust)
   const pick = useMemo(() => {
     if (!meta || !pants || !info) return null;
-    const keys = Object.keys(pants.sizes[info.sizes[0]].bodies), w = +waist > 0 ? +waist : null;
+    const keys = Object.keys(pants.sizes[info.sizes[0]].bodies), w = +waist > 0 ? +waist : null, hp = +hip > 0 ? +hip : null;
     let best: { k: string; d: number } | null = null;
     for (const k of keys) {
       const b = meta.body[k]; if (!b) continue;
-      const d = Math.abs(b.height - height) / 5 + (w !== null ? Math.abs((b.waist ?? 0) - w) / 4 : Math.abs(b.chest - chest) / 5);
+      const d = Math.abs(b.height - height) / 5 + (w === null && hp === null ? Math.abs(b.chest - chest) / 5
+        : (w !== null ? Math.abs((b.waist ?? 0) - w) / 4 : 0) + (hp !== null ? Math.abs((b.hip ?? 0) - hp) / 4 : 0));
       if (!best || d < best.d) best = { k, d };
     }
-    return best && { key: best.k, body: meta.body[best.k], byWaist: w !== null };
-  }, [meta, pants, height, chest, waist, info]);
+    return best && { key: best.k, body: meta.body[best.k], byTape: w !== null || hp !== null };
+  }, [meta, pants, height, chest, waist, hip, info]);
 
   const rows = useMemo(() => {
     if (!meta || !pants || !pick || !info) return [];
-    const st = (z: string) => jeansState(meta, pants, z, belt, pick.body.height, pick.body.chest, null, null, 0, +waist > 0 ? { waist: +waist } : {});
+    const st = (z: string) => jeansState(meta, pants, z, belt, pick.body.height, pick.body.chest, null, null, 0, { waist: +waist > 0 ? +waist : null, hip: +hip > 0 ? +hip : null });
     const all = info.sizes.map(z => ({ z, st: st(z) }));
     // "your size": the smallest size that is drawn and not tight; shown with the next size up (or down at the top)
     let i = all.findIndex(r => r.st && !r.st.hide && r.st.now && r.st.now.waistEase >= 0 && r.st.now.tone !== 'red');
@@ -164,7 +166,7 @@ export default function FitWidget() {
     if (i < 0) return all.slice(0, 2).map(r => ({ ...r, yours: false }));
     const j = i + 1 < all.length ? i + 1 : i - 1;
     return [{ ...all[i], yours: true }, ...(j >= 0 ? [{ ...all[j], yours: false }] : [])].sort((a, b) => info.sizes.indexOf(a.z) - info.sizes.indexOf(b.z));
-  }, [meta, pants, pick, belt, waist, info]);
+  }, [meta, pants, pick, belt, waist, hip, info]);
 
   if (off || !product || !info) return null;
   const mode = belt ? 'belt' : 'drop', bodyDir = info.body ?? 'body', bustWord = women ? 'Bust' : 'Chest';
@@ -175,13 +177,14 @@ export default function FitWidget() {
         <div className="text-xs uppercase tracking-wide" style={{ opacity: 0.6 }}>{info.brand}</div>
         <h1 className="text-lg font-semibold">{info.name}: see your size</h1>
       </header>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
         <label className="flex flex-col gap-1">Height (cm)<input type="number" min={hr[0] - 5} max={hr[1] + 5} value={height} onChange={e => setHeight(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
         <label className="flex flex-col gap-1">{bustWord} (cm)<input type="number" min={70} max={136} value={chest} onChange={e => setChest(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
         <label className="flex flex-col gap-1">Waist (cm, optional)<input type="number" min={55} max={125} value={waist} onChange={e => setWaist(e.target.value)} placeholder="tape" className="rounded-lg border px-2 py-1" /></label>
+        <label className="flex flex-col gap-1">Hips (cm, optional)<input type="number" min={70} max={140} value={hip} onChange={e => setHip(e.target.value)} placeholder="tape" className="rounded-lg border px-2 py-1" /></label>
         <label className="flex items-end gap-2 pb-1"><input type="checkbox" checked={belt} onChange={e => setBelt(e.target.checked)} />with a belt</label>
       </div>
-      {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, {bustWord.toLowerCase()} {pick.body.chest.toFixed(0)}, hips {(pick.body.hip ?? 0).toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byWaist ? ' (matched to your waist)' : ''}. Your numbers stay on this page.</p>}
+      {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, {bustWord.toLowerCase()} {pick.body.chest.toFixed(0)}, hips {(pick.body.hip ?? 0).toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byTape ? ' (matched to your tape numbers)' : ''}. Your numbers stay on this page.</p>}
       <div className="grid grid-cols-2 gap-3">
         {rows.map(({ z, st, yours }) => {
           const n = st?.now, hidden = !st || st.hide;
