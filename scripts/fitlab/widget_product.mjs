@@ -1,7 +1,8 @@
 // Shop-widget files for one pants product (16 Nov 2026): every exported size of a product folder split into the light
 // per-body files the /fit-widget page reads, plus its fit numbers and an info.json, so a new product (or the same one
 // on the women's bodies) needs no code change.
-//   node scripts/fitlab/widget_product.mjs <public product dir> <widget name> [--women] [--sizes a,b] [--brand x] [--name y]
+//   node scripts/fitlab/widget_product.mjs <public product dir> <widget name> [--women] [--top] [--sizes a,b] [--brand x] [--name y]
+//   --top: a shirt (new_shirt.sh): [women/]grid/shirt_<size>.glb(.gz) + the numbers in [women/]product.json "shirt"
 //   e.g. node scripts/fitlab/widget_product.mjs public/models/fitlab/brands/uniqlo/barrel_leg_jeans uq_barrel_women --women
 // Reads <dir>/[women/]{belt,drop}/jeans_<size>.glb(.gz) + .json and <dir>/product.json (name, brand, sizes).
 // Writes public/models/fitlab/widget/<widget name>/{info.json, belt|drop/<size>/{base.json, *.bin.gz, tex_*, fit.json}}.
@@ -10,15 +11,29 @@ import { spawnSync } from 'node:child_process';
 const argv = process.argv.slice(2);
 const opt = n => { const i = argv.indexOf(n); return i >= 0 ? argv.splice(i, 2)[1] : null; };
 const flag = n => { const i = argv.indexOf(n); return i >= 0 ? (argv.splice(i, 1), true) : false; };
-const women = flag('--women'), only = opt('--sizes'), brand = opt('--brand'), name = opt('--name');
+const women = flag('--women'), top = flag('--top'), only = opt('--sizes'), brand = opt('--brand'), name = opt('--name');
 const [dir, wname] = argv;
 if (!dir || !wname || !/^[a-z0-9_-]{1,64}$/i.test(wname)) { console.error('usage: widget_product.mjs <public product dir> <widget name> [--women]'); process.exit(2); }
 const prod = existsSync(`${dir}/product.json`) ? JSON.parse(readFileSync(`${dir}/product.json`, 'utf8')) : {};
+const srcProd = women && existsSync(`${dir}/women/product.json`) ? JSON.parse(readFileSync(`${dir}/women/product.json`, 'utf8')) : prod;
 const src = women ? `${dir}/women` : dir, out = `public/models/fitlab/widget/${wname}`;
 const sets = women ? prod.women ?? {} : prod;
-const sizes = (only ? only.split(',') : Object.keys(sets.belt ?? {})).filter(z => existsSync(`${src}/belt/jeans_${z}.json`));
-if (!sizes.length) { console.error(`no exported sizes in ${src}/belt`); process.exit(1); }
-for (const m of ['belt', 'drop']) for (const z of sizes) {
+const sizes = top ? (only ? only.split(',') : srcProd.sizes ?? []).filter(z => srcProd.shirt?.[z] && Object.keys(srcProd.shirt[z]).length)
+  : (only ? only.split(',') : Object.keys(sets.belt ?? {})).filter(z => existsSync(`${src}/belt/jeans_${z}.json`));
+if (!sizes.length) { console.error(`no exported sizes in ${src}`); process.exit(1); }
+const split = (g, o) => {
+  mkdirSync(o, { recursive: true });
+  const r = spawnSync('node', ['scripts/fitlab/split_bodies.mjs', g, o, '--tex', '1024'], { encoding: 'utf8' });
+  if (r.status) { console.error(r.stderr); process.exit(1); }
+  return r.stdout.trim().split('\n').pop();
+};
+if (top) for (const z of sizes) {
+  const g = [`${src}/grid/shirt_${z}.glb.gz`, `${src}/grid/shirt_${z}.glb`].find(f => existsSync(f));
+  if (!g) { console.log(`skip ${z}: no file`); continue; }
+  const o = `${out}/${z}`; console.log(`${z}: ${split(g, o)}`);
+  writeFileSync(`${o}/fit.json`, JSON.stringify({ size: z, chart: srcProd.chart?.[z] ?? null, bodies: srcProd.shirt[z] }));
+}
+for (const m of top ? [] : ['belt', 'drop']) for (const z of sizes) {
   const g = [`${src}/${m}/jeans_${z}.glb.gz`, `${src}/${m}/jeans_${z}.glb`].find(f => existsSync(f));
   if (!g) { console.log(`skip ${m} ${z}: no file`); continue; }
   const o = `${out}/${m}/${z}`; mkdirSync(o, { recursive: true });
@@ -29,6 +44,7 @@ for (const m of ['belt', 'drop']) for (const z of sizes) {
   writeFileSync(`${o}/fit.json`, JSON.stringify({ size: j.size, chart: j.chart, bodies: j.bodies, variants: j.variants ?? {} }));
 }
 const info = { name: name ?? prod.name ?? wname, brand: brand ?? prod.brand ?? '', sizes,
+  ...(top ? { kind: 'top', intended_fit: srcProd.intended_fit ?? null, body_size: prod.body_size ?? null } : {}),
   ...(women ? { women: true, body: 'body_women', meta: '/models/fitlab/bodies/women/meta.json' } : {}) };
 writeFileSync(`${out}/info.json`, JSON.stringify(info, null, 1));
 console.log('WIDGET READY', `/fit-widget?p=${wname}`, sizes.join(' '));
