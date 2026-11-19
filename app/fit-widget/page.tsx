@@ -14,7 +14,7 @@
 //    no code change (16 Nov 2026, women's bodies).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jeansState, type PantsData } from '../fit-lab/jeansFit';
-import { fitTier, layerShirtOverPants, type GridMeta } from '../fit-lab/engine';
+import { fitTier, layerShirtOverPants, TIERS, type GridMeta } from '../fit-lab/engine';
 
 const ROOT = '/models/fitlab/widget';
 type Info = { name: string; brand: string; sizes: string[]; body?: string; meta?: string; women?: boolean; kind?: 'top' | 'pants'; intended_fit?: string | null };
@@ -198,17 +198,23 @@ export default function FitWidget() {
   }, [meta, pants, pick, belt, waist, hip, info]);
 
   // a top: chest room on this body -> the fit tier (engine.ts fitTier, the same words as the fitting room); suggested =
-  // the smallest size that is at least a regular fit and not stretched; shown with the next size up
+  // the smallest size that reaches the fit the brand designed it for (intended_fit, e.g. "Regular": not "between slim
+  // and regular") and is not stretched; shown with the next size up
   const topRows = useMemo(() => {
     if (!isTop || !tops || !pick || !info) return [];
     const all = info.sizes.map(z => {
       const n = tops[z]?.bodies[pick.key];
-      if (!n) return { z, n: null, ease: 0, label: '', color: '', tight: false };
+      if (!n) return { z, n: null, ease: 0, label: '', color: '', tight: false, tier: '' };
       const ease = n.chest_cm - pick.body.chest, t = fitTier(ease, pick.body.chest, false);
       const tight = ease < 0 || n.stretch_p95 >= 10;
-      return { z, n, ease, label: tight ? 'Tight: the fabric is stretched' : t.label, color: tight ? '#b91c1c' : t.color, tight };
+      return { z, n, ease, label: tight ? 'Tight: the fabric is stretched' : t.label, color: tight ? '#b91c1c' : t.color, tight, tier: t.tier };
     });
-    let i = all.findIndex(r => r.n && !r.tight && r.ease / pick.body.chest >= 0.08);
+    const want = Math.max(1, TIERS.findIndex(t => t.name === (info.intended_fit ?? 'Regular')));
+    const reaches = (r: (typeof all)[number]) => {
+      const k = TIERS.findIndex(t => t.name === r.tier);
+      return k > want || (k === want && !r.label.startsWith(`Between ${TIERS[want - 1].name}`));
+    };
+    let i = all.findIndex(r => r.n && !r.tight && reaches(r));
     if (i < 0) i = all.map(r => !!r.n && !r.tight).lastIndexOf(true);
     if (i < 0) return all.slice(0, 2).map(r => ({ ...r, yours: false }));
     const j = i + 1 < all.length ? i + 1 : i - 1;
