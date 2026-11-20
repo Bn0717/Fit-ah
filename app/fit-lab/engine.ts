@@ -540,6 +540,27 @@ export function fitTier(easeCm: number, bodyCm: number, droppedShoulder = true) 
   return { tier: t.name, label, color: t.color, pct };
 }
 
+// Which top size to suggest on one body (shop widget, 18 Nov 2026): rows = the sizes in order with the shirt's simulated
+// chest girth and stretch on that body (null = not simulated). Each row gets the fit tier of its chest room; the
+// suggested size is the smallest one that reaches the fit the brand designed it for (intended, e.g. "Regular": not
+// "between slim and regular") and is not stretched (chest smaller than the body, or 10 %+ of the fabric stretched);
+// if none does, the largest one that is not stretched. Returns the index of the suggestion (-1 = none) and the rows.
+export function suggestTop(rows: ({ chest_cm: number; stretch_p95: number } | null)[], bodyChest: number, intended = 'Regular') {
+  const out = rows.map(n => {
+    if (!n) return null;
+    const ease = n.chest_cm - bodyChest, t = fitTier(ease, bodyChest, false), tight = ease < 0 || n.stretch_p95 >= 10;
+    return { ease, tier: t.tier, label: tight ? 'Tight: the fabric is stretched' : t.label, color: tight ? '#b91c1c' : t.color, tight };
+  });
+  const want = Math.max(1, TIERS.findIndex(t => t.name === intended));
+  const reaches = (r: NonNullable<(typeof out)[number]>) => {
+    const k = TIERS.findIndex(t => t.name === r.tier);
+    return k > want || (k === want && !r.label.startsWith(`Between ${TIERS[want - 1].name}`));
+  };
+  let i = out.findIndex(r => !!r && !r.tight && reaches(r));
+  if (i < 0) i = out.map(r => !!r && !r.tight).lastIndexOf(true);
+  return { index: i, rows: out };
+}
+
 // Estimated fit, not contact pressure. These legacy strain bands are display heuristics,
 // not measured comfort limits. Warm colours require BOTH stretch and proximity to the body.
 // G is unsigned surface distance in cm. Subtract the baked collider envelope before

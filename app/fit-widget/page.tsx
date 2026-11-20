@@ -14,7 +14,7 @@
 //    no code change (16 Nov 2026, women's bodies).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jeansState, type PantsData } from '../fit-lab/jeansFit';
-import { fitTier, layerShirtOverPants, TIERS, type GridMeta } from '../fit-lab/engine';
+import { layerShirtOverPants, suggestTop, type GridMeta } from '../fit-lab/engine';
 
 const ROOT = '/models/fitlab/widget';
 type Info = { name: string; brand: string; sizes: string[]; body?: string; meta?: string; women?: boolean; kind?: 'top' | 'pants'; intended_fit?: string | null };
@@ -207,20 +207,13 @@ export default function FitWidget() {
   // and regular") and is not stretched; shown with the next size up
   const topRows = useMemo(() => {
     if (!isTop || !tops || !pick || !info) return [];
-    const all = info.sizes.map(z => {
-      const n = tops[z]?.bodies[pick.key];
-      if (!n) return { z, n: null, ease: 0, label: '', color: '', tight: false, tier: '' };
-      const ease = n.chest_cm - pick.body.chest, t = fitTier(ease, pick.body.chest, false);
-      const tight = ease < 0 || n.stretch_p95 >= 10;
-      return { z, n, ease, label: tight ? 'Tight: the fabric is stretched' : t.label, color: tight ? '#b91c1c' : t.color, tight, tier: t.tier };
+    const nums = info.sizes.map(z => tops[z]?.bodies[pick.key] ?? null);
+    const sg = suggestTop(nums, pick.body.chest, info.intended_fit ?? 'Regular');
+    const all = info.sizes.map((z, k) => {
+      const r = sg.rows[k];
+      return r ? { z, n: nums[k], ease: r.ease, label: r.label, color: r.color, tight: r.tight } : { z, n: null, ease: 0, label: '', color: '', tight: false };
     });
-    const want = Math.max(1, TIERS.findIndex(t => t.name === (info.intended_fit ?? 'Regular')));
-    const reaches = (r: (typeof all)[number]) => {
-      const k = TIERS.findIndex(t => t.name === r.tier);
-      return k > want || (k === want && !r.label.startsWith(`Between ${TIERS[want - 1].name}`));
-    };
-    let i = all.findIndex(r => r.n && !r.tight && reaches(r));
-    if (i < 0) i = all.map(r => !!r.n && !r.tight).lastIndexOf(true);
+    const i = sg.index;
     if (i < 0) return all.slice(0, 2).map(r => ({ ...r, yours: false }));
     const j = i + 1 < all.length ? i + 1 : i - 1;
     return [{ ...all[i], yours: true }, ...(j >= 0 ? [{ ...all[j], yours: false }] : [])].sort((a, b) => info.sizes.indexOf(a.z) - info.sizes.indexOf(b.z));
