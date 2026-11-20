@@ -153,6 +153,7 @@ export default function FitWidget() {
   }, [product]);
   const women = !!info?.women, isTop = info?.kind === 'top';
   const [tops, setTops] = useState<Record<string, TopFit> | null>(null);
+  const [hasDrop, setHasDrop] = useState(true);
   useEffect(() => {
     if (!product || !info) return;
     fetch(`${ROOT}/${product}/off.json`).then(r => setOff(r.ok)).catch(() => {});
@@ -162,9 +163,13 @@ export default function FitWidget() {
         const t = Object.fromEntries(await Promise.all(info.sizes.map(async z => [z, await (await fetch(`${ROOT}/${product}/${z}/fit.json`)).json()])));
         setMeta(m); setTops(t); return;
       }
-      const ld = async (mode: string) => Object.fromEntries(await Promise.all(info.sizes.map(async z => [z, await (await fetch(`${ROOT}/${product}/${mode}/${z}/fit.json`)).json()])));
-      const b = await ld('belt'), d = await ld('drop');
-      setMeta(m); setPants({ name: info.name, sizes: b, belt: b, drop: d } as PantsData);
+      const ld = async (mode: string) => Object.fromEntries(await Promise.all(info.sizes.map(async z => {
+        const r = await fetch(`${ROOT}/${product}/${mode}/${z}/fit.json`); return [z, r.ok ? await r.json() : null];
+      })));
+      // elastic-waist pants are simulated once (the elastic holds them up): no "without a belt" version
+      const b = await ld('belt'), d0 = await ld('drop'), noDrop = Object.values(d0).every(v => !v);
+      setHasDrop(!noDrop);
+      setMeta(m); setPants({ name: info.name, sizes: b, belt: b, drop: noDrop ? b : d0 } as PantsData);
     })().catch(() => {});
   }, [product, info]);
 
@@ -222,7 +227,7 @@ export default function FitWidget() {
   }, [isTop, tops, pick, info]);
 
   if (off || !product || !info) return null;
-  const mode = belt ? 'belt' : 'drop', bodyDir = info.body ?? 'body', bustWord = women ? 'Bust' : 'Chest';
+  const mode = belt || !hasDrop ? 'belt' : 'drop', bodyDir = info.body ?? 'body', bustWord = women ? 'Bust' : 'Chest';
   const hr = meta ? [meta.heights[0], meta.heights[meta.heights.length - 1]] : [155, 195];
   return (
     <main className="mx-auto max-w-2xl p-4 space-y-3" style={{ color: '#1c1917' }}>
@@ -235,7 +240,7 @@ export default function FitWidget() {
         <label className="flex flex-col gap-1">{bustWord} (cm)<input type="number" min={70} max={136} value={chest} onChange={e => setChest(+e.target.value)} className="rounded-lg border px-2 py-1" /></label>
         {!isTop && <><label className="flex flex-col gap-1">Waist (cm, optional)<input type="number" min={55} max={125} value={waist} onChange={e => setWaist(e.target.value)} placeholder="tape" className="rounded-lg border px-2 py-1" /></label>
         <label className="flex flex-col gap-1">Hips (cm, optional)<input type="number" min={70} max={140} value={hip} onChange={e => setHip(e.target.value)} placeholder="tape" className="rounded-lg border px-2 py-1" /></label>
-        <label className="flex items-end gap-2 pb-1"><input type="checkbox" checked={belt} onChange={e => setBelt(e.target.checked)} />with a belt</label></>}
+        {hasDrop && <label className="flex items-end gap-2 pb-1"><input type="checkbox" checked={belt} onChange={e => setBelt(e.target.checked)} />with a belt</label>}</>}
       </div>
       {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, {bustWord.toLowerCase()} {pick.body.chest.toFixed(0)}, hips {(pick.body.hip ?? 0).toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byTape ? ' (matched to your tape numbers)' : ''}. Your numbers stay on this page.</p>}
       {isTop && <div className="grid grid-cols-2 gap-3">
