@@ -18,9 +18,9 @@ test('suggests the smallest size that reaches the intended regular fit, not "bet
 });
 
 test('a stretched or too-small size is never suggested and is labelled tight', () => {
-  const r = suggestTop(rows(95, { chest_cm: 115, stretch_p95: 36 }, 118), 100);
+  const r = suggestTop(rows(95, { chest_cm: 115, stretch_p95: 18 }, 118), 100);
   assert.equal(r.rows[0].tight, true);                      // smaller than the body
-  assert.equal(r.rows[1].tight, true);                      // 36 % of the fabric stretched (a failed dressing)
+  assert.equal(r.rows[1].tight, true);                      // 18 % of the fabric stretched: tight, still wearable
   assert.equal(r.rows[1].label, 'Tight: the fabric is stretched');
   assert.equal(r.index, 2);
 });
@@ -44,3 +44,21 @@ test('a relaxed-fit brand asks for more room', () => {
   // 12 % room is regular, 20 % relaxed
   assert.equal(suggestTop(rows(112, 120), 100, 'Relaxed').index, 1);
 });
+
+test('a size stretched past what knit can give is too small to put on, never suggested', async () => {
+  const { KNIT_STRETCH_MAX } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+  const r = suggestTop(rows({ chest_cm: 100, stretch_p95: 200 }, { chest_cm: 106, stretch_p95: 28 }, 118), 106);
+  assert.equal(KNIT_STRETCH_MAX, 25);
+  assert.equal(r.rows[0].tooSmall, true);
+  assert.match(r.rows[0].label, /^Too small to put on/);
+  assert.equal(r.rows[1].tooSmall, true);
+  assert.equal(r.index, 2);
+});
+
+test('an oversized brand: the oversized tier is reachable, so a small body is not sent to the biggest size', () => {
+  // body 80: 104 = 30 % room (oversized), then much bigger sizes
+  const r = suggestTop(rows(96, 104, 120, 152), 80, 'Oversized');
+  assert.equal(r.rows[1].tier, 'Oversized');
+  assert.equal(r.index, 1);
+});
+

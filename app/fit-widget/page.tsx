@@ -211,7 +211,7 @@ export default function FitWidget() {
     const sg = suggestTop(nums, pick.body.chest, info.intended_fit ?? 'Regular');
     const all = info.sizes.map((z, k) => {
       const r = sg.rows[k];
-      return r ? { z, n: nums[k], ease: r.ease, label: r.label, color: r.color, tight: r.tight } : { z, n: null, ease: 0, label: '', color: '', tight: false };
+      return r ? { z, n: nums[k], ease: r.ease, label: r.label, color: r.color, tight: r.tight, tooSmall: r.tooSmall } : { z, n: null, ease: 0, label: '', color: '', tight: false, tooSmall: false };
     });
     const i = sg.index;
     if (i < 0) return all.slice(0, 2).map(r => ({ ...r, yours: false }));
@@ -237,10 +237,10 @@ export default function FitWidget() {
       </div>
       {pick && <p className="text-xs" style={{ opacity: 0.7 }}>Shown on the nearest simulated body: {pick.body.height.toFixed(0)} cm tall, {bustWord.toLowerCase()} {pick.body.chest.toFixed(0)}, hips {(pick.body.hip ?? 0).toFixed(0)}, waist {(pick.body.waist ?? 0).toFixed(0)} cm{pick.byTape ? ' (matched to your tape numbers)' : ''}. Your numbers stay on this page.</p>}
       {isTop && <div className="grid grid-cols-2 gap-3">
-        {topRows.map(({ z, n, ease, label, color, yours }) => (
+        {topRows.map(({ z, n, ease, label, color, yours, tooSmall }) => (
           <section key={z} className="space-y-1">
             <div className="flex items-baseline gap-2"><span className="font-semibold">{z}</span>{yours && <span className="text-xs rounded-full px-2" style={{ background: '#1c1917', color: '#fff' }}>suggested</span>}</div>
-            {!n || !pick ? <div className="w-full flex items-center justify-center p-3 text-center text-sm" style={{ aspectRatio: '3 / 4', background: '#f4efe7', borderRadius: 16, color: '#b91c1c' }}>Not simulated for this body yet</div>
+            {!n || !pick || tooSmall ? <div className="w-full flex items-center justify-center p-3 text-center text-sm" style={{ aspectRatio: '3 / 4', background: '#f4efe7', borderRadius: 16, color: '#b91c1c' }}>{n && tooSmall ? 'Too small to put on' : 'Not simulated for this body yet'}</div>
               : <View garment={`${ROOT}/${product}/${z}`} top bodyKey={pick.key} centre={meta!.centre} bodyDir={bodyDir} heightM={pick.body.height / 100} />}
             {n && <div className="text-xs space-y-0.5">
               <div className="font-semibold" style={{ color }}>{label}</div>

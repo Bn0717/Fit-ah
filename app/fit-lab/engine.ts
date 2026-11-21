@@ -544,12 +544,20 @@ export function fitTier(easeCm: number, bodyCm: number, droppedShoulder = true) 
 // chest girth and stretch on that body (null = not simulated). Each row gets the fit tier of its chest room; the
 // suggested size is the smallest one that reaches the fit the brand designed it for (intended, e.g. "Regular": not
 // "between slim and regular") and is not stretched (chest smaller than the body, or 10 %+ of the fabric stretched);
-// if none does, the largest one that is not stretched. Returns the index of the suggestion (-1 = none) and the rows.
+// if none does, the roomiest one that is not stretched. A brand that designs a top oversized intends the dropped-shoulder
+// look, so its oversized tier must be reachable (it was not: 4XL was suggested to a 150 cm woman, 20 Nov 2026).
+// Returns the suggestion's index (-1 = none) and the rows.
+// A size whose knit would have to stretch past what knit can (about 25 %) does not go on: not drawn, said in words
+// (the same limit as the fitting room's SHIRT_STRETCH_MAX).
+export const KNIT_STRETCH_MAX = 25;
 export function suggestTop(rows: ({ chest_cm: number; stretch_p95: number } | null)[], bodyChest: number, intended = 'Regular') {
   const out = rows.map(n => {
     if (!n) return null;
-    const ease = n.chest_cm - bodyChest, t = fitTier(ease, bodyChest, false), tight = ease < 0 || n.stretch_p95 >= 10;
-    return { ease, tier: t.tier, label: tight ? 'Tight: the fabric is stretched' : t.label, color: tight ? '#b91c1c' : t.color, tight };
+    const ease = n.chest_cm - bodyChest, t = fitTier(ease, bodyChest, intended === 'Oversized'), tight = ease < 0 || n.stretch_p95 >= 10;
+    const tooSmall = n.stretch_p95 > KNIT_STRETCH_MAX;
+    const label = tooSmall ? `Too small to put on: the fabric would have to stretch ${n.stretch_p95.toFixed(0)} % (knit gives about ${KNIT_STRETCH_MAX} % at most). Try a larger size.`
+      : tight ? 'Tight: the fabric is stretched' : t.label;
+    return { ease, tier: t.tier, label, color: tight ? '#b91c1c' : t.color, tight, tooSmall };
   });
   const want = Math.max(1, TIERS.findIndex(t => t.name === intended));
   const reaches = (r: NonNullable<(typeof out)[number]>) => {
@@ -557,6 +565,8 @@ export function suggestTop(rows: ({ chest_cm: number; stretch_p95: number } | nu
     return k > want || (k === want && !r.label.startsWith(`Between ${TIERS[want - 1].name}`));
   };
   let i = out.findIndex(r => !!r && !r.tight && reaches(r));
+  // none reaches it: every wearable size is tighter than intended (a looser one would count as reaching it), so the
+  // roomiest of them is the closest to the intended fit
   if (i < 0) i = out.map(r => !!r && !r.tight).lastIndexOf(true);
   return { index: i, rows: out };
 }
